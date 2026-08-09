@@ -30,32 +30,42 @@ jobs:
           python-version: "3.12"
 
       # 표준 라이브러리만 사용하므로 설치할 의존성이 없다.
+      # continue-on-error: 이 단계 하나가 실패해도(외부 API 일시 장애 등)
+      # 나머지 모듈 수집과 사이트 배포는 계속 진행된다. 실패한 모듈의
+      # data/*.json 은 직전 성공분이 그대로 남아 화면에 표시된다.
       - name: 데이터 수집
         run: python etl/fetch.py
+        continue-on-error: true
 
       # ETHERSCAN_API_KEY 시크릿이 없으면 이 단계는 조용히 건너뛴다.
       - name: 동결 조치 수집
         env:
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
         run: python etl/fetch_freeze.py --days 365
+        continue-on-error: true
 
-      # 키 없이 항상 실행된다.
+      # 키 없이 항상 실행된다. Binance가 실행 서버(미국 소재) IP를 지역
+      # 차단하면(HTTP 451) 스크립트가 자동으로 CoinGecko로 전환한다.
       - name: 김치프리미엄 수집
         run: python etl/fetch_premium.py --days 180
+        continue-on-error: true
 
       # ETHERSCAN_API_KEY 재사용. 없으면 건너뛴다.
       - name: 국경 간 코너 자금흐름 수집 (이더리움)
         env:
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
         run: python etl/fetch_flow.py --days 180
+        continue-on-error: true
 
       # 키 없이 항상 실행된다.
       - name: 국경 간 코너 자금흐름 수집 (XRP)
         run: python etl/fetch_flow_xrp.py --days 180
+        continue-on-error: true
 
       # etl/attestations.json 을 손으로 갱신해야 값이 바뀐다. 계산만 자동화되어 있다.
       - name: 어테스테이션 시차 계산
         run: python etl/fetch_attestation.py
+        continue-on-error: true
 
       - name: 갱신분 커밋
         run: |

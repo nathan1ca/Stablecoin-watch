@@ -44,6 +44,11 @@ THRESHOLDS = {
 }
 
 
+# Binance가 막힌 환경(예: GitHub Actions 실행 서버는 미국 소재라 Binance가
+# 지역 차단함, HTTP 451)을 위한 대체 소스. 무인증 공개 API.
+CG_IDS = {"BTCUSDT": "bitcoin", "ETHUSDT": "ethereum", "XRPUSDT": "ripple"}
+
+
 def get_json(url: str, retries: int = 3):
     last = None
     for attempt in range(retries):
@@ -63,12 +68,36 @@ def upbit_ticker(markets: list[str]) -> dict:
     return {r["market"]: r for r in rows}
 
 
-def binance_prices(symbols: list[str]) -> dict:
-    # symbols 파라미터는 JSON 배열을 그대로 문자열로 넣는다: ["BTCUSDT","ETHUSDT"]
+def coingecko_prices(symbols: list[str]) -> dict:
+    ids = [CG_IDS[s] for s in symbols if s in CG_IDS]
+    url = "https://api.coingecko.com/api/v3/simple/price?" + urlencode({
+        "ids": ",".join(ids), "vs_currencies": "usd",
+    })
+    data = get_json(url)
+    out = {}
+    for sym in symbols:
+        cid = CG_IDS.get(sym)
+        if cid and cid in data and "usd" in data[cid]:
+            out[sym] = float(data[cid]["usd"])
+    return out
+
+
+def binance_prices(symbols: list[str]) -> tuple[dict, str]:
+    """(가격 딕셔너리, 실제 사용한 출처) 를 반환한다.
+
+    Binance는 미국 소재 IP를 지역 차단한다(HTTP 451). GitHub Actions
+    실행 서버가 미국에 있어 여기서 막히므로, 실패하면 CoinGecko로
+    자동 전환한다. 집 PC(한국)에서 직접 돌릴 때는 보통 Binance가
+    그대로 성공한다.
+    """
     sym_param = json.dumps(symbols, separators=(",", ":"))
     url = "https://api.binance.com/api/v3/ticker/price?" + urlencode({"symbols": sym_param})
-    rows = get_json(url)
-    return {r["symbol"]: float(r["price"]) for r in rows}
+    try:
+        rows = get_json(url, retries=1)  # 451은 재시도해도 안 풀리므로 한 번만
+        return {r["symbol"]: float(r["price"]) for r in rows}, "Binance"
+    except RuntimeError as e:
+        print(f"  Binance 접속 실패({e}) — CoinGecko로 대체합니다.", file=sys.stderr)
+        return coingecko_prices(symbols), "CoinGecko(대체)"
 
 
 def usdkrw_rate() -> float:
@@ -91,11 +120,37 @@ def upbit_candles(market: str, count: int) -> list[dict]:
     return get_json(url)  # 최신순(내림차순)으로 온다
 
 
-def binance_klines(symbol: str, days: int) -> list[list]:
+def coingecko_history(symbol: str, days: int) -> dict:
+    """{'YYYY-MM-DD': 종가(USD)} 딕셔너리. CoinGecko market_chart 사용."""
+    cid = CG_IDS.get(symbol)
+    if not cid:
+        return {}
+    url = f"https://api.coingecko.com/api/v3/coins/{cid}/market_chart?" + urlencode({
+        "vs_currency": "usd", "days": min(days, 365), "interval": "daily",
+    })
+    data = get_json(url)
+    out = {}
+    for ts_ms, price in data.get("prices", []):
+        d = datetime.fromtimestamp(ts_ms / 1000, timezone.utc).strftime("%Y-%m-%d")
+        out[d] = float(price)  # 같은 날짜가 여러 번 나오면 마지막 값으로 덮어써짐(허용)
+    return out
+
+
+def binance_klines(symbol: str, days: int) -> dict:
+    """{'YYYY-MM-DD': 종가(USD)} 딕셔너리. Binance 실패 시 CoinGecko로 대체."""
     url = "https://api.binance.com/api/v3/klines?" + urlencode({
         "symbol": symbol, "interval": "1d", "limit": min(days, 1000),
     })
-    return get_json(url)  # 오래된순(오름차순)
+    try:
+        rows = get_json(url, retries=1)
+        out = {}
+        for k in rows:
+            d = datetime.fromtimestamp(k[0] / 1000, timezone.utc).strftime("%Y-%m-%d")
+            out[d] = float(k[4])  # 종가
+        return out
+    except RuntimeError as e:
+        print(f"  Binance 일봉 조회 실패({e}) — CoinGecko로 대체합니다.", file=sys.stderr)
+        return coingecko_history(symbol, days)
 
 
 def grade(pct: float | None) -> str:
@@ -115,7 +170,7 @@ def build_snapshot() -> dict:
     symbols = [a[1] for a in ASSETS]
 
     upbit = upbit_ticker(markets)
-    binance = binance_prices(symbols)
+    binance, price_source = binance_prices(symbols)
     fx = usdkrw_rate()
 
     rows = []
@@ -147,7 +202,7 @@ def build_snapshot() -> dict:
             "is_sample": False,
             "thresholds": THRESHOLDS,
             "fx_usdkrw": round(fx, 2),
-            "source": "Upbit · Binance · Frankfurter(FX)",
+            "source": f"Upbit · {price_source} · Frankfurter(FX)",
         },
         "basket_avg_pct": basket_avg,
         "basket_grade": grade(basket_avg),
@@ -169,12 +224,7 @@ def build_history(days: int = 180) -> list[dict]:
     # BTC 하나만 시계열로 다룬다. 유동성이 가장 크고 왜곡이 적다.
     market, symbol, label = ASSETS[0]
     up_candles = upbit_candles(market, days)  # 내림차순
-    bn_klines = binance_klines(symbol, days)  # 오름차순
-
-    bn_by_date = {}
-    for k in bn_klines:
-        d = datetime.fromtimestamp(k[0] / 1000, timezone.utc).strftime("%Y-%m-%d")
-        bn_by_date[d] = float(k[4])  # 종가
+    bn_by_date = binance_klines(symbol, days)  # {'YYYY-MM-DD': 종가}
 
     pts = []
     for c in up_candles:
@@ -195,8 +245,9 @@ def probe():
     for m, r in u.items():
         print(f"  {m:10s} trade_price={r.get('trade_price')} signed_change_rate={r.get('signed_change_rate')}")
 
-    print("\n== Binance 티커 ==")
-    b = binance_prices([a[1] for a in ASSETS])
+    print("\n== Binance 티커 (실패 시 자동으로 CoinGecko 대체) ==")
+    b, src = binance_prices([a[1] for a in ASSETS])
+    print(f"  실제 사용 출처: {src}")
     for s, p in b.items():
         print(f"  {s:10s} {p}")
 
@@ -207,10 +258,10 @@ def probe():
     for c in upbit_candles("KRW-BTC", 3):
         print(f"  {c.get('candle_date_time_kst')}  trade_price={c.get('trade_price')}")
 
-    print("\n== Binance 일봉(최근 3개) ==")
-    for k in binance_klines("BTCUSDT", 3)[-3:]:
-        d = datetime.fromtimestamp(k[0] / 1000, timezone.utc).strftime("%Y-%m-%d")
-        print(f"  {d}  close={k[4]}")
+    print("\n== Binance 일봉 (실패 시 자동으로 CoinGecko 대체, 최근 3개) ==")
+    hist = binance_klines("BTCUSDT", 5)
+    for d in sorted(hist.keys())[-3:]:
+        print(f"  {d}  close={hist[d]}")
 
 
 def main():
