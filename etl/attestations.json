@@ -1,0 +1,14 @@
+{
+  "_readme": "이 파일은 자동 수집이 불가능해서 손으로 관리합니다. 발행사 준비금 보고서(어테스테이션)는 PDF로만 공개되고, 발행일·기준일을 구조화된 형식으로 주는 무료 API가 없습니다. 새 보고서가 나올 때마다 issuer/symbol/as_of_date/reported_circulating/source_url을 채운 항목을 entries에 추가하십시오. reported_circulating은 보고서 안의 'USDC/USDT In Circulation' 류 문구에서 그대로 옮겨적으면 됩니다. as_of_date는 보고서가 명시하는 기준 시점(Report Date)입니다.",
+  "entries": [
+    {
+      "issuer": "Circle",
+      "symbol": "USDC",
+      "as_of_date": "2026-03-31",
+      "reported_circulating": 79170267853,
+      "source_url": "https://www.circle.com/transparency",
+      "verified": true,
+      "note": "2026년 3월 준비금 보고서(Report Dates 2026-03-11, 2026-03-31) 원문에서 확인. 2026-03-31 기준치만 시드로 넣었다."
+    }
+  ]
+}

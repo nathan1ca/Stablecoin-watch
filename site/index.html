@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스테이블코인 감시 · Stablecoin Watch</title>
+<meta name="description" content="공개 블록체인 원장 기반 스테이블코인 발행·페그·집중도 상시 모니터링. 감독 목적 지표를 매일 갱신합니다.">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a class="skip" href="#gauge">본문 바로가기</a>
+
+<header class="masthead">
+  <div class="wrap masthead-in">
+    <div>
+      <p class="eyebrow">ON-CHAIN SUPERVISORY MONITOR</p>
+      <h1>스테이블코인 감시</h1>
+      <p class="lede">공개 원장에 기록된 발행·소각과 시장가격만으로 페그 유지 상태, 상환 압력, 시장 집중도를 매일 측정합니다.</p>
+    </div>
+    <dl class="stamp">
+      <dt>기준시각</dt><dd id="stamp-time">—</dd>
+      <dt>출처</dt><dd id="stamp-src">—</dd>
+      <dt>대상</dt><dd id="stamp-count">—</dd>
+    </dl>
+  </div>
+</header>
+
+<div id="sample-band" class="band" hidden>
+  <div class="wrap">표시된 수치는 <strong>샘플</strong>입니다. 화면 구성을 확인하기 위한 가짜 값이며, <code>python etl/fetch.py</code> 를 한 번 실행하면 실제 데이터로 교체됩니다.</div>
+</div>
+
+<main>
+
+<section class="wrap statuswrap" aria-labelledby="h-status">
+  <h2 id="h-status" class="sr">시스템 상태</h2>
+  <div class="status">
+  <div class="verdict" id="verdict">
+    <span class="dot" id="verdict-dot"></span>
+    <div>
+      <p class="verdict-label" id="verdict-label">—</p>
+      <p class="verdict-note" id="verdict-note">데이터를 불러오는 중입니다.</p>
+    </div>
+  </div>
+  <div class="figs">
+    <div class="fig"><p class="fig-k">총 발행잔액</p><p class="fig-v" id="f-total">—</p><p class="fig-s" id="f-total-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">페그 이탈</p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
+    <div class="fig"><p class="fig-k">발행사 집중도 <abbr title="허핀달-허시만 지수">HHI</abbr></p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">알고리즘형 비중</p><p class="fig-v" id="f-algo">—</p><p class="fig-s">담보 없는 발행 잔액 비율</p></div>
+  </div>
+  </div>
+</section>
+
+<section class="wrap block" id="gauge" aria-labelledby="h-gauge">
+  <div class="block-head">
+    <h2 id="h-gauge">페그 편차 계기판</h2>
+    <p>스테이블코인의 유일한 약속은 1.0000입니다. 가운데 세로선이 그 약속이고, 표식이 얼마나 벗어나 있는지를 베이시스포인트로 잽니다. 옅은 띠는 ±25bp 허용 구간입니다.</p>
+  </div>
+  <div class="ghead" aria-hidden="true">
+    <span>종목</span>
+    <span class="scale">
+      <span style="left:0%">−150</span><span style="left:16.7%">−100</span><span style="left:41.7%">−25</span>
+      <span style="left:50%" class="scale-mid">1.0000</span>
+      <span style="left:58.3%">+25</span><span style="left:83.3%">+100</span><span style="left:100%">+150</span>
+    </span>
+    <span class="gunit">편차 bp</span>
+  </div>
+  <ol class="gauge" id="gauge-list"></ol>
+  <p class="foot">USD 페그 종목만 표시합니다. ±150bp를 넘는 편차는 끝단에 고정되며 수치로 확인하십시오.</p>
+</section>
+
+<section class="wrap block" aria-labelledby="h-trend">
+  <div class="block-head">
+    <h2 id="h-trend">발행잔액과 상환 압력</h2>
+    <p>총 발행잔액은 시장에 들어온 돈의 크기이고, 30일 순증감률은 그 방향입니다. 마이너스가 깊어지면 상환이 발행을 앞지르고 있다는 뜻입니다.</p>
+  </div>
+  <div class="charts">
+    <figure class="chart">
+      <figcaption>총 발행잔액 <span class="unit">USD</span></figcaption>
+      <div id="chart-total"></div>
+    </figure>
+    <figure class="chart">
+      <figcaption>30일 순증감률 <span class="unit">%</span></figcaption>
+      <div id="chart-flow"></div>
+    </figure>
+  </div>
+</section>
+
+<section class="wrap block" aria-labelledby="h-struct">
+  <div class="block-head">
+    <h2 id="h-struct">발행 구조</h2>
+    <p>무엇으로 뒷받침되는가, 그리고 얼마나 한쪽에 쏠려 있는가. 담보 유형과 집중도는 개별 종목이 아니라 시스템 차원의 취약성을 가리킵니다.</p>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>담보 유형별</h3>
+      <div id="mech-bars" class="bars"></div>
+    </div>
+    <div class="panel">
+      <h3>페그 통화별</h3>
+      <div id="cur-bars" class="bars"></div>
+      <p class="foot">비달러 페그 비중은 원화 스테이블코인 도입 논의에서 참고 기준이 됩니다.</p>
+    </div>
+    <div class="panel">
+      <h3>발행 체인별</h3>
+      <div id="chain-bars" class="bars"></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap block" aria-labelledby="h-table">
+  <div class="block-head">
+    <h2 id="h-table">종목별 현황</h2>
+    <p>발행잔액 순입니다. 등급은 페그 편차와 30일 순증감률 중 나쁜 쪽을 따릅니다.</p>
+  </div>
+  <div class="tablewrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th scope="col">종목</th><th scope="col">담보</th><th scope="col">페그</th>
+          <th scope="col" class="num">발행잔액</th><th scope="col" class="num">점유율</th>
+          <th scope="col" class="num">편차 bp</th><th scope="col" class="num">7일</th>
+          <th scope="col" class="num">30일</th><th scope="col">등급</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="wrap block" id="freeze-sec" aria-labelledby="h-freeze" hidden>
+  <div class="block-head">
+    <h2 id="h-freeze">발행사 동결 조치</h2>
+    <p>페그 편차가 시장이 발행사를 어떻게 보는지의 지표라면, 동결 건수는 발행사가 실제로 통제권을 얼마나 행사하는지의 지표입니다. 블랙리스트 등재와 잔액 소각은 전부 이벤트 로그로 남습니다.</p>
+  </div>
+  <div class="fz-figs">
+    <div class="fig"><p class="fig-k">동결</p><p class="fig-v" id="fz-freeze">—</p><p class="fig-s" id="fz-window">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">해제</p><p class="fig-v" id="fz-unfreeze">—</p><p class="fig-s">동결 후 되돌린 건수</p></div>
+    <div class="fig"><p class="fig-k">잔액 소각</p><p class="fig-v" id="fz-seize">—</p><p class="fig-s">보유분을 직접 없앤 건수</p></div>
+    <div class="fig"><p class="fig-k">소각 규모</p><p class="fig-v" id="fz-amount">—</p><p class="fig-s">토큰 단위 합계</p></div>
+  </div>
+
+  <div class="ghead fz-head" aria-hidden="true">
+    <span>발행사</span><span class="fz-axis" id="fz-axis"></span><span class="gunit">건수</span>
+  </div>
+  <ol class="gauge" id="fz-lanes"></ol>
+  <p class="foot">가로축은 조회 기간입니다. 진한 표식은 동결, 붉은 표식은 잔액 소각입니다. 해제는 표시하지 않습니다.</p>
+
+  <div class="cols fz-cols">
+    <div class="panel fz-recent">
+      <h3>최근 조치</h3>
+      <div class="tablewrap tw-inner">
+        <table id="fz-tbl">
+          <thead><tr>
+            <th scope="col">일자</th><th scope="col">발행사</th><th scope="col">조치</th>
+            <th scope="col">대상 주소</th><th scope="col" class="num">규모</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>읽는 법</h3>
+      <ul class="plain">
+        <li>동결은 발행사가 단독으로 실행합니다. 사법적 판단이 선행됐는지는 온체인에서 확인되지 않습니다.</li>
+        <li>여기 남는 주소는 발행사가 공개적으로 등재한 대상입니다. 이 사이트는 발행사의 조치를 집계할 뿐 특정인을 추적하지 않습니다.</li>
+        <li>소각은 동결보다 강한 조치입니다. 잔액이 사라지므로 되돌릴 수 없습니다.</li>
+        <li>이더리움 메인넷 기준입니다. 다른 체인의 조치는 포함되지 않습니다.</li>
+      </ul>
+      <p class="foot" id="fz-notes"></p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap block" id="premium-sec" aria-labelledby="h-premium" hidden>
+  <div class="block-head">
+    <h2 id="h-premium">국경 간 순유출 — 김치프리미엄
+      <span class="live-badge" id="pm-live-badge"><i class="live-dot" id="pm-live-dot"></i>LIVE</span>
+    </h2>
+    <p>프리미엄은 재정거래 유인의 크기입니다. 라벨링된 지갑 없이도 가격만으로 잡히기 때문에, 실제 자금이 움직이기 전에 먼저 나타나는 경우가 많습니다. <span id="pm-updated">&nbsp;</span></p>
+  </div>
+  <div class="figs prem-figs">
+    <div class="fig"><p class="fig-k">평균 프리미엄</p><p class="fig-v" id="pm-avg">—</p><p class="fig-s" id="pm-fx">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">BTC</p><p class="fig-v" id="pm-btc">—</p><p class="fig-s">기준 자산</p></div>
+    <div class="fig"><p class="fig-k">ETH</p><p class="fig-v" id="pm-eth">—</p><p class="fig-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">XRP</p><p class="fig-v" id="pm-xrp">—</p><p class="fig-s">국내 재정거래 최다 이용 이력</p></div>
+  </div>
+  <figure class="chart chart-wide">
+    <figcaption>BTC 기준 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
+    <div id="chart-premium"></div>
+  </figure>
+  <p class="foot">평균은 BTC·ETH·XRP 3종 단순 평균이며 거래량 가중치는 적용하지 않았습니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
+</section>
+
+<section class="wrap block" id="flow-sec" aria-labelledby="h-flow" hidden>
+  <div class="block-head">
+    <h2 id="h-flow">온체인 코너 자금흐름 (이더리움 USDT·USDC, 좁은 대리지표)</h2>
+    <p>업비트·빗썸의 태그된 지갑과 Binance·OKX·Bybit 각각의 최대 핫월렛 사이를 직접 오간 USDT·USDC만 집계합니다. 트론·XRP 통로와 코인원·코빗·고팍스, 그리고 각 거래소의 다른 지갑들은 빠져 있어 실제 순유출의 극히 일부만 보여줍니다 — 하한선으로만 읽으십시오.</p>
+  </div>
+  <div class="figs">
+    <div class="fig"><p class="fig-k">순유출</p><p class="fig-v" id="fl-net">—</p><p class="fig-s" id="fl-window">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">유입</p><p class="fig-v" id="fl-in">—</p><p class="fig-s">해외→국내</p></div>
+    <div class="fig"><p class="fig-k">유출</p><p class="fig-v" id="fl-out">—</p><p class="fig-s">국내→해외</p></div>
+    <div class="fig"><p class="fig-k">이벤트</p><p class="fig-v" id="fl-count">—</p><p class="fig-s">코너 통과 이체 건수</p></div>
+  </div>
+  <figure class="chart chart-wide">
+    <figcaption>일별 순유출(+) · 순유입(−) <span class="unit">USD, USDT+USDC 합산</span></figcaption>
+    <div id="chart-flow2"></div>
+  </figure>
+  <div class="cols fz-cols3">
+    <div class="panel">
+      <h3>자산별</h3>
+      <div id="fl-asset-bars" class="bars"></div>
+    </div>
+    <div class="panel">
+      <h3>해외 거래소별</h3>
+      <div id="fl-exchange-bars" class="bars"></div>
+    </div>
+  </div>
+  <div class="cols fz-cols">
+    <div class="panel fz-recent">
+      <h3>최근 이체</h3>
+      <div class="tablewrap tw-inner">
+        <table id="fl-tbl">
+          <thead><tr>
+            <th scope="col">일자</th><th scope="col">자산</th><th scope="col">방향</th><th scope="col">한국 지갑</th>
+            <th scope="col">해외 지갑</th><th scope="col" class="num">금액</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>커버리지 한계</h3>
+      <ul class="plain" id="fl-coverage"></ul>
+    </div>
+  </div>
+</section>
+
+<section class="wrap block" id="attest-sec" aria-labelledby="h-attest" hidden>
+  <div class="block-head">
+    <h2 id="h-attest">어테스테이션 시차</h2>
+    <p>발행사가 공표한 준비금 보고서의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다.</p>
+  </div>
+  <div class="tablewrap">
+    <table id="attest-tbl">
+      <thead><tr>
+        <th scope="col">발행사</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
+        <th scope="col" class="num">보고 시점 발행량</th><th scope="col" class="num">현재 발행량</th>
+        <th scope="col" class="num">드리프트</th><th scope="col">등급</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="foot" id="attest-note"></p>
+</section>
+
+<section class="wrap block" id="flowxrp-sec" aria-labelledby="h-flowxrp" hidden>
+  <div class="block-head">
+    <h2 id="h-flowxrp">온체인 코너 자금흐름 (XRP Ledger)</h2>
+    <p>업비트·빗썸의 xrpscan 라벨 계정과 Binance·OKX·Bybit 사이의 네이티브 XRP 결제만 집계합니다. XRPL은 거래소당 지갑이 보통 하나뿐이라 이더리움 코너보다 커버리지가 넓지만, 여전히 하한선입니다.</p>
+  </div>
+  <div class="figs">
+    <div class="fig"><p class="fig-k">순유출</p><p class="fig-v" id="fx-net">—</p><p class="fig-s" id="fx-window">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">유입</p><p class="fig-v" id="fx-in">—</p><p class="fig-s">해외→국내</p></div>
+    <div class="fig"><p class="fig-k">유출</p><p class="fig-v" id="fx-out">—</p><p class="fig-s">국내→해외</p></div>
+    <div class="fig"><p class="fig-k">이벤트</p><p class="fig-v" id="fx-count">—</p><p class="fig-s">코너 통과 결제 건수</p></div>
+  </div>
+  <figure class="chart chart-wide">
+    <figcaption>일별 순유출(+) · 순유입(−) <span class="unit">XRP</span></figcaption>
+    <div id="chart-flowxrp"></div>
+  </figure>
+  <div class="cols fz-cols">
+    <div class="panel fz-recent">
+      <h3>최근 결제</h3>
+      <div class="tablewrap tw-inner">
+        <table id="fx-tbl">
+          <thead><tr>
+            <th scope="col">일자</th><th scope="col">방향</th><th scope="col">한국 계정</th>
+            <th scope="col">해외 계정</th><th scope="col" class="num">XRP</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>커버리지 한계</h3>
+      <ul class="plain" id="fx-coverage"></ul>
+    </div>
+  </div>
+</section>
+
+<section class="wrap block method" aria-labelledby="h-method">
+  <div class="block-head">
+    <h2 id="h-method">산출 방법과 한계</h2>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>등급 기준</h3>
+      <ul id="thr-list" class="plain"></ul>
+      <p class="foot">법정 기준이 아니라 이 사이트가 임의로 정한 관측선입니다. 근거를 갖고 조정할 수 있으며, 변경 이력은 저장소에 남습니다.</p>
+    </div>
+    <div class="panel">
+      <h3>읽을 때 유의할 점</h3>
+      <ul class="plain">
+        <li>발행잔액은 원장상 발행량이지 준비자산의 존재나 충분성을 증명하지 않습니다. 준비금 실사는 온체인 데이터 밖의 문제입니다.</li>
+        <li>가격은 거래소 체결가 기준입니다. 유동성이 얕은 종목은 편차가 과장되어 나타날 수 있습니다.</li>
+        <li>브릿지된 잔액이 원본과 이중 계상될 여지가 있어 소형 체인 수치는 보수적으로 보아야 합니다.</li>
+        <li>집중도 지수는 발행잔액 기준이며, 결제량이나 실사용자 수 기준과는 다른 그림을 줄 수 있습니다.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>데이터</h3>
+      <p class="plain-p">DefiLlama 공개 엔드포인트를 하루 네 차례 수집합니다. 원본 API는 무인증이며, 수집 코드와 산출 결과 JSON은 모두 저장소에 공개되어 있습니다.</p>
+      <p class="plain-p">이 사이트는 개인이 공개 데이터만으로 만든 참고 자료이며, 어떠한 기관의 공식 견해도 아닙니다. 투자 판단의 근거로 쓰기에 적합하지 않습니다.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="masthead foot-bar">
+  <div class="wrap">
+    <p>데이터 <a href="https://defillama.com/stablecoins" rel="noopener">DefiLlama</a> · 공개 블록체인 원장 기반 · 갱신 <span id="foot-time">—</span></p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
