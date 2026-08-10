@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>스테이블코인 감시 · Stablecoin Watch</title>
+<title>스테이블코인 모니터링 · Stablecoin Monitor</title>
 <meta name="description" content="공개 블록체인 원장 기반 스테이블코인 발행·페그·집중도 상시 모니터링. 감독 목적 지표를 매일 갱신합니다.">
 <meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,7 +19,7 @@
   <div class="wrap masthead-in">
     <div>
       <p class="eyebrow">ON-CHAIN SUPERVISORY MONITOR</p>
-      <h1>스테이블코인 감시</h1>
+      <h1>스테이블코인 모니터링</h1>
       <p class="lede">공개 원장에 기록된 발행·소각과 시장가격만으로 페그 유지 상태, 상환 압력, 시장 집중도를 매일 측정합니다.</p>
     </div>
     <dl class="stamp">
@@ -76,6 +76,7 @@
     <h2 id="h-gauge">페그 편차 계기판</h2>
     <p>스테이블코인의 유일한 약속은 1.0000입니다. 가운데 세로선이 그 약속이고, 표식이 얼마나 벗어나 있는지를 베이시스포인트로 잽니다. 옅은 띠는 ±25bp 허용 구간입니다.</p>
   </div>
+  <p class="gcap" id="gauge-basis">가격 출처: DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님) · 기준시각: —</p>
   <div class="ghead" aria-hidden="true">
     <span>종목</span>
     <span class="scale">
@@ -86,7 +87,9 @@
     <span class="gunit">편차 bp</span>
   </div>
   <ol class="gauge" id="gauge-list"></ol>
-  <p class="foot">USD 페그 종목만 표시합니다. ±150bp를 넘는 편차는 끝단에 고정되며 수치로 확인하십시오.</p>
+  <p class="foot">USD 페그 종목만 표시합니다. ±150bp를 넘는 편차는 끝단에 고정되며 수치로 확인하십시오.
+    <span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 발행사 개요가 열립니다.</span></p>
+  <p class="foot" id="gauge-nonusd" hidden></p>
 </section>
 
 <section class="wrap block" aria-labelledby="h-trend">
@@ -94,16 +97,27 @@
     <h2 id="h-trend">발행잔액과 상환 압력</h2>
     <p>총 발행잔액은 시장에 들어온 돈의 크기이고, 30일 순증감률은 그 방향입니다. 마이너스가 깊어지면 상환이 발행을 앞지르고 있다는 뜻입니다.</p>
   </div>
+  <div class="chart-tools">
+    <label class="ct-label" for="series-pick">표시 대상</label>
+    <select id="series-pick" class="ct-select">
+      <option value="__all__">전체 시장</option>
+    </select>
+    <button type="button" class="ct-btn" id="csv-dl">CSV 내려받기</button>
+    <span class="ct-hint" id="series-hint"></span>
+  </div>
   <div class="charts">
     <figure class="chart">
-      <figcaption>총 발행잔액 <span class="unit">USD</span></figcaption>
-      <div id="chart-total"></div>
+      <figcaption><span id="cap-total">총 발행잔액</span> <span class="unit">USD</span></figcaption>
+      <div id="chart-total" class="chart-plot"></div>
     </figure>
     <figure class="chart">
-      <figcaption>30일 순증감률 <span class="unit">%</span></figcaption>
-      <div id="chart-flow"></div>
+      <figcaption><span id="cap-flow">30일 순증감률</span> <span class="unit">%</span></figcaption>
+      <div id="chart-flow" class="chart-plot"></div>
     </figure>
   </div>
+  <p class="foot">차트 위에 커서를 올리면(터치 기기는 탭하면) 해당 날짜의 정확한 값이 표시됩니다.
+    CSV 열은 날짜 · 발행잔액(USD) · 30일 순증감률(%) 입니다.</p>
+  <p class="foot">출처: DefiLlama (<a href="https://defillama.com/stablecoins" rel="noopener">https://defillama.com/stablecoins</a>)</p>
 </section>
 
 <section class="wrap block" aria-labelledby="h-struct">
@@ -388,7 +402,7 @@
       <h3>읽을 때 유의할 점</h3>
       <ul class="plain">
         <li>발행잔액은 원장상 발행량이지 준비자산의 존재나 충분성을 증명하지 않습니다. 준비금 실사는 온체인 데이터 밖의 문제입니다.</li>
-        <li>가격은 거래소 체결가 기준입니다. 유동성이 얕은 종목은 편차가 과장되어 나타날 수 있습니다.</li>
+        <li>가격은 DefiLlama 가격 오라클이 여러 출처를 집계한 값이며 특정 거래소의 체결가가 아닙니다. 유동성이 얕은 종목은 편차가 과장되어 나타날 수 있습니다.</li>
         <li>브릿지된 잔액이 원본과 이중 계상될 여지가 있어 소형 체인 수치는 보수적으로 보아야 합니다.</li>
         <li>집중도 지수는 발행잔액 기준이며, 결제량이나 실사용자 수 기준과는 다른 그림을 줄 수 있습니다.</li>
       </ul>
@@ -410,6 +424,18 @@
     <p>데이터 <a href="https://defillama.com/stablecoins" rel="noopener">DefiLlama</a> · 공개 블록체인 원장 기반 · 갱신 <span id="foot-time">—</span></p>
   </div>
 </footer>
+
+<!-- 계기판 종목 개요. 화면에 하나만 두고 열린 행 옆으로 옮겨 붙인다. -->
+<div class="asset-pop" id="asset-pop" role="tooltip" hidden>
+  <p class="ap-head"><span class="ap-sym" id="ap-sym">—</span><span class="ap-name" id="ap-name"></span></p>
+  <dl class="ap-grid">
+    <dt>발행사</dt><dd id="ap-issuer">—</dd>
+    <dt>발행국가</dt><dd id="ap-country">—</dd>
+    <dt>발행잔액</dt><dd id="ap-mcap">—</dd>
+    <dt>점유율</dt><dd id="ap-share">—</dd>
+  </dl>
+  <p class="ap-note" id="ap-note" hidden></p>
+</div>
 
 <script src="app.js"></script>
 </body>
