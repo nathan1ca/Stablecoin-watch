@@ -188,6 +188,7 @@
     const sec = $("#freeze-sec");
     if (!f || !f.issuers || !f.issuers.length) return;
     sec.hidden = false;
+    $("#freeze-empty").hidden = true;
 
     const t = f.totals, days = f.meta.lookback_days;
     $("#fz-freeze").textContent = t.freeze.toLocaleString();
@@ -244,6 +245,7 @@
   function renderPremium(p, hist) {
     if (!p || !p.assets || !p.assets.length) return;
     $("#premium-sec").hidden = false;
+    $("#premium-empty").hidden = true;
 
     const grade = p.basket_grade;
     $("#pm-avg").textContent = signed(p.basket_avg_pct, 2, "%");
@@ -274,6 +276,7 @@
   function renderFlow(f) {
     if (!f || !f.totals) return;
     $("#flow-sec").hidden = false;
+    $("#flow-empty").hidden = true;
 
     const t = f.totals;
     $("#fl-net").textContent = (t.net_outflow_usd >= 0 ? "+$" : "−$") + usd(Math.abs(t.net_outflow_usd));
@@ -330,6 +333,7 @@
   function renderAttestation(a) {
     if (!a || !a.entries || !a.entries.length) return;
     $("#attest-sec").hidden = false;
+    $("#attest-empty").hidden = true;
     $("#attest-tbl tbody").innerHTML = a.entries.map((e) => `<tr>
       <td>${e.issuer} <span class="tname">${e.symbol}</span></td>
       <td>${e.as_of_date}</td>
@@ -346,6 +350,7 @@
   function renderFlowXRP(f) {
     if (!f || !f.totals) return;
     $("#flowxrp-sec").hidden = false;
+    $("#flowxrp-empty").hidden = true;
 
     const t = f.totals;
     $("#fx-net").textContent = (t.net_outflow_xrp >= 0 ? "+" : "−") + usd(Math.abs(t.net_outflow_xrp)) + " XRP";
@@ -405,6 +410,34 @@
     } catch (e) {
       console.info("프리미엄 재조회 실패:", e.message || e);
     }
+  }
+
+  // ── 탭 전환 ─────────────────────────────────────────────
+  function initTabs() {
+    const tabs = Array.from(document.querySelectorAll(".tab-btn"));
+    if (!tabs.length) return;
+    const panels = tabs.map((t) => document.getElementById(t.getAttribute("aria-controls")));
+
+    const activate = (i, focus) => {
+      tabs.forEach((t, j) => {
+        const on = j === i;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        if (panels[j]) panels[j].hidden = !on;
+      });
+      if (focus) tabs[i].focus();
+    };
+
+    tabs.forEach((t, i) => {
+      t.addEventListener("click", () => activate(i, false));
+      t.addEventListener("keydown", (e) => {
+        const n = tabs.length;
+        if (e.key === "ArrowRight") { e.preventDefault(); activate((i + 1) % n, true); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); activate((i - 1 + n) % n, true); }
+        else if (e.key === "Home") { e.preventDefault(); activate(0, true); }
+        else if (e.key === "End") { e.preventDefault(); activate(n - 1, true); }
+      });
+    });
   }
 
   // ── 부팅 ────────────────────────────────────────────────
@@ -502,5 +535,6 @@
     });
   }
 
+  initTabs();
   boot();
 })();

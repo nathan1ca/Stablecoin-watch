@@ -76,6 +76,31 @@ a{color:var(--petrol)}
 .fig-s{margin:.35rem 0 0;font-size:.72rem;color:var(--dim)}
 abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
 
+/* ── tabs ─────────────────────────────────────────────── */
+.tabbar{background:var(--card);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.tabbar-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.tablist{display:flex;gap:.2rem;width:max-content;min-width:100%}
+.tab-btn{
+  appearance:none;background:transparent;border:0;border-bottom:2px solid transparent;
+  font-family:var(--mono);font-size:.76rem;letter-spacing:.03em;color:var(--mid);
+  padding:.9rem 1.05rem;cursor:pointer;white-space:nowrap;line-height:1.2;
+}
+.tab-btn:hover{color:var(--ink)}
+.tab-btn[aria-selected="true"]{color:var(--petrol);font-weight:600;border-bottom-color:var(--petrol)}
+.tabpanel{outline:none}
+.tabpanel > .block:first-child,.tabpanel > .empty-state:first-child{border-top:0}
+
+/* ── empty state ──────────────────────────────────────── */
+.empty-state{padding-block:clamp(2.5rem,7vw,4.5rem)}
+.empty-box{
+  max-width:52ch;margin:0 auto;text-align:center;background:var(--card);
+  border:1px dashed var(--rule);padding:2.2rem 1.6rem;
+}
+.empty-box h3{margin:0 0 .6rem;font-size:1rem;font-weight:600;color:var(--ink)}
+.empty-box p{margin:.4rem 0 0;font-size:.85rem;color:var(--mid);line-height:1.6}
+.empty-box code{font-family:var(--mono);font-size:.85em;background:#0d111710;padding:.1em .4em}
+.empty-reason{font-family:var(--mono);font-size:.72rem;color:var(--dim)}
+
 /* ── blocks ───────────────────────────────────────────── */
 .block{padding-block:clamp(2rem,5vw,3.25rem);border-top:1px solid var(--rule)}
 .block-head{max-width:60ch;margin-bottom:1.6rem}
@@ -235,6 +260,7 @@ tbody tr:hover{background:#fff}
   .fz-figs .fig:nth-child(3){border-left:0}
   .fz-figs .fig:nth-child(n+3){border-top:1px solid var(--rule-soft)}
   .charts{grid-template-columns:1fr}
+  .tab-btn{padding:.8rem .85rem;font-size:.72rem}
 }
 @media (max-width:620px){
   .figs{grid-template-columns:1fr 1fr}
@@ -242,4 +268,5 @@ tbody tr:hover{background:#fff}
   .ghead{font-size:.58rem}
   .masthead-in{gap:1.5rem}
   .stamp{align-content:start}
+  .empty-box{padding:1.6rem 1.1rem}
 }
