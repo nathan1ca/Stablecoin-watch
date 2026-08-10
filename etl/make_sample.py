@@ -14,7 +14,9 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from fetch import THRESHOLDS, MECHANISM_KO, hhi, grade_peg, grade_redemption, WORST  # noqa
+from fetch import (THRESHOLDS, MECHANISM_KO, SERIES_ASSET_COUNT, UNKNOWN_ISSUER,  # noqa
+                   hhi, grade_peg, grade_redemption, issuer_fields, load_issuers,
+                   net_30d_series, WORST)
 
 random.seed(17)
 
@@ -52,6 +54,8 @@ def main():
     out = Path(__file__).resolve().parent.parent / "site" / "data"
     out.mkdir(exist_ok=True)
 
+    issuers = load_issuers()
+
     rows = []
     for sym, name, mech, cur, mcap, dev, c1, c7, c30 in SPEC:
         peg_g = grade_peg(dev)
@@ -61,6 +65,7 @@ def main():
         picks = random.sample([c for c, _ in CHAINS], 6)
         rows.append({
             "id": str(len(rows) + 1), "name": name, "symbol": sym,
+            **issuer_fields(sym, issuers),
             "peg_currency": cur, "mechanism": mech,
             "mechanism_ko": MECHANISM_KO.get(mech, mech),
             "circulating": round(mcap, 2), "mcap_usd": round(mcap, 2),
@@ -108,6 +113,9 @@ def main():
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source": "샘플", "source_url": "https://defillama.com/stablecoins",
             "is_sample": True, "thresholds": THRESHOLDS, "asset_count": len(rows),
+            "price_basis": "DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님)",
+            "issuer_source": "etl/issuers.json (수기 관리)",
+            "issuer_unknown_label": UNKNOWN_ISSUER,
         },
         "totals": {
             "circulating_usd": round(total, 2),
@@ -126,16 +134,37 @@ def main():
 
     # 시계열 — 완만한 성장에 변동을 얹은 가짜 곡선
     now = int(datetime.now(timezone.utc).timestamp())
-    pts, v = [], total * 0.62
-    for i in range(365):
-        v *= 1 + 0.0013 + math.sin(i / 29) * 0.0016 + random.gauss(0, 0.0011)
-        pts.append({"t": now - (364 - i) * 86400, "v": round(v, 2)})
-    flow = [{"t": p["t"], "v": round((p["v"] - pts[i - 30]["v"]) / pts[i - 30]["v"] * 100, 3)}
-            for i, p in enumerate(pts) if i >= 30]
+
+    def fake_series(end_value, drift, wave, noise, period):
+        """끝값이 end_value가 되도록 역산해 365일치 곡선을 만든다."""
+        steps = [1 + drift + math.sin(i / period) * wave + random.gauss(0, noise)
+                 for i in range(365)]
+        v, back = end_value, []
+        for s in reversed(steps):
+            back.append(v)
+            v /= s
+        back.reverse()
+        return [{"t": now - (364 - i) * 86400, "v": round(max(x, 1.0), 2)}
+                for i, x in enumerate(back)]
+
+    pts = fake_series(total, 0.0013, 0.0016, 0.0011, 29)
+    flow = net_30d_series(pts)
+
+    # 종목별 시계열 — 화면 드롭다운이 실제 데이터 없이도 동작하도록 상위 종목만 만든다.
+    series = []
+    for r in rows[:SERIES_ASSET_COUNT]:
+        drift = (r["chg_30d"] / 100) / 30  # 30일 변화율을 일간 드리프트로 환산
+        series.append({
+            "id": r["id"], "symbol": r["symbol"], "name": r["name"],
+            "total_circulating": (sp := fake_series(r["mcap_usd"], drift, 0.0022,
+                                                    0.0026, random.randint(17, 41))),
+            "net_30d_pct": net_30d_series(sp),
+        })
 
     (out / "snapshot.json").write_text(json.dumps(snap, ensure_ascii=False,
                                                   separators=(",", ":")), encoding="utf-8")
-    (out / "history.json").write_text(json.dumps({"total_circulating": pts, "net_30d_pct": flow},
+    (out / "history.json").write_text(json.dumps({"total_circulating": pts, "net_30d_pct": flow,
+                                                  "series": series},
                                                  ensure_ascii=False, separators=(",", ":")),
                                       encoding="utf-8")
 
@@ -180,7 +209,10 @@ def main():
         "events": ev[:200],
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
+    unknown = sum(1 for r in rows_or_assets if r["issuer"] == UNKNOWN_ISSUER)
     print(f"샘플 생성 완료 — {len(rows_or_assets)}종목 / 총 ${total/1e9:,.1f}B / 동결 {len(ev)}건")
+    print(f"           발행사 대조 {len(rows_or_assets) - unknown}종 확인 / "
+          f"{unknown}종 '{UNKNOWN_ISSUER}' · 종목별 시계열 {len(series)}종")
 
     # ── 김치프리미엄 샘플 ──────────────────────────────────
     PREM_ASSETS = [("BTC", 2.8, 0.3, (1.3e8, 1.7e8)), ("ETH", 1.9, -0.1, (4.5e6, 6.5e6)),

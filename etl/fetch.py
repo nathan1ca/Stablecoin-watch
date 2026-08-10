@@ -28,6 +28,13 @@ from urllib.request import Request, urlopen
 BASE = "https://stablecoins.llama.fi"
 UA = "stablecoin-watch/0.1 (public supervisory dashboard; contact: <your-email>)"
 
+# 발행사·발행국가 대조표. DefiLlama 응답에는 이 정보가 없어 손으로 채운다.
+ISSUERS_PATH = Path(__file__).resolve().parent / "issuers.json"
+UNKNOWN_ISSUER = "확인 필요"
+
+# 종목별 시계열을 따로 받아올 개수 (발행잔액 상위). 화면 드롭다운 항목 수와 같다.
+SERIES_ASSET_COUNT = 12
+
 # ── 감독 임계치 ────────────────────────────────────────────────────────────
 # 법정 기준이 아니라 이 대시보드의 편의상 설정값이다. 근거를 갖고 조정할 것.
 THRESHOLDS = {
@@ -82,6 +89,49 @@ def peg_currency(box, fallback: str = "USD") -> str:
             if k.startswith("pegged"):
                 return k.replace("pegged", "") or fallback
     return fallback
+
+
+# ── 발행사 대조표 ─────────────────────────────────────────────────────────
+def load_issuers(path: Path | str | None = None) -> dict:
+    """etl/issuers.json 을 {심볼(대문자): {issuer, country, note}} 로 읽는다.
+
+    파일이 없거나 깨져 있어도 수집 자체는 계속한다. 이 경우 모든 종목의
+    발행사·발행국가가 '확인 필요'로 표시된다 — 틀린 값을 채우는 것보다 낫다.
+    """
+    p = Path(path) if path else ISSUERS_PATH
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        print(f"  issuers.json 없음 ({p}) — 발행사·발행국가는 '{UNKNOWN_ISSUER}'", file=sys.stderr)
+        return {}
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"  issuers.json 읽기 실패 ({e}) — 발행사·발행국가는 '{UNKNOWN_ISSUER}'", file=sys.stderr)
+        return {}
+
+    table = raw.get("issuers") if isinstance(raw, dict) and isinstance(raw.get("issuers"), dict) else raw
+    if not isinstance(table, dict):
+        return {}
+    return {
+        str(k).strip().upper(): v
+        for k, v in table.items()
+        if isinstance(v, dict) and not str(k).startswith("_")
+    }
+
+
+def issuer_fields(symbol: str | None, table: dict) -> dict:
+    """심볼 하나에 대한 발행사 필드. 미등재 종목은 빈 칸이 아니라 '확인 필요'."""
+    entry = table.get(str(symbol or "").strip().upper()) or {}
+
+    def val(key: str) -> str:
+        v = entry.get(key)
+        return v.strip() if isinstance(v, str) and v.strip() else UNKNOWN_ISSUER
+
+    note = entry.get("note")
+    return {
+        "issuer": val("issuer"),
+        "issuer_country": val("country"),
+        "issuer_note": note.strip() if isinstance(note, str) and note.strip() else "",
+    }
 
 
 def pct_change(now: float, prev: float) -> float | None:
@@ -139,6 +189,18 @@ def fetch_chains() -> list[dict]:
     return raw if isinstance(raw, list) else []
 
 
+def fetch_asset_history(asset_id: str, days: int = 400) -> list[dict]:
+    """종목 하나의 전체 체인 합산 시계열.
+
+    /stablecoincharts/all 에 stablecoin={id} 를 붙이면 그 종목만 걸러서 준다.
+    응답 모양은 시장 전체 시계열과 같다(date + totalCirculating*).
+    """
+    raw = get("/stablecoincharts/all", {"stablecoin": str(asset_id)})
+    if not isinstance(raw, list):
+        return []
+    return raw[-days:]
+
+
 # ── 가공 ──────────────────────────────────────────────────────────────────
 MECHANISM_KO = {
     "fiat-backed": "법정화폐 담보",
@@ -147,7 +209,8 @@ MECHANISM_KO = {
 }
 
 
-def build_snapshot(assets: list[dict], chains: list[dict]) -> dict:
+def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None = None) -> dict:
+    issuers = load_issuers() if issuers is None else issuers
     rows = []
     for a in assets:
         circ_box = a.get("circulating")
@@ -190,6 +253,7 @@ def build_snapshot(assets: list[dict], chains: list[dict]) -> dict:
             "id": str(a.get("id", "")),
             "name": a.get("name"),
             "symbol": a.get("symbol"),
+            **issuer_fields(a.get("symbol"), issuers),
             "peg_currency": cur,
             "mechanism": mech,
             "mechanism_ko": MECHANISM_KO.get(mech, mech),
@@ -283,6 +347,9 @@ def build_snapshot(assets: list[dict], chains: list[dict]) -> dict:
             "is_sample": False,
             "thresholds": THRESHOLDS,
             "asset_count": len(rows),
+            "price_basis": "DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님)",
+            "issuer_source": "etl/issuers.json (수기 관리)",
+            "issuer_unknown_label": UNKNOWN_ISSUER,
         },
         "totals": {
             "circulating_usd": round(total, 2),
@@ -304,7 +371,8 @@ def build_snapshot(assets: list[dict], chains: list[dict]) -> dict:
     }
 
 
-def build_history(raw: list[dict]) -> dict:
+def series_points(raw: list[dict]) -> list[dict]:
+    """차트 응답을 {t, v} 시계열로 정규화한다. 시장 전체·종목별 모두 같은 모양이다."""
     pts = []
     for d in raw:
         ts = d.get("date")
@@ -317,14 +385,55 @@ def build_history(raw: list[dict]) -> dict:
             continue
         pts.append({"t": ts, "v": round(total, 2)})
     pts.sort(key=lambda p: p["t"])
+    return pts
 
-    # 30일 순증감률 시계열 — 상환압력의 추세를 본다
+
+def net_30d_series(pts: list[dict]) -> list[dict]:
+    """30일 순증감률 시계열 — 상환압력의 추세를 본다."""
     flow = []
     for i, p in enumerate(pts):
         j = i - 30
         if j >= 0 and pts[j]["v"]:
             flow.append({"t": p["t"], "v": round((p["v"] - pts[j]["v"]) / pts[j]["v"] * 100, 3)})
-    return {"total_circulating": pts, "net_30d_pct": flow}
+    return flow
+
+
+def build_history(raw: list[dict], series: list[dict] | None = None) -> dict:
+    pts = series_points(raw)
+    return {
+        "total_circulating": pts,
+        "net_30d_pct": net_30d_series(pts),
+        # 종목별 시계열. 화면 드롭다운에서 "전체 시장" 다음 항목들로 쓴다.
+        "series": series or [],
+    }
+
+
+def fetch_asset_series(rows: list[dict], count: int = SERIES_ASSET_COUNT) -> list[dict]:
+    """발행잔액 상위 종목의 시계열을 하나씩 받아온다.
+
+    한 종목이 실패해도 나머지는 그대로 살린다 — 드롭다운에서 그 종목만 빠진다.
+    """
+    out = []
+    for r in rows[:count]:
+        aid = r.get("id")
+        if not aid:
+            continue
+        try:
+            pts = series_points(fetch_asset_history(aid))
+        except RuntimeError as e:
+            print(f"    {r['symbol']} 시계열 수집 실패 — 건너뜀 ({e})", file=sys.stderr)
+            continue
+        if len(pts) < 2:
+            print(f"    {r['symbol']} 시계열 데이터 부족 — 건너뜀", file=sys.stderr)
+            continue
+        out.append({
+            "id": str(aid),
+            "symbol": r.get("symbol"),
+            "name": r.get("name"),
+            "total_circulating": pts,
+            "net_30d_pct": net_30d_series(pts),
+        })
+    return out
 
 
 # ── 진단 모드 ─────────────────────────────────────────────────────────────
@@ -344,6 +453,38 @@ def probe():
     c = fetch_chains()
     print(json.dumps(c[0] if c else {}, ensure_ascii=False, indent=2)[:600])
 
+    # 종목별 히스토리 엔드포인트가 실제로 있는지 확인한다.
+    # /stablecoincharts/all 에 stablecoin={id} 를 붙이면 그 종목만 걸러 준다는 전제.
+    print("\n== /stablecoincharts/all?stablecoin={id} 종목별 히스토리 ==")
+    if assets:
+        top = max(assets, key=lambda a: peg_amount(a.get("circulating")))
+        aid = top.get("id")
+        print(f"대상: {top.get('symbol')} (id={aid})")
+        try:
+            h1 = fetch_asset_history(aid)
+            print(f"  응답 길이: {len(h1)}")
+            if h1:
+                print("  마지막 항목: " + json.dumps(h1[-1], ensure_ascii=False)[:400])
+                pts = series_points(h1)
+                print(f"  정규화 시계열: {len(pts)}점")
+                if pts:
+                    print(f"  최신 값 ${pts[-1]['v']/1e9:,.2f}B "
+                          f"(스냅숏 발행잔액과 비슷하면 종목별 필터가 실제로 먹은 것)")
+            else:
+                print("  빈 배열 — 종목별 필터가 지원되지 않을 수 있다.")
+        except RuntimeError as e:
+            print(f"  실패: {e}")
+
+    print("\n== etl/issuers.json 대조표 ==")
+    tbl = load_issuers()
+    unknown = sum(1 for v in tbl.values() if (v.get("issuer") or UNKNOWN_ISSUER) == UNKNOWN_ISSUER)
+    print(f"등재 {len(tbl)}종 (그중 발행사 '확인 필요' {unknown}종)")
+    if assets:
+        top20 = sorted(assets, key=lambda a: -peg_amount(a.get("circulating")))[:20]
+        missing = [a.get("symbol") for a in top20
+                   if str(a.get("symbol") or "").upper() not in tbl]
+        print("상위 20종 중 미등재: " + (", ".join(m for m in missing if m) or "없음"))
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -358,18 +499,24 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    print("1/3 발행 현황 수집…")
+    print("1/4 발행 현황 수집…")
     assets = fetch_assets()
     print(f"    {len(assets)}개 종목")
 
-    print("2/3 체인별 집계 수집…")
+    print("2/4 체인별 집계 수집…")
     chains = fetch_chains()
 
-    print("3/3 시계열 수집…")
+    print("3/4 시장 전체 시계열 수집…")
     history = fetch_history()
 
-    snap = build_snapshot(assets, chains)
-    hist = build_history(history)
+    issuers = load_issuers()
+    snap = build_snapshot(assets, chains, issuers)
+
+    print(f"4/4 종목별 시계열 수집… (상위 {SERIES_ASSET_COUNT}종)")
+    series = fetch_asset_series(snap["assets"])
+    print(f"    {len(series)}종 확보")
+
+    hist = build_history(history, series)
 
     (out / "snapshot.json").write_text(
         json.dumps(snap, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -380,6 +527,9 @@ def main():
     print(f"\n완료 — 총 발행잔액 ${t['circulating_usd']/1e9:,.1f}B / "
           f"시스템 등급 {t['system_grade']} / 경보 {t['breach_count']}건 주의 {t['watch_count']}건")
     print(f"       HHI(발행사) {snap['concentration']['hhi_issuer']:,.0f}")
+    unknown = sum(1 for r in snap["assets"] if r["issuer"] == UNKNOWN_ISSUER)
+    print(f"       발행사 대조: {len(snap['assets']) - unknown}/{len(snap['assets'])}종 확인, "
+          f"{unknown}종 '{UNKNOWN_ISSUER}' (etl/issuers.json 에 채우면 줄어든다)")
 
 
 if __name__ == "__main__":

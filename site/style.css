@@ -164,7 +164,84 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   .gmark,.gbar{transition:none}
 }
 
+/* ── 계기판 종목 개요 ─────────────────────────────────────
+   .grow 는 동결 조치 탭의 지갑 레인과 공유하므로, 개요가 붙는 계기판 행에만
+   .grow-asset 을 두고 여기 있는 규칙은 전부 그 클래스 안으로 한정한다. */
+.gcap{
+  font-family:var(--mono);font-size:.68rem;line-height:1.5;color:var(--dim);
+  margin:0 0 .9rem;
+}
+.gauge-hint{color:var(--dim)}
+.grow-asset .gsym-btn{
+  appearance:none;background:transparent;border:0;padding:0;margin:0;
+  font:inherit;font-family:var(--mono);font-size:.82rem;font-weight:500;letter-spacing:-.01em;
+  color:inherit;text-align:left;cursor:pointer;justify-self:start;
+  border-bottom:1px dotted var(--rule);
+}
+.grow-asset .gsym-btn[aria-expanded="true"]{color:var(--petrol);border-bottom-color:var(--petrol)}
+.grow-asset .gsym-btn:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+
+/* 호버가 되는 기기에서만 커서 힌트를 준다. 판정 질의는 app.js 의 HOVER_MQ 와 같다. */
+@media (hover:hover) and (pointer:fine){
+  .grow-asset .gsym-btn{cursor:help}
+  .grow-asset .gsym-btn:hover{color:var(--petrol);border-bottom-color:var(--petrol)}
+}
+/* 호버가 없는 기기(터치)에서는 탭으로 여는 것임을 점으로 알린다. */
+@media not all and (hover:hover) and (pointer:fine){
+  .grow-asset .gsym-btn::after{
+    content:"";display:inline-block;width:4px;height:4px;border-radius:50%;
+    background:var(--dim);vertical-align:.35em;margin-left:.3rem;
+  }
+}
+
+.asset-pop{
+  position:fixed;top:0;left:0;z-index:40;width:min(19rem,calc(100vw - 1rem));
+  background:var(--card);border:1px solid var(--rule);border-top:2px solid var(--petrol);
+  box-shadow:0 6px 20px #0d111722;padding:.75rem .85rem .8rem;
+}
+.asset-pop[hidden]{display:none}
+.ap-head{margin:0 0 .5rem;display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap}
+.ap-sym{font-family:var(--mono);font-size:.85rem;font-weight:600;letter-spacing:-.01em}
+.ap-name{font-size:.75rem;color:var(--dim)}
+.ap-grid{
+  display:grid;grid-template-columns:auto 1fr;gap:.3rem .8rem;margin:0;
+  padding-top:.5rem;border-top:1px solid var(--rule-soft);
+}
+.ap-grid dt{font-family:var(--mono);font-size:.68rem;letter-spacing:.05em;color:var(--mid)}
+.ap-grid dd{margin:0;font-size:.8rem;text-align:right;overflow-wrap:anywhere}
+.ap-note{
+  margin:.6rem 0 0;padding-top:.5rem;border-top:1px solid var(--rule-soft);
+  font-size:.71rem;line-height:1.5;color:var(--dim);
+}
+.ap-note[hidden]{display:none}
+
 /* ── charts ───────────────────────────────────────────── */
+.chart-tools{
+  display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:1.1rem;
+}
+.ct-label{font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;color:var(--mid)}
+.ct-select{
+  font-family:var(--mono);font-size:.78rem;color:var(--ink);background:var(--card);
+  border:1px solid var(--rule);padding:.35rem .5rem;max-width:min(22rem,60vw);
+}
+.ct-select:disabled{color:var(--dim);background:transparent}
+.ct-btn{
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;color:var(--petrol);
+  background:var(--card);border:1px solid var(--petrol);padding:.38rem .7rem;cursor:pointer;
+}
+.ct-btn:hover{background:var(--petrol);color:var(--card)}
+.ct-hint{font-family:var(--mono);font-size:.68rem;color:var(--dim)}
+.chart-plot{position:relative}
+.chart-plot svg{touch-action:pan-y}
+.ch-tip{
+  position:absolute;transform:translate(-50%,calc(-100% - 10px));pointer-events:none;
+  background:var(--ink);color:#E8EBEF;padding:.3rem .5rem;white-space:nowrap;
+  font-family:var(--mono);font-size:.7rem;line-height:1.35;display:grid;gap:.05rem;z-index:5;
+}
+.ch-tip[hidden]{display:none}
+.ch-tip-d{color:#A8B1BC}
+.ch-tip-v{font-weight:500}
+
 .charts{display:grid;grid-template-columns:1fr 1fr;column-gap:2.4rem}
 .chart{margin:0;background:var(--card);padding:1.1rem 0 0.6rem}
 .chart+.chart{border-left:1px solid var(--rule);padding-left:2.4rem}
@@ -279,7 +356,8 @@ tbody tr:hover{background:#fff}
 @media print{
   @page{size:A4;margin:14mm}
   body{background:#fff;font-size:11px}
-  .skip,.band,.live-badge{display:none}
+  .skip,.band,.live-badge,.asset-pop,.chart-tools,.ch-tip{display:none}
+  .grow-asset .gsym-btn{border-bottom:0;color:var(--ink)}
   .masthead{background:#fff;color:var(--ink);border-bottom:2px solid var(--ink)}
   .eyebrow{color:var(--mid)}
   .lede{color:var(--mid)}
