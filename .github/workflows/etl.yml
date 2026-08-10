@@ -2,10 +2,11 @@ name: 수집 및 배포
 
 on:
   schedule:
-    # GitHub Actions는 5분 미만 스케줄을 지원하지 않고, 부하 시 더 늦게 돌기도
-    # 한다. 진짜 1분 단위가 필요하면 etl/live_loop.py 를 로컬/서버에서 계속
-    # 돌려라 — 이건 아무도 그걸 안 켜놨을 때의 기준선(15분)이다.
-    - cron: "*/15 * * * *"
+    # GitHub Actions는 짧은 간격 스케줄을 부하 시 지연·스킵하는 경우가 잦다.
+    # */15 로는 낮 시간대에 실제로 자주 밀려서, 매시 정각으로 낮춰 안정적으로
+    # 돈다. 진짜 1분 단위가 필요하면 etl/live_loop.py 를 로컬/서버에서 계속
+    # 돌려라.
+    - cron: "0 * * * *"
   workflow_dispatch:
   push:
     branches: [main]
