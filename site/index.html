@@ -55,6 +55,22 @@
   </div>
 </section>
 
+<nav class="tabbar" aria-label="화면 구성 탭">
+  <div class="wrap tabbar-scroll">
+    <div class="tablist" role="tablist" aria-label="지표 구분">
+      <button type="button" class="tab-btn" role="tab" id="tab-issuance" aria-controls="panel-issuance" aria-selected="true">발행 현황</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-freeze" aria-controls="panel-freeze" aria-selected="false" tabindex="-1">동결 조치</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-premium" aria-controls="panel-premium" aria-selected="false" tabindex="-1">김치프리미엄</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">코너 흐름 · ETH</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-flowxrp" aria-controls="panel-flowxrp" aria-selected="false" tabindex="-1">코너 흐름 · XRP</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-attest" aria-controls="panel-attest" aria-selected="false" tabindex="-1">어테스테이션</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-method" aria-controls="panel-method" aria-selected="false" tabindex="-1">방법론</button>
+    </div>
+  </div>
+</nav>
+
+<div class="tabpanel" id="panel-issuance" role="tabpanel" aria-labelledby="tab-issuance" tabindex="0">
+
 <section class="wrap block" id="gauge" aria-labelledby="h-gauge">
   <div class="block-head">
     <h2 id="h-gauge">페그 편차 계기판</h2>
@@ -132,6 +148,10 @@
   </div>
 </section>
 
+</div>
+
+<div class="tabpanel" id="panel-freeze" role="tabpanel" aria-labelledby="tab-freeze" tabindex="0" hidden>
+
 <section class="wrap block" id="freeze-sec" aria-labelledby="h-freeze" hidden>
   <div class="block-head">
     <h2 id="h-freeze">발행사 동결 조치</h2>
@@ -176,6 +196,18 @@
   </div>
 </section>
 
+<div class="wrap empty-state" id="freeze-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>발행사 동결·소각 이벤트는 이더리움 온체인 로그에서 수집합니다.</p>
+    <p class="empty-reason">필요 시크릿: <code>ETHERSCAN_API_KEY</code> · 확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “동결 조치 수집” 단계 로그</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-premium" role="tabpanel" aria-labelledby="tab-premium" tabindex="0" hidden>
+
 <section class="wrap block" id="premium-sec" aria-labelledby="h-premium" hidden>
   <div class="block-head">
     <h2 id="h-premium">국경 간 순유출 — 김치프리미엄
@@ -195,6 +227,18 @@
   </figure>
   <p class="foot">평균은 BTC·ETH·XRP 3종 단순 평균이며 거래량 가중치는 적용하지 않았습니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
 </section>
+
+<div class="wrap empty-state" id="premium-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이 데이터는 시크릿 없이 자동으로 생성됩니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “김치프리미엄 수집” 단계 로그 (외부 API 일시 장애일 수 있습니다)</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-flow" role="tabpanel" aria-labelledby="tab-flow" tabindex="0" hidden>
 
 <section class="wrap block" id="flow-sec" aria-labelledby="h-flow" hidden>
   <div class="block-head">
@@ -241,23 +285,17 @@
   </div>
 </section>
 
-<section class="wrap block" id="attest-sec" aria-labelledby="h-attest" hidden>
-  <div class="block-head">
-    <h2 id="h-attest">어테스테이션 시차</h2>
-    <p>발행사가 공표한 준비금 보고서의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다.</p>
+<div class="wrap empty-state" id="flow-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이더리움 코너 자금흐름은 온체인 이체 로그에서 수집합니다.</p>
+    <p class="empty-reason">필요 시크릿: <code>ETHERSCAN_API_KEY</code> · 확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “국경 간 코너 자금흐름 수집 (이더리움)” 단계 로그</p>
   </div>
-  <div class="tablewrap">
-    <table id="attest-tbl">
-      <thead><tr>
-        <th scope="col">발행사</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
-        <th scope="col" class="num">보고 시점 발행량</th><th scope="col" class="num">현재 발행량</th>
-        <th scope="col" class="num">드리프트</th><th scope="col">등급</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <p class="foot" id="attest-note"></p>
-</section>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-flowxrp" role="tabpanel" aria-labelledby="tab-flowxrp" tabindex="0" hidden>
 
 <section class="wrap block" id="flowxrp-sec" aria-labelledby="h-flowxrp" hidden>
   <div class="block-head">
@@ -294,6 +332,48 @@
   </div>
 </section>
 
+<div class="wrap empty-state" id="flowxrp-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이 데이터는 시크릿 없이 자동으로 생성됩니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “국경 간 코너 자금흐름 수집 (XRP)” 단계 로그 (외부 API 일시 장애일 수 있습니다)</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-attest" role="tabpanel" aria-labelledby="tab-attest" tabindex="0" hidden>
+
+<section class="wrap block" id="attest-sec" aria-labelledby="h-attest" hidden>
+  <div class="block-head">
+    <h2 id="h-attest">어테스테이션 시차</h2>
+    <p>발행사가 공표한 준비금 보고서의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다.</p>
+  </div>
+  <div class="tablewrap">
+    <table id="attest-tbl">
+      <thead><tr>
+        <th scope="col">발행사</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
+        <th scope="col" class="num">보고 시점 발행량</th><th scope="col" class="num">현재 발행량</th>
+        <th scope="col" class="num">드리프트</th><th scope="col">등급</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="foot" id="attest-note"></p>
+</section>
+
+<div class="wrap empty-state" id="attest-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이 항목은 <code>etl/attestations.json</code> 을 손으로 갱신해야 값이 채워지는 수동 데이터입니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “어테스테이션 시차 계산” 단계 로그</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-method" role="tabpanel" aria-labelledby="tab-method" tabindex="0" hidden>
+
 <section class="wrap block method" aria-labelledby="h-method">
   <div class="block-head">
     <h2 id="h-method">산출 방법과 한계</h2>
@@ -320,6 +400,8 @@
     </div>
   </div>
 </section>
+
+</div>
 
 </main>
 
