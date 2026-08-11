@@ -74,9 +74,20 @@
   // 탭의 지갑 레인과 공유하므로 여기서 스타일을 얹으면 그쪽까지 번진다.
   let GAUGE_ROWS = []; // 개요 패널이 참조할 행 데이터
 
+  // 이자부(가격 누적형) 상품인지. 판정은 ETL(etl/yield_bearing.json)이 하고
+  // 화면은 행에 붙어 온 yield_bearing 플래그만 읽는다. 다만 이 커밋 이전에
+  // 만들어진 snapshot.json 에는 그 필드가 없어서, 그런 파일을 열었을 때 USYC 가
+  // 다시 +1300bp 로 튀지 않도록 심볼 몇 개만 최소한의 대비책으로 들고 있는다.
+  // 목록 관리의 정본은 어디까지나 etl/yield_bearing.json 쪽이다.
+  const YB_FALLBACK = new Set(["USYC", "USDY", "OUSG", "USTB", "TBILL"]);
+  const isYieldBearing = (a) =>
+    a.yield_bearing === true || (a.yield_bearing == null && YB_FALLBACK.has(String(a.symbol || "").toUpperCase()));
+
   function renderGauge(d) {
     const list = $("#gauge-list");
-    const rows = d.assets.filter((a) => a.peg_currency === "USD").slice(0, 16);
+    const rows = d.assets
+      .filter((a) => a.peg_currency === "USD" && !isYieldBearing(a))
+      .slice(0, 16);
     GAUGE_ROWS = rows;
     const pos = (bp) => 50 + (clamp(bp, -SCALE_BP, SCALE_BP) / SCALE_BP) * 50;
 
@@ -126,6 +137,23 @@
       el.hidden = false;
     } else {
       el.hidden = true;
+    }
+
+    // [D] 편차 계산에서 빠진 이자부 상품 안내 — 어떤 종목이 왜 빠졌는지 밝힌다
+    const yb = (d.yield_bearing && d.yield_bearing.length)
+      ? d.yield_bearing
+      : d.assets.filter(isYieldBearing);
+    const ybEl = $("#gauge-yield");
+    if (ybEl) {
+      if (yb.length) {
+        const syms = yb.slice(0, 6).map((a) => a.symbol).join("·");
+        ybEl.textContent =
+          `이번 수집분에서 제외된 이자부 상품 ${yb.length}종: ${syms}`
+          + " — 이자가 토큰 가격에 누적되는 구조라 $1이 목표가가 아닙니다. 아래 종목별 현황 표에서 편차가 “—”로 표시됩니다.";
+        ybEl.hidden = false;
+      } else {
+        ybEl.hidden = true;
+      }
     }
   }
 
@@ -568,7 +596,9 @@
       <td>${a.peg_currency}</td>
       <td class="num">$${usd(a.mcap_usd)}</td>
       <td class="num">${a.share.toFixed(2)}%</td>
-      <td class="num t-${a.grade_peg}">${a.dev_bp == null ? "—" : signed(a.dev_bp, 1)}</td>
+      <td class="num t-${a.grade_peg}"${a.dev_bp == null && isYieldBearing(a)
+        ? ' title="이자부 토큰화 상품 — $1 고정이 목표가 아니라 편차를 계산하지 않습니다"' : ""
+      }>${a.dev_bp == null ? "—" : signed(a.dev_bp, 1)}</td>
       <td class="num">${signed(a.chg_7d, 1, "%")}</td>
       <td class="num t-${a.grade_redemption}">${signed(a.chg_30d, 1, "%")}</td>
       <td><span class="pill is-${a.grade} t-${a.grade}">${GRADE_KO[a.grade]}</span></td>
