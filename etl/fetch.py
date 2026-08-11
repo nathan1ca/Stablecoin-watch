@@ -23,6 +23,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 BASE = "https://stablecoins.llama.fi"
@@ -52,6 +53,38 @@ YIELD_BEARING_MECHANISMS = ("yield-bearing", "interest-bearing", "rwa-yield")
 
 # 종목별 시계열을 따로 받아올 개수 (발행잔액 상위). 화면 드롭다운 항목 수와 같다.
 SERIES_ASSET_COUNT = 12
+
+# ── 종목 아이콘 ────────────────────────────────────────────────────────────
+# DefiLlama 가 자기 사이트에서 쓰는 아이콘 CDN. 슬러그 하나만 끼워 넣으면 된다.
+ICON_CDN = "https://icons.llamao.fi/icons/pegged"
+ICON_SIZE = 48
+
+# 슬러그로 쓸 수 있는 응답 필드 후보. 앞에서부터 먼저 채워져 있는 것을 쓴다.
+#
+# 여기 없는 필드로는 슬러그를 만들지 않는다 — 특히 name/symbol 을 소문자+하이픈으로
+# 바꿔 추측하지 않는다. 추측한 URL 은 404 로 끝나면 그나마 다행이고, 우연히 다른
+# 종목의 아이콘을 물어오면 화면이 조용히 틀린 그림을 보여준다. 확실한 필드가 없으면
+# icon_url 을 빈 문자열로 두고, 화면은 심볼 텍스트만 표시하는 쪽으로 떨어진다.
+#
+# 후보가 실제로 응답에 있는지, 그 값으로 만든 URL 이 200 을 주는지는
+# `python etl/fetch.py --probe` 의 "아이콘 URL 구성 필드 확인" 절이 답한다.
+ICON_SLUG_FIELDS = ("slug", "gecko_id")
+
+
+def icon_slug(asset: dict) -> tuple[str, str]:
+    """(슬러그, 근거 필드명). 쓸 수 있는 필드가 없으면 ("", "")."""
+    for key in ICON_SLUG_FIELDS:
+        v = asset.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip().lower(), key
+    return "", ""
+
+
+def icon_url(slug: str) -> str:
+    """슬러그로 아이콘 URL 을 만든다. 슬러그가 없으면 빈 문자열."""
+    if not slug:
+        return ""
+    return f"{ICON_CDN}/{quote(slug, safe='')}?w={ICON_SIZE}&h={ICON_SIZE}"
 
 # ── 감독 임계치 ────────────────────────────────────────────────────────────
 # 법정 기준이 아니라 이 대시보드의 편의상 설정값이다. 근거를 갖고 조정할 것.
@@ -323,10 +356,15 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         top_chains = sorted(chain_circ.items(), key=lambda x: -x[1])[:6]
 
         mech = a.get("pegMechanism") or "unknown"
+        slug, slug_field = icon_slug(a)
         rows.append({
             "id": str(a.get("id", "")),
             "name": a.get("name"),
             "symbol": a.get("symbol"),
+            # 슬러그를 만들 수 있는 필드가 없으면 빈 문자열이다. 화면은 빈 값을 보면
+            # 아이콘을 아예 그리지 않고 심볼 텍스트만 남긴다.
+            "icon_url": icon_url(slug),
+            "icon_slug_basis": slug_field,
             **issuer_fields(a.get("symbol"), issuers),
             "peg_currency": cur,
             "mechanism": mech,
@@ -444,6 +482,11 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "issuer_unknown_label": UNKNOWN_ISSUER,
             "yield_bearing_source": "etl/yield_bearing.json (수기 관리 — 응답에 구분 필드 없음)",
             "yield_bearing_note": "이자부 토큰화 상품은 $1 고정이 목표가 아니므로 페그 편차 계산에서 제외한다.",
+            "icon_source": ICON_CDN,
+            "icon_slug_fields": list(ICON_SLUG_FIELDS),
+            "icon_note": "아이콘 슬러그는 응답 필드에서만 가져온다. 필드가 없으면 icon_url 은 "
+                         "빈 값이고 화면은 심볼 텍스트만 표시한다(이름을 소문자+하이픈으로 추측하지 않는다).",
+            "icon_coverage": f"{sum(1 for r in rows if r['icon_url'])}/{len(rows)}",
         },
         "totals": {
             "circulating_usd": round(total, 2),
@@ -532,6 +575,72 @@ def fetch_asset_series(rows: list[dict], count: int = SERIES_ASSET_COUNT) -> lis
 
 
 # ── 진단 모드 ─────────────────────────────────────────────────────────────
+def head_status(url: str, timeout: int = 15) -> str:
+    """URL 을 HEAD 로 한 번 두드려 본 결과를 사람이 읽을 문자열로."""
+    try:
+        req = Request(url, headers={"User-Agent": UA}, method="HEAD")
+        with urlopen(req, timeout=timeout) as r:
+            return f"HTTP {r.status} {r.headers.get('Content-Type', '')}".strip()
+    except HTTPError as e:
+        return f"HTTP {e.code}"
+    except (URLError, TimeoutError, OSError) as e:
+        return f"실패 ({e})"
+
+
+def probe_icons(assets: list[dict]):
+    """아이콘 URL 을 어떤 필드로 만들 수 있는지 응답에서 직접 확인한다.
+
+    1) 슬러그로 쓸 만한 이름의 필드가 응답에 있는지 (있으면 이름을 그대로 보여준다)
+    2) 후보 필드가 몇 종에 채워져 있는지
+    3) 그 값으로 만든 URL 이 실제로 아이콘을 주는지 (CDN 에 HEAD 한 번)
+    """
+    print("\n== 아이콘 URL 구성 필드 확인 ==")
+    if not assets:
+        print("  응답 없음")
+        return
+
+    # (1) 이름만 보고도 후보가 되는 필드를 전부 긁는다. 지금 모르는 필드가
+    #     추가되어도 여기서 눈에 띈다.
+    hint = sorted({
+        k for a in assets[:80] for k in a
+        if any(s in str(k).lower() for s in ("slug", "gecko", "icon", "logo", "image", "symbol"))
+    })
+    print("  이름에 slug/gecko/icon/logo/image/symbol 이 들어간 필드: " + (", ".join(hint) or "없음"))
+
+    # (2) 실제로 쓰는 후보 필드가 몇 종에 채워져 있는가
+    n = len(assets)
+    for k in ICON_SLUG_FIELDS:
+        filled = sum(1 for a in assets if isinstance(a.get(k), str) and a.get(k).strip())
+        sample = next((a.get(k) for a in assets if isinstance(a.get(k), str) and a.get(k).strip()), None)
+        print(f"  {k:10s}: {filled}/{n}종 채워짐" + (f" (예: {sample})" if sample else ""))
+
+    top = sorted(assets, key=lambda a: -peg_amount(a.get("circulating")))[:8]
+    print("  상위 8종 슬러그 판정:")
+    for a in top:
+        slug, field = icon_slug(a)
+        print(f"    {str(a.get('symbol')):8s} → " +
+              (f"{slug}  (근거 {field})" if slug else "없음 — icon_url 비움"))
+
+    # (3) 만든 URL 이 정말 아이콘을 주는지. 여기서 404 가 나오면 그 필드는
+    #     슬러그가 아니라는 뜻이므로 ICON_SLUG_FIELDS 를 고쳐야 한다.
+    checked = [a for a in top if icon_slug(a)[0]][:5]
+    if not checked:
+        print(f"  → 후보 필드가 응답에 없다. icon_url 은 전부 빈 값으로 나가고 "
+              f"화면은 심볼 텍스트만 표시한다.")
+        return
+    print(f"  CDN 응답 확인 ({ICON_CDN}):")
+    ok = 0
+    for a in checked:
+        url = icon_url(icon_slug(a)[0])
+        st = head_status(url)
+        ok += st.startswith("HTTP 2")
+        print(f"    {str(a.get('symbol')):8s} {st}  {url}")
+    print(f"  → {ok}/{len(checked)}종 성공"
+          + ("" if ok == len(checked) else
+             " — 실패한 종목은 화면에서 아이콘 없이 심볼만 표시된다."
+             " 전부 실패하면 ICON_SLUG_FIELDS 후보가 슬러그가 아니라는 뜻이다."))
+
+
 def probe():
     print("== /stablecoins 첫 항목 필드 ==")
     assets = fetch_assets()
@@ -598,6 +707,8 @@ def probe():
     else:
         print("  비교 대상 종목이 응답에 없음")
 
+    probe_icons(assets)
+
     print("\n== etl/issuers.json 대조표 ==")
     tbl = load_issuers()
     unknown = sum(1 for v in tbl.values() if (v.get("issuer") or UNKNOWN_ISSUER) == UNKNOWN_ISSUER)
@@ -657,6 +768,11 @@ def main():
     ybs = snap["yield_bearing"]
     print(f"       페그 편차 제외(이자부 상품): {len(ybs)}종"
           + (f" — {', '.join(r['symbol'] for r in ybs)}" if ybs else ""))
+    iconed = sum(1 for r in snap["assets"] if r["icon_url"])
+    print(f"       아이콘 URL: {iconed}/{len(snap['assets'])}종"
+          + ("" if iconed else
+             f" — 슬러그로 쓸 필드({'/'.join(ICON_SLUG_FIELDS)})가 응답에 없다."
+             " --probe 로 실제 필드명을 확인하십시오."))
 
 
 if __name__ == "__main__":

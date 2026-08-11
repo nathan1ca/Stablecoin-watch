@@ -8,7 +8,7 @@
 <meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -47,10 +47,10 @@
     </div>
   </div>
   <div class="figs">
-    <div class="fig"><p class="fig-k">총 발행잔액</p><p class="fig-v" id="f-total">—</p><p class="fig-s" id="f-total-s">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">페그 이탈</p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
-    <div class="fig"><p class="fig-k">발행사 집중도 <abbr title="허핀달-허시만 지수">HHI</abbr></p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">알고리즘형 비중</p><p class="fig-v" id="f-algo">—</p><p class="fig-s">담보 없는 발행 잔액 비율</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">TOTAL</span>총 발행잔액</p><p class="fig-v" id="f-total">—</p><p class="fig-s" id="f-total-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">PEG</span>페그 이탈</p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag"><abbr title="허핀달-허시만 지수">HHI</abbr></span>발행사 집중도</p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">ALGO</span>알고리즘형 비중</p><p class="fig-v" id="f-algo">—</p><p class="fig-s">담보 없는 발행 잔액 비율</p></div>
   </div>
   </div>
 </section>
@@ -98,26 +98,56 @@
     <h2 id="h-trend">발행잔액과 상환 압력</h2>
     <p>총 발행잔액은 시장에 들어온 돈의 크기이고, 30일 순증감률은 그 방향입니다. 마이너스가 깊어지면 상환이 발행을 앞지르고 있다는 뜻입니다.</p>
   </div>
-  <div class="chart-tools">
-    <label class="ct-label" for="series-pick">표시 대상</label>
-    <select id="series-pick" class="ct-select">
-      <option value="__all__">전체 시장</option>
-    </select>
-    <button type="button" class="ct-btn" id="csv-dl">CSV 내려받기</button>
-    <span class="ct-hint" id="series-hint"></span>
+  <!-- 이 카드 안쪽만 DefiLlama 풍으로 다시 그렸다. 계기판·표·다른 탭은 그대로다. -->
+  <div class="tcard">
+    <div class="tcard-head">
+      <div class="tcard-kpi">
+        <p class="tk-label" id="tk-label">TOTAL 발행잔액</p>
+        <p class="tk-value" id="tk-value">—</p>
+        <p class="tk-sub" id="tk-sub">&nbsp;</p>
+      </div>
+      <div class="tcard-actions">
+        <div class="seg" role="group" aria-label="차트에 표시할 지표">
+          <button type="button" class="seg-btn" id="seg-total" data-metric="total"
+            aria-pressed="true" aria-controls="fig-total">발행잔액</button>
+          <button type="button" class="seg-btn" id="seg-flow" data-metric="flow"
+            aria-pressed="false" aria-controls="fig-flow">순증감률</button>
+        </div>
+        <div class="tcard-export">
+          <button type="button" class="pill-btn" id="csv-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1.5v8m0 0L4.8 6.3M8 9.5l3.2-3.2M2.5 11.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"
+              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV</button>
+          <button type="button" class="pill-btn" id="png-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6"
+              fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.9" cy="6.4" r="1.15" fill="currentColor"/><path
+              d="M2.2 11.4 5.8 8.2l2.5 2.2 2.4-2 3.1 2.8" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/></svg>PNG</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-tools">
+      <label class="ct-label" for="series-pick">표시 대상</label>
+      <select id="series-pick" class="ct-select">
+        <option value="__all__">전체 시장</option>
+      </select>
+      <span class="ct-hint" id="series-hint"></span>
+    </div>
+
+    <div class="charts">
+      <figure class="chart" id="fig-total">
+        <figcaption><span id="cap-total">총 발행잔액</span> <span class="unit">USD</span></figcaption>
+        <div id="chart-total" class="chart-plot"></div>
+      </figure>
+      <figure class="chart" id="fig-flow" hidden>
+        <figcaption><span id="cap-flow">30일 순증감률</span> <span class="unit">%</span></figcaption>
+        <div id="chart-flow" class="chart-plot"></div>
+      </figure>
+    </div>
   </div>
-  <div class="charts">
-    <figure class="chart">
-      <figcaption><span id="cap-total">총 발행잔액</span> <span class="unit">USD</span></figcaption>
-      <div id="chart-total" class="chart-plot"></div>
-    </figure>
-    <figure class="chart">
-      <figcaption><span id="cap-flow">30일 순증감률</span> <span class="unit">%</span></figcaption>
-      <div id="chart-flow" class="chart-plot"></div>
-    </figure>
-  </div>
-  <p class="foot">차트 위에 커서를 올리면(터치 기기는 탭하면) 해당 날짜의 정확한 값이 표시됩니다.
-    CSV 열은 날짜 · 발행잔액(USD) · 30일 순증감률(%) 입니다.</p>
+  <p class="foot">위 알약형 토글로 발행잔액과 30일 순증감률을 번갈아 봅니다.
+    차트 위에 커서를 올리면(터치 기기는 탭하면) 해당 날짜의 정확한 값이 표시됩니다.
+    CSV 열은 날짜 · 발행잔액(USD) · 30일 순증감률(%) 이고, PNG 는 지금 보이는 차트를 그대로 내려받습니다.</p>
   <p class="foot">출처: DefiLlama (<a href="https://defillama.com/stablecoins" rel="noopener">https://defillama.com/stablecoins</a>)</p>
 </section>
 

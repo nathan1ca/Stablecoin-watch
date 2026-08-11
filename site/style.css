@@ -7,6 +7,11 @@
   --rule:#C9D0D8;
   --rule-soft:#DCE1E7;
   --petrol:#123F58;
+  /* 발행 현황 탭의 KPI·차트 카드에서만 쓰는 강조색. 처음 잡은 #2B6CB0 은 옆에
+     놓인 --petrol(#123F58)보다 채도가 높아 계기판·표까지 시선을 끌어갔다.
+     채도를 한 급 낮춰 두 색이 같은 계열로 읽히게 맞췄다. 흰 글자 대비는 6.17:1
+     (#2B6CB0 은 5.42:1) 로 WCAG AA 를 넘기므로 알약 토글의 활성 배지에 그대로 쓴다. */
+  --accent:#2C6595;
   --sound:#2C6650;
   --watch:#9C6612;
   --breach:#9E2A25;
@@ -82,6 +87,24 @@ a{color:var(--petrol)}
 .fig-v{margin:.4rem 0 0;font-family:var(--mono);font-size:1.5rem;font-weight:500;letter-spacing:-.03em;line-height:1}
 .fig-s{margin:.35rem 0 0;font-size:.72rem;color:var(--dim)}
 abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
+
+/* 상단 KPI 카드만 DefiLlama 풍으로. .fig/.figs 는 동결·프리미엄·코너흐름 탭이
+   같이 쓰므로 반드시 .statuswrap 안쪽으로 한정한다 — 여기서 범위를 넓히면
+   그 탭들의 수치 블록까지 같이 커진다. */
+.statuswrap .status{
+  border:1px solid var(--rule);border-radius:14px;overflow:hidden;
+  box-shadow:0 2px 6px rgba(13,17,23,.06);
+}
+.statuswrap .fig-k{
+  display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;
+  font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);
+}
+.fig-tag{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.14em;color:var(--accent)}
+/* 숫자는 2.4rem/700. IBM Plex Mono 700 은 index.html 에서 같이 받아온다 —
+   400·500·600 만 받아오면 브라우저가 합성 볼드로 뭉개 그린다. */
+.statuswrap .fig-v{
+  margin:.55rem 0 0;font-size:clamp(1.75rem,5.4vw,2.4rem);font-weight:700;letter-spacing:-.04em;
+}
 
 /* ── tabs ─────────────────────────────────────────────── */
 .tabbar{background:var(--card);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
@@ -213,6 +236,22 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   }
 }
 
+/* ── 종목 로고 (계기판 행 · 종목별 현황 표 공용) ───────────
+   자리는 항상 24px 로 고정해 둔다. 외부 CDN 이 죽어 이미지가 안 오더라도
+   (app.js 의 onerror 가 img 를 숨긴다) 빈 원만 남고 행 정렬은 그대로다.
+   icon_url 이 아예 없으면 app.js 가 이 자리 자체를 만들지 않는다. */
+.cicon{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:24px;height:24px;border-radius:50%;overflow:hidden;background:#0d11170d;
+}
+.cicon img{width:100%;height:100%;object-fit:contain;display:block;border-radius:50%}
+.cicon img[hidden]{display:none}
+.gsym-cell,.tsym-cell{display:inline-flex;align-items:center;gap:.45rem;min-width:0}
+.tsym-cell .tname{margin-left:0}
+/* 아이콘이 붙는 만큼 종목 칸을 넓힌다. 아이콘이 없는 수집분에서는 이 클래스가
+   붙지 않으므로 예전 폭 그대로다. */
+.gauge.has-icons .grow,.ghead.has-icons{grid-template-columns:8rem 1fr 5rem}
+
 .asset-pop{
   position:fixed;top:0;left:0;z-index:40;width:min(19rem,calc(100vw - 1rem));
   background:var(--card);border:1px solid var(--rule);border-top:2px solid var(--petrol);
@@ -244,12 +283,64 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   border:1px solid var(--rule);padding:.35rem .5rem;max-width:min(22rem,60vw);
 }
 .ct-select:disabled{color:var(--dim);background:transparent}
-.ct-btn{
-  font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;color:var(--petrol);
-  background:var(--card);border:1px solid var(--petrol);padding:.38rem .7rem;cursor:pointer;
-}
-.ct-btn:hover{background:var(--petrol);color:var(--card)}
 .ct-hint{font-family:var(--mono);font-size:.68rem;color:var(--dim)}
+
+/* ── 발행잔액·순증감률 카드 ────────────────────────────────
+   여기 있는 규칙은 전부 .tcard 안쪽으로 한정한다. .chart / .charts / .chart-tools
+   는 프리미엄·코너흐름 탭의 차트도 같이 쓰는 클래스라, 범위를 풀면 그쪽 생김새까지
+   따라 바뀐다. */
+.tcard{
+  background:var(--card);border:1px solid var(--rule);border-radius:14px;
+  box-shadow:0 2px 6px rgba(13,17,23,.06);padding:1.35rem 1.35rem 1rem;
+}
+.tcard-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:1rem 1.5rem;flex-wrap:wrap;margin-bottom:1.25rem;
+}
+.tk-label{
+  margin:0;font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--mid);
+}
+.tk-value{
+  margin:.5rem 0 0;font-family:var(--mono);font-size:clamp(1.75rem,5.4vw,2.4rem);
+  font-weight:700;letter-spacing:-.04em;line-height:1;
+}
+.tk-sub{margin:.4rem 0 0;font-size:.72rem;color:var(--dim)}
+.tcard-actions{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
+
+/* 세그먼트 토글. 활성 여부를 색으로만 알리지 않는다 — 굵기(500→600)도 같이
+   올려서 색 구분이 어려워도 어느 쪽이 켜져 있는지 보이게 한다. */
+.seg{
+  display:inline-flex;gap:.2rem;background:var(--paper);border:1px solid var(--rule);
+  border-radius:999px;padding:.22rem;
+}
+.seg-btn{
+  appearance:none;border:0;background:transparent;border-radius:999px;
+  font-family:var(--mono);font-size:.76rem;font-weight:500;letter-spacing:.02em;
+  color:var(--mid);padding:.5rem 1.05rem;min-height:38px;cursor:pointer;white-space:nowrap;
+  transition:background-color .15s ease,color .15s ease;
+}
+.seg-btn:hover{color:var(--ink)}
+.seg-btn[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:600}
+.seg-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.tcard-export{display:inline-flex;gap:.45rem;flex-wrap:wrap}
+.pill-btn{
+  display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--rule);
+  border-radius:999px;background:var(--card);color:var(--mid);
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;
+  padding:.45rem .9rem;min-height:38px;cursor:pointer;white-space:nowrap;
+}
+.pill-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pill-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pill-btn svg{width:13px;height:13px;flex:none}
+
+/* 토글로 한 번에 하나만 보이므로 2단 격자와 칸 사이 경계선을 걷어낸다. */
+.tcard .charts{grid-template-columns:1fr;column-gap:0}
+.tcard .chart{background:transparent;padding:0}
+.tcard .chart+.chart{border-left:0;padding-left:0;border-top:0;padding-top:0;margin-top:0}
+.tcard .chart[hidden]{display:none}
+.tcard .chart-tools{margin-bottom:.9rem}
 .chart-plot{position:relative}
 .chart-plot svg{touch-action:pan-y}
 /* 툴팁 글자는 축 라벨(app.js AX_SIZE=12.5px / weight 600)에 맞춰 읽는다.
@@ -371,11 +462,27 @@ tbody tr:hover{background:#fff}
   .charts{grid-template-columns:1fr}
   .tab-btn{padding:.8rem .85rem;font-size:.72rem}
   .chart+.chart{border-left:0;padding-left:0;border-top:1px solid var(--rule);padding-top:1.1rem;margin-top:.6rem}
+  .tcard .chart+.chart{border-top:0;padding-top:0;margin-top:0}
+}
+/* 좁은 화면에서 알약 토글이 잘리거나 눌리기 어려워지지 않게 한다. 카드 좌우
+   여백을 줄이고, 토글은 한 줄을 통째로 쓰되 두 칸이 폭을 반씩 나눠 갖는다. */
+@media (max-width:560px){
+  .tcard{padding:1.1rem .95rem .9rem;border-radius:14px}
+  .tcard-head{gap:1rem}
+  .tcard-actions{width:100%;justify-content:space-between}
+  .seg{flex:1 1 100%}
+  .seg-btn{flex:1 1 0;padding:.55rem .6rem;min-height:42px;text-align:center}
+  .tcard-export{flex:1 1 100%}
+  .pill-btn{flex:1 1 0;justify-content:center;min-height:42px}
 }
 @media (max-width:620px){
   .figs{grid-template-columns:1fr 1fr}
   .grow,.ghead{grid-template-columns:3.6rem 1fr 4.4rem}
+  .gauge.has-icons .grow,.ghead.has-icons{grid-template-columns:5.9rem 1fr 4.4rem}
   .ghead{font-size:.58rem}
+  /* 좁은 화면에서는 −25/+25 라벨이 가운데 1.0000 과 겹쳐 둘 다 못 읽게 된다.
+     ±25 허용 구간은 옅은 띠와 머리글 설명이 이미 알려주므로 라벨만 접는다. */
+  .scale > span:nth-child(3),.scale > span:nth-child(5){display:none}
   .masthead-in{gap:1.5rem}
   .stamp{align-content:start}
   .empty-box{padding:1.6rem 1.1rem}
@@ -385,7 +492,8 @@ tbody tr:hover{background:#fff}
 @media print{
   @page{size:A4;margin:14mm}
   body{background:#fff;font-size:11px}
-  .skip,.band,.live-badge,.asset-pop,.chart-tools,.ch-tip{display:none}
+  .skip,.band,.live-badge,.asset-pop,.chart-tools,.ch-tip,.tcard-actions{display:none}
+  .tcard,.statuswrap .status{box-shadow:none}
   .sym-btn{border-bottom:0;color:var(--ink)}
   .masthead{background:#fff;color:var(--ink);border-bottom:2px solid var(--ink)}
   .eyebrow{color:var(--mid)}
