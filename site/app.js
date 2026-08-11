@@ -83,6 +83,20 @@
   const isYieldBearing = (a) =>
     a.yield_bearing === true || (a.yield_bearing == null && YB_FALLBACK.has(String(a.symbol || "").toUpperCase()));
 
+  // ── 종목 로고 ───────────────────────────────────────────
+  // icon_url 은 ETL 이 응답 필드로 슬러그를 만들 수 있었을 때만 채워진다.
+  // 비어 있으면(예전 수집분이거나 필드가 없는 경우) 아이콘 자리를 아예 만들지
+  // 않고 심볼 텍스트만 남긴다.
+  //
+  // 외부 CDN 은 언제든 죽을 수 있다. onerror 로 img 만 감추면 감싼 원이 자리를
+  // 지키고 있어서 행 높이도 열 정렬도 흔들리지 않는다. 깨진 이미지 아이콘이
+  // 보이는 일은 없다.
+  const hasIcons = (rows) => rows.some((a) => a && a.icon_url);
+  const iconCell = (a) => `<span class="cicon">${a.icon_url
+    ? `<img src="${esc(a.icon_url)}" alt="" width="24" height="24" loading="lazy"
+        decoding="async" referrerpolicy="no-referrer" onerror="this.hidden=true">`
+    : ""}</span>`;
+
   function renderGauge(d) {
     const list = $("#gauge-list");
     const rows = d.assets
@@ -90,6 +104,13 @@
       .slice(0, 16);
     GAUGE_ROWS = rows;
     const pos = (bp) => 50 + (clamp(bp, -SCALE_BP, SCALE_BP) / SCALE_BP) * 50;
+
+    // 아이콘이 하나라도 있으면 모든 행에 자리를 만들어 종목 칸을 넓힌다.
+    // 하나도 없으면 예전 폭 그대로 간다.
+    const icons = hasIcons(rows);
+    list.classList.toggle("has-icons", icons);
+    const ghead = document.querySelector("#gauge .ghead");
+    if (ghead) ghead.classList.toggle("has-icons", icons);
 
     list.innerHTML = rows.map((a, i) => {
       const g = a.grade_peg;
@@ -99,8 +120,9 @@
       const ticks = [-100, -50, 50, 100]
         .map((b) => `<i class="gtick" style="left:${pos(b)}%"></i>`).join("");
       return `<li class="grow grow-asset">
-        <button type="button" class="gsym sym-btn" data-i="${i}" aria-expanded="false"
-          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button>
+        <span class="gsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="gsym sym-btn"
+          data-i="${i}" aria-expanded="false"
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button></span>
         <span class="gstrip" role="img" aria-label="${a.symbol} 페그 편차 ${has ? signed(a.dev_bp, 1) + "bp" : "측정 불가"}">
           <i class="gband"></i>${ticks}<i class="gdatum"></i>
           <i class="gbar is-${g}" style="left:50%;width:0" data-l="${barL}" data-w="${barW}"></i>
@@ -373,8 +395,18 @@
     drawChart(el);
   }
 
+  // 그라데이션 채움은 한 페이지에 여러 차트가 있어도 서로 물리지 않게
+  // id 를 하나씩 새로 딴다.
+  let gradSeq = 0;
+
   function paintChart(el, pts, opts, W) {
-    const H = Math.round(W * (opts.height || 170) / AX_BASE), mt = 12, mb = 26;
+    // 세로는 폭에 비례해 잡는다(AX_BASE 주석 참고). 다만 발행 현황 탭의 차트는
+    // 카드 전폭을 혼자 쓰기 때문에 비례만 따르면 1400px 화면에서 1000px 가 넘게
+    // 솟는다. hMin/hMax 를 주는 차트만 그 범위로 눌러 4:1 안팎을 유지한다.
+    let H = Math.round(W * (opts.height || 170) / AX_BASE);
+    if (opts.hMin) H = Math.max(H, opts.hMin);
+    if (opts.hMax) H = Math.min(H, opts.hMax);
+    const mt = 12, mb = 26;
     const xs = pts.map((p) => p.t), ys = pts.map((p) => p.v);
     let y0 = Math.min(...ys), y1 = Math.max(...ys);
     if (opts.zero) { y0 = Math.min(y0, 0); y1 = Math.max(y1, 0); }
@@ -420,13 +452,27 @@
       ? `<line class="ch-cross" x1="0" x2="0" y1="${mt}" y2="${H - mb}" stroke="var(--ink)" stroke-opacity=".45" stroke-dasharray="2 2"/>
          <circle class="ch-dot" cx="0" cy="0" r="3.6" fill="${opts.color}" stroke="var(--card)" stroke-width="1.4"/>` : "";
 
+    // 위쪽이 진하고 아래로 갈수록 옅어지는 세로 그라데이션. 켜는 차트만 켠다
+    // (발행 현황 탭의 두 차트). 나머지 차트는 예전처럼 균일한 옅은 채움이다.
+    let defs = "", areaFill = `fill="${opts.color}" fill-opacity=".1"`;
+    if (opts.fillGradient) {
+      const gid = "chfill" + (++gradSeq);
+      defs = `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse"
+          x1="0" y1="${mt}" x2="0" y2="${(H - mb).toFixed(1)}">
+        <stop offset="0" stop-color="${opts.color}" stop-opacity=".42"/>
+        <stop offset=".55" stop-color="${opts.color}" stop-opacity=".16"/>
+        <stop offset="1" stop-color="${opts.color}" stop-opacity=".03"/>
+      </linearGradient></defs>`;
+      areaFill = `fill="url(#${gid})"`;
+    }
+
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
         aria-label="${opts.label}. 최근값 ${esc(lastLab)}">
       <style>.ax{font-family:var(--mono);font-size:${AX_SIZE}px;font-weight:600;fill:var(--ink)}
         .ax-last{letter-spacing:-.02em}
         .ch-cross,.ch-dot{opacity:0;pointer-events:none}</style>
-      ${grid}${zeroLine}
-      <path d="${area}" fill="${opts.color}" fill-opacity=".1"/>
+      ${defs}${grid}${zeroLine}
+      <path d="${area}" ${areaFill}/>
       <path d="${line}" fill="none" stroke="${opts.color}" stroke-width="${LINE_W}" stroke-linejoin="round" stroke-linecap="round"/>
       ${lastTag}
       ${xt}${cross}
@@ -482,8 +528,11 @@
   }
 
   // ── 발행잔액·순증감률 차트 (전체 시장 / 종목별) ──────────
-  const TREND = { opts: [], key: "__all__" };
+  // metric 은 세그먼트 토글이 고르는 지표다. 두 차트를 동시에 보여주던 것을
+  // 한 번에 하나만 보여주는 방식으로 바꿨다 — 드롭다운·툴팁·CSV 는 그대로다.
+  const TREND = { opts: [], key: "__all__", metric: "total" };
   const isoDate = (t) => new Date(t * 1000).toISOString().slice(0, 10);
+  const TREND_COLOR = "var(--accent)";
 
   function trendOptions(hist) {
     const all = {
@@ -506,6 +555,22 @@
     return TREND.opts.find((o) => o.key === TREND.key) || TREND.opts[0];
   }
 
+  // 카드 머리의 큰 숫자. 지금 고른 종목·지표의 최신값을 그대로 보여준다.
+  function renderTrendKpi(o) {
+    const flow = TREND.metric === "flow";
+    const tag = o.key === "__all__" ? "TOTAL" : (o.short || "").toUpperCase();
+    const pts = flow ? o.flow : o.total;
+    const last = pts && pts.length ? pts[pts.length - 1] : null;
+
+    $("#tk-label").textContent = `${tag} ${flow ? "30일 순증감률" : "발행잔액"}`;
+    $("#tk-value").textContent = last
+      ? (flow ? signed(last.v, 2, "%") : "$" + usd(last.v))
+      : "—";
+    $("#tk-sub").textContent = last
+      ? `최근 관측 ${fullDate(last.t)} · ${pts.length}일 시계열`
+      : "시계열 없음";
+  }
+
   function renderTrend() {
     const o = currentTrend();
     if (!o) return;
@@ -513,18 +578,48 @@
     $("#cap-total").textContent = whole ? "총 발행잔액" : `${o.short} 발행잔액`;
     $("#cap-flow").textContent = whole ? "30일 순증감률" : `${o.short} 30일 순증감률`;
 
+    // 고르지 않은 쪽은 숨긴다. 숨은 동안에는 폭이 0이라 그려지지 않고,
+    // 다시 보이는 순간 ResizeObserver 가 같은 자리에서 그려 준다.
+    const flow = TREND.metric === "flow";
+    $("#fig-total").hidden = flow;
+    $("#fig-flow").hidden = !flow;
+    $("#seg-total").setAttribute("aria-pressed", String(!flow));
+    $("#seg-flow").setAttribute("aria-pressed", String(flow));
+    renderTrendKpi(o);
+
     const height = chartHeight();
+    const box = { height, hMin: 200, hMax: Math.round(height * 1.5) };
     lineChart($("#chart-total"), o.total, {
-      color: "var(--petrol)", label: `${o.short} 발행잔액 추이`, height, interactive: true,
-      fmt: (v) => "$" + usd(v),
+      ...box, color: TREND_COLOR, label: `${o.short} 발행잔액 추이`, interactive: true,
+      fillGradient: true, fmt: (v) => "$" + usd(v),
     });
     lineChart($("#chart-flow"), o.flow, {
-      color: "var(--petrol)", label: `${o.short} 30일 순증감률`, zero: true, height, interactive: true,
-      fmt: (v) => v.toFixed(1) + "%",
+      ...box, color: TREND_COLOR, label: `${o.short} 30일 순증감률`, zero: true, interactive: true,
+      fillGradient: true, fmt: (v) => v.toFixed(1) + "%",
     });
   }
 
+  // 내려받기 이름은 CSV·PNG 가 같은 규칙을 쓴다.
+  function trendFileName(ext) {
+    const o = currentTrend();
+    const who = !o || o.key === "__all__" ? "market" : o.short;
+    const what = ext === "png" ? (TREND.metric === "flow" ? "_net30d" : "_supply") : "";
+    return `stablecoin-monitor_${who}${what}_${isoDate(Math.floor(Date.now() / 1000))}.${ext}`;
+  }
+
+  function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   // 서버를 거치지 않고 브라우저에서 바로 CSV를 만들어 내려받는다.
+  // 보이는 차트가 하나뿐이어도 CSV 는 예전처럼 두 열을 다 담는다.
   function downloadTrendCsv() {
     const o = currentTrend();
     if (!o || !o.total.length) return;
@@ -535,17 +630,47 @@
       lines.push(`${isoDate(p.t)},${p.v},${f == null ? "" : f}`);
     });
     // BOM 을 붙여야 엑셀에서 한글 머리글이 깨지지 않는다.
-    const blob = new Blob(["﻿" + lines.join("\r\n") + "\r\n"],
-      { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `stablecoin-monitor_${o.key === "__all__" ? "market" : o.short}_` +
-      `${isoDate(Math.floor(Date.now() / 1000))}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveBlob(new Blob(["﻿" + lines.join("\r\n") + "\r\n"],
+      { type: "text/csv;charset=utf-8" }), trendFileName("csv"));
+  }
+
+  // 지금 보이는 차트를 PNG 로 굽는다.
+  //
+  // SVG 를 문서에서 떼어내면 var(--...) 가 풀리지 않는다 — 선 색과 글꼴이
+  // 통째로 날아가므로, 직렬화한 뒤 계산된 값으로 바꿔 넣는다. blob: 대신
+  // data: URL 을 쓰는 이유는 캔버스 오염(tainted canvas) 없이 확실히
+  // toBlob() 까지 가기 위해서다.
+  function downloadTrendPng() {
+    const host = TREND.metric === "flow" ? $("#chart-flow") : $("#chart-total");
+    const svg = host && host.querySelector("svg");
+    if (!svg) return;
+    const vb = svg.viewBox.baseVal;
+    const W = Math.round(vb.width || host.clientWidth || 520);
+    const H = Math.round(vb.height || 170);
+    if (!W || !H) return;
+
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", W);
+    clone.setAttribute("height", H);
+    const cs = getComputedStyle(document.documentElement);
+    const markup = new XMLSerializer().serializeToString(clone)
+      .replace(/var\(\s*(--[\w-]+)\s*\)/g, (m, name) => (cs.getPropertyValue(name) || "#000").trim());
+
+    const scale = 2; // 보고서에 붙여도 흐리지 않을 정도
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = W * scale;
+      cv.height = H * scale;
+      const ctx = cv.getContext("2d");
+      ctx.fillStyle = (cs.getPropertyValue("--card") || "#fff").trim();
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob((b) => { if (b) saveBlob(b, trendFileName("png")); });
+    };
+    img.onerror = () => console.warn("PNG 변환 실패 — 차트를 이미지로 굽지 못했습니다.");
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
   }
 
   function initTrend(hist) {
@@ -561,6 +686,17 @@
     }
     sel.addEventListener("change", () => { TREND.key = sel.value; renderTrend(); });
     $("#csv-dl").addEventListener("click", downloadTrendCsv);
+    $("#png-dl").addEventListener("click", downloadTrendPng);
+
+    // 세그먼트 토글 — 발행잔액 ↔ 30일 순증감률
+    document.querySelectorAll(".seg-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const m = b.dataset.metric;
+        if (m === TREND.metric) return;
+        TREND.metric = m;
+        renderTrend();
+      });
+    });
     renderTrend();
 
     // 화면 폭이 바뀌어 차트 높이 구간이 달라질 때만 다시 그린다.
@@ -589,9 +725,11 @@
 
   function renderTable(d) {
     TABLE_ROWS = d.assets;
+    const icons = hasIcons(d.assets);
     $("#tbl tbody").innerHTML = d.assets.map((a, i) => `<tr>
-      <td><button type="button" class="tsym sym-btn" data-i="${i}" aria-expanded="false"
-          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></td>
+      <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
+          data-i="${i}" aria-expanded="false"
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></span></td>
       <td>${a.mechanism_ko}</td>
       <td>${a.peg_currency}</td>
       <td class="num">$${usd(a.mcap_usd)}</td>
