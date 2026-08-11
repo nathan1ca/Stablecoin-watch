@@ -126,7 +126,14 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   0%,100%{box-shadow:0 0 0 0 rgba(44,102,80,.5)}
   50%{box-shadow:0 0 0 4px rgba(44,102,80,0)}
 }
-#pm-updated{font-family:var(--mono);font-size:.72rem;color:var(--dim)}
+/* 갱신 상태는 안내 문단과 성격이 다른 정보다. 문단 끝에 인라인으로 붙어 있으면
+   "…나타나는 경우가 많습니다. 정적 값 · 기준시각 …" 처럼 한 문장으로 이어 읽혀서
+   산만하다. 블록으로 떼어내고 위 여백을 줘 한 줄로 분리한다.
+   (.block-head p 의 margin:0 을 이기려면 ID 선택자여야 한다.) */
+#pm-updated{
+  display:block;font-family:var(--mono);font-size:.72rem;letter-spacing:.01em;
+  color:var(--dim);margin:.65rem 0 0;
+}
 @media (prefers-reduced-motion:reduce){.live-dot.live-on{animation:none}}
 .block-head p{margin:0;color:var(--mid);font-size:.9rem}
 .foot{font-size:.75rem;color:var(--dim);margin:1rem 0 0}
@@ -245,14 +252,21 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
 .ct-hint{font-family:var(--mono);font-size:.68rem;color:var(--dim)}
 .chart-plot{position:relative}
 .chart-plot svg{touch-action:pan-y}
+/* 툴팁 글자는 축 라벨(app.js AX_SIZE=12.5px / weight 600)에 맞춰 읽는다.
+   .76rem = 12.16px 로 축 라벨과 거의 같은 눈높이가 되고, 값 줄은 축 라벨과
+   같은 600 으로 잡아 날짜 줄(500)과 위계를 준다. 여기만 작게 두면 같은
+   모노스페이스인데도 축 라벨 옆에서 흐릿해 보인다.
+   700 은 쓰지 않는다 — index.html 이 IBM Plex Mono 를 400·500·600 만 받아와서
+   700 을 주면 브라우저가 합성 볼드로 뭉개 그린다. */
 .ch-tip{
   position:absolute;transform:translate(-50%,calc(-100% - 10px));pointer-events:none;
-  background:var(--ink);color:#E8EBEF;padding:.3rem .5rem;white-space:nowrap;
-  font-family:var(--mono);font-size:.7rem;line-height:1.35;display:grid;gap:.05rem;z-index:5;
+  background:var(--ink);color:#E8EBEF;padding:.34rem .55rem;white-space:nowrap;
+  font-family:var(--mono);font-size:.76rem;font-weight:500;line-height:1.35;
+  display:grid;gap:.08rem;z-index:5;
 }
 .ch-tip[hidden]{display:none}
-.ch-tip-d{color:#A8B1BC}
-.ch-tip-v{font-weight:500}
+.ch-tip-d{color:#A8B1BC;font-weight:500}
+.ch-tip-v{font-weight:600;letter-spacing:-.01em}
 
 .charts{display:grid;grid-template-columns:1fr 1fr;column-gap:2.4rem}
 .chart{margin:0;background:var(--card);padding:1.1rem 0 0.6rem;min-width:0}

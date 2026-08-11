@@ -32,6 +32,24 @@ UA = "stablecoin-watch/0.1 (public supervisory dashboard; contact: <your-email>)
 ISSUERS_PATH = Path(__file__).resolve().parent / "issuers.json"
 UNKNOWN_ISSUER = "확인 필요"
 
+# 이자부(가격 누적형) 토큰화 상품 목록. 편집은 이 JSON에서 한다.
+YIELD_BEARING_PATH = Path(__file__).resolve().parent / "yield_bearing.json"
+
+# 응답 필드로 이자부 상품을 구분할 수 있는지 먼저 본다.
+#
+# 2026-08 기준 /stablecoins?includePrices=true 응답에는 구분 필드가 없다.
+# USYC·USDY 는 pegType 이 "peggedUSD", pegMechanism 이 "fiat-backed" 로,
+# USDT·USDC 와 완전히 같은 값으로 내려온다. 별도 카테고리 플래그도 없다.
+# 그래서 실제 구분은 아래 심볼 목록(yield_bearing.json)이 담당한다.
+#
+# 다만 나중에 필드가 생길 수 있으니, 아래 키가 참으로 오면 목록보다 먼저 믿는다.
+# 새 필드를 발견하면 --probe 로 이름을 확인해 여기 추가하는 쪽이 우선이다.
+YIELD_BEARING_FIELD_HINTS = ("isYieldBearing", "yieldBearing", "isInterestBearing")
+
+# pegMechanism 이 이런 값으로 오면 그 자체로 이자부 상품 신호다. 현재는 셋 다
+# 관측되지 않지만, 위와 같은 이유로 미리 열어 둔다.
+YIELD_BEARING_MECHANISMS = ("yield-bearing", "interest-bearing", "rwa-yield")
+
 # 종목별 시계열을 따로 받아올 개수 (발행잔액 상위). 화면 드롭다운 항목 수와 같다.
 SERIES_ASSET_COUNT = 12
 
@@ -134,6 +152,53 @@ def issuer_fields(symbol: str | None, table: dict) -> dict:
     }
 
 
+# ── 이자부(가격 누적형) 상품 판별 ─────────────────────────────────────────
+def load_yield_bearing(path: Path | str | None = None) -> dict:
+    """etl/yield_bearing.json 을 {심볼(대문자): {name, kind, note}} 로 읽는다.
+
+    파일이 없거나 깨져 있으면 빈 표를 돌려주고 수집은 계속한다. 이 경우
+    USYC·USDY 같은 종목이 다시 '페그 이탈'로 잡히므로 경고를 남긴다.
+    """
+    p = Path(path) if path else YIELD_BEARING_PATH
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        print(f"  yield_bearing.json 없음 ({p}) — 이자부 상품이 페그 이탈로 잡힐 수 있음",
+              file=sys.stderr)
+        return {}
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"  yield_bearing.json 읽기 실패 ({e}) — 이자부 상품이 페그 이탈로 잡힐 수 있음",
+              file=sys.stderr)
+        return {}
+
+    table = raw.get("yield_bearing") if isinstance(raw, dict) else None
+    if not isinstance(table, dict):
+        table = raw if isinstance(raw, dict) else {}
+    return {
+        str(k).strip().upper(): (v if isinstance(v, dict) else {})
+        for k, v in table.items()
+        if not str(k).startswith("_")
+    }
+
+
+def yield_bearing_reason(asset: dict, table: dict) -> str | None:
+    """이자부 상품이면 판별 근거('field:...' 또는 'symbol')를, 아니면 None.
+
+    응답 필드를 먼저 보고, 필드로 구분되지 않을 때만 심볼 목록으로 떨어진다.
+    """
+    for key in YIELD_BEARING_FIELD_HINTS:
+        if asset.get(key):
+            return f"field:{key}"
+
+    mech = str(asset.get("pegMechanism") or "").strip().lower()
+    if mech in YIELD_BEARING_MECHANISMS:
+        return "field:pegMechanism"
+
+    if str(asset.get("symbol") or "").strip().upper() in table:
+        return "symbol"
+    return None
+
+
 def pct_change(now: float, prev: float) -> float | None:
     if not prev:
         return None
@@ -209,8 +274,10 @@ MECHANISM_KO = {
 }
 
 
-def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None = None) -> dict:
+def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None = None,
+                   yield_bearing: dict | None = None) -> dict:
     issuers = load_issuers() if issuers is None else issuers
+    yield_bearing = load_yield_bearing() if yield_bearing is None else yield_bearing
     rows = []
     for a in assets:
         circ_box = a.get("circulating")
@@ -229,10 +296,17 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         prev_w = peg_amount(a.get("circulatingPrevWeek"))
         prev_m = peg_amount(a.get("circulatingPrevMonth"))
 
+        # 이자부(가격 누적형) 상품인가. DefiLlama 는 이런 상품도 peggedUSD 로
+        # 함께 내려주지만, 목표가가 $1이 아니라 시간이 지날수록 오르는 NAV다.
+        yb_reason = yield_bearing_reason(a, yield_bearing)
+        is_yb = yb_reason is not None
+
         # 페그 편차: 페그 목표가는 해당 통화 1단위. price는 USD 표시가이므로
         # USD 페그만 1.0 대비 편차가 곧바로 의미를 갖는다.
+        # 이자부 상품은 목표가 자체가 $1이 아니므로 편차를 재지 않는다 — 재면
+        # 정상적인 이자 누적이 +1300bp 대의 '페그 이탈'로 잘못 잡힌다.
         dev_bp = None
-        if price is not None and cur == "USD":
+        if price is not None and cur == "USD" and not is_yb:
             dev_bp = round((price - 1.0) * 10_000, 2)
 
         chg_30d = pct_change(circ, prev_m)
@@ -257,6 +331,10 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "peg_currency": cur,
             "mechanism": mech,
             "mechanism_ko": MECHANISM_KO.get(mech, mech),
+            "yield_bearing": is_yb,
+            "yield_bearing_kind": (yield_bearing.get(str(a.get("symbol") or "").upper(), {}).get("kind")
+                                   or "이자부 토큰화 상품") if is_yb else None,
+            "yield_bearing_basis": yb_reason,
             "circulating": round(circ, 2),
             "mcap_usd": round(mcap_usd, 2),
             "price": price,
@@ -325,6 +403,20 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
     }
 
     visible = [r for r in rows if r["mcap_usd"] >= THRESHOLDS["min_mcap_usd"]]
+
+    # 계기판에서 빠진 이자부 상품 — 화면에 "왜 안 보이는지"를 적어 주기 위한 목록
+    yb_rows = [
+        {
+            "symbol": r["symbol"],
+            "name": r["name"],
+            "kind": r["yield_bearing_kind"],
+            "basis": r["yield_bearing_basis"],
+            "price": r["price"],
+            "mcap_usd": r["mcap_usd"],
+        }
+        for r in visible if r["yield_bearing"]
+    ]
+
     alerts = [r for r in visible if r["grade"] in ("watch", "breach")]
     alerts.sort(key=lambda r: (-WORST[r["grade"]], -r["mcap_usd"]))
 
@@ -350,6 +442,8 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "price_basis": "DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님)",
             "issuer_source": "etl/issuers.json (수기 관리)",
             "issuer_unknown_label": UNKNOWN_ISSUER,
+            "yield_bearing_source": "etl/yield_bearing.json (수기 관리 — 응답에 구분 필드 없음)",
+            "yield_bearing_note": "이자부 토큰화 상품은 $1 고정이 목표가 아니므로 페그 편차 계산에서 제외한다.",
         },
         "totals": {
             "circulating_usd": round(total, 2),
@@ -359,6 +453,7 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "system_grade": system,
         },
         "concentration": conc,
+        "yield_bearing": yb_rows,
         "by_mechanism": mech_rows,
         "by_peg_currency": cur_rows,
         "by_chain": chain_rows[:15],
@@ -475,6 +570,34 @@ def probe():
         except RuntimeError as e:
             print(f"  실패: {e}")
 
+    # 이자부 상품을 응답 필드로 구를 수 있는지 확인한다. USYC·USDY 를 USDC 와
+    # 나란히 놓고 필드를 비교하면, 값이 갈리는 필드가 있는지 눈으로 판정된다.
+    print("\n== 이자부 상품 구분 필드 확인 ==")
+    yb_tbl = load_yield_bearing()
+    print(f"수동 목록(yield_bearing.json): {len(yb_tbl)}종 — {', '.join(sorted(yb_tbl)) or '없음'}")
+    by_sym = {str(a.get("symbol") or "").upper(): a for a in assets}
+    probe_syms = [s for s in ("USDC", "USYC", "USDY") if s in by_sym]
+    if probe_syms:
+        keys = ("symbol", "pegType", "pegMechanism", "price", *YIELD_BEARING_FIELD_HINTS)
+        for s in probe_syms:
+            a = by_sym[s]
+            vals = " ".join(f"{k}={json.dumps(a.get(k), ensure_ascii=False)}" for k in keys)
+            print(f"  {vals}")
+        # price 는 당연히 갈리므로 판정에서 뺀다. 나머지 중 값이 갈리는 필드가
+        # 있으면 그 필드로 자동 구분이 가능하다는 뜻이다.
+        splits = [
+            k for k in keys
+            if k not in ("symbol", "price")
+            and len({json.dumps(by_sym[s].get(k)) for s in probe_syms}) > 1
+        ]
+        print("  → 값이 갈리는 필드: " + (", ".join(splits) if splits else
+              "없음 (구분 필드 부재 — yield_bearing.json 심볼 목록으로 제외한다)"))
+        for s in probe_syms:
+            r = yield_bearing_reason(by_sym[s], yb_tbl)
+            print(f"  판정 {s}: {r or '일반 스테이블코인'}")
+    else:
+        print("  비교 대상 종목이 응답에 없음")
+
     print("\n== etl/issuers.json 대조표 ==")
     tbl = load_issuers()
     unknown = sum(1 for v in tbl.values() if (v.get("issuer") or UNKNOWN_ISSUER) == UNKNOWN_ISSUER)
@@ -510,7 +633,8 @@ def main():
     history = fetch_history()
 
     issuers = load_issuers()
-    snap = build_snapshot(assets, chains, issuers)
+    yb = load_yield_bearing()
+    snap = build_snapshot(assets, chains, issuers, yb)
 
     print(f"4/4 종목별 시계열 수집… (상위 {SERIES_ASSET_COUNT}종)")
     series = fetch_asset_series(snap["assets"])
@@ -530,6 +654,9 @@ def main():
     unknown = sum(1 for r in snap["assets"] if r["issuer"] == UNKNOWN_ISSUER)
     print(f"       발행사 대조: {len(snap['assets']) - unknown}/{len(snap['assets'])}종 확인, "
           f"{unknown}종 '{UNKNOWN_ISSUER}' (etl/issuers.json 에 채우면 줄어든다)")
+    ybs = snap["yield_bearing"]
+    print(f"       페그 편차 제외(이자부 상품): {len(ybs)}종"
+          + (f" — {', '.join(r['symbol'] for r in ybs)}" if ybs else ""))
 
 
 if __name__ == "__main__":

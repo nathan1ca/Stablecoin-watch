@@ -1,0 +1,71 @@
+{
+  "_meta": {
+    "purpose": "가격이 $1에 고정되도록 설계되지 않은 이자부(이자 누적형) 토큰화 상품 목록. 페그 편차(dev_bp) 계산과 계기판 표시에서 제외한다.",
+    "why": "DefiLlama /stablecoins 는 이런 상품도 pegType=peggedUSD 로 함께 내려주고 pegMechanism 값도 일반 스테이블코인과 같은 'fiat-backed'로 준다(2026-08 확인). 그래서 응답 필드만으로는 구분되지 않는다. 목표가를 $1로 놓고 편차를 재면 정상적인 이자 누적이 +1300bp 대의 '페그 이탈'로 잘못 표시된다.",
+    "criterion": "제외 기준은 '수익 분배 방식'이다. 토큰 가격(NAV)이 시간이 지날수록 오르도록 설계된 상품만 제외한다. 리베이스(보유 수량 증가)나 별도 배당으로 수익을 주면서 가격 자체는 $1 근처를 유지하도록 설계된 상품은 제외하지 않는다 — 그런 상품의 $1 이탈은 실제로 관측 대상이다.",
+    "maintenance": "새 종목을 넣기 전에 site/data/snapshot.json 에서 그 심볼의 price 를 확인할 것. 지속적으로 1.00 을 크게 벗어나 한 방향으로만 올라가면 누적형일 가능성이 높다. 심볼은 대문자로 적고, 근거를 note 에 남긴다.",
+    "field_check": "응답에 구분 필드가 생기면 fetch.py 의 YIELD_BEARING_FIELD_HINTS 에 키를 추가하는 쪽이 우선이다. 이 파일은 필드로 구분되지 않을 때의 수동 대비책이다.",
+    "updated": "2026-08-11",
+    "schema": {
+      "name": "상품 이름",
+      "kind": "상품 유형 (토큰화 국채 / 토큰화 MMF 등)",
+      "note": "가격이 누적형이라고 판단한 근거"
+    }
+  },
+
+  "yield_bearing": {
+    "USYC": {
+      "name": "Circle USYC (Hashnote Short Duration Yield Coin)",
+      "kind": "토큰화 단기국채 펀드",
+      "note": "단기 국채 수익이 토큰 가격에 누적된다. 발행가 $1에서 시작해 계속 오르는 구조로, $1 고정이 목표가 아니다."
+    },
+    "USDY": {
+      "name": "Ondo US Dollar Yield",
+      "kind": "토큰화 단기국채 노트",
+      "note": "이자를 가격에 반영하는 누적형(accruing) 토큰. Ondo는 가격 고정형인 별도 리베이스 버전(rUSDY)을 따로 두고 있다."
+    },
+    "OUSG": {
+      "name": "Ondo Short-Term US Government Treasuries",
+      "kind": "토큰화 국채 펀드",
+      "note": "펀드 NAV를 그대로 따라가는 가격. 최초 발행가부터 이자만큼 계속 올라간다."
+    },
+    "USTB": {
+      "name": "Superstate Short Duration US Government Securities Fund",
+      "kind": "토큰화 국채 펀드",
+      "note": "NAV 연동 가격. $1 고정 설계가 아니다."
+    },
+    "TBILL": {
+      "name": "OpenEden T-Bill",
+      "kind": "토큰화 국채 볼트",
+      "note": "볼트 수익이 토큰 가격에 누적된다."
+    },
+    "SYRUPUSDC": {
+      "name": "Maple syrupUSDC",
+      "kind": "대출 수익 볼트",
+      "note": "예치 수익이 가격에 누적되는 볼트 토큰. 원금 $1 상환을 약속하는 페그가 아니다."
+    },
+    "SUSDE": {
+      "name": "Ethena sUSDe",
+      "kind": "스테이킹 래퍼",
+      "note": "USDe 를 예치한 지분 토큰으로 가격이 누적된다. 페그 대상은 원본 USDe 쪽이다."
+    },
+    "SUSDS": {
+      "name": "Sky sUSDS",
+      "kind": "스테이킹 래퍼",
+      "note": "USDS 예치 지분. 저축이자율만큼 가격이 오른다."
+    },
+    "SDAI": {
+      "name": "Savings DAI",
+      "kind": "스테이킹 래퍼",
+      "note": "DSR 이자가 가격에 누적된다."
+    }
+  },
+
+  "_not_excluded": {
+    "_comment": "아래는 '이자부'이지만 가격은 $1 고정을 목표로 하는 상품이다. 제외하면 실제 페그 이탈을 놓치므로 yield_bearing 에 옮기지 말 것.",
+    "BUIDL": "BlackRock USD Institutional Digital Liquidity Fund. 수익을 매일 토큰 추가 발행으로 지급하고 가격은 $1을 유지한다.",
+    "BENJI": "Franklin OnChain U.S. Government Money Fund. 안정 NAV $1 유지, 수익은 토큰 수량으로 지급.",
+    "USDM": "Mountain Protocol USDM. 리베이스로 보유 수량이 늘고 가격은 $1 근처를 유지한다.",
+    "RUSDY": "Ondo rUSDY. USDY의 리베이스 버전으로 가격이 $1에 고정된다."
+  }
+}

@@ -87,9 +87,10 @@
     <span class="gunit">편차 bp</span>
   </div>
   <ol class="gauge" id="gauge-list"></ol>
-  <p class="foot">USD 페그 종목만 표시합니다. ±150bp를 넘는 편차는 끝단에 고정되며 수치로 확인하십시오.
+  <p class="foot">USD 페그 종목만 표시합니다. 이자부 토큰화 상품(USYC·USDY 등)은 $1 고정이 목표가 아니므로 편차 계산에서 제외합니다. ±150bp를 넘는 편차는 끝단에 고정되며 수치로 확인하십시오.
     <span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 발행사 개요가 열립니다.</span></p>
   <p class="foot" id="gauge-nonusd" hidden></p>
+  <p class="foot" id="gauge-yield" hidden></p>
 </section>
 
 <section class="wrap block" aria-labelledby="h-trend">
@@ -228,7 +229,8 @@
     <h2 id="h-premium">국경 간 순유출 — 김치프리미엄
       <span class="live-badge" id="pm-live-badge"><i class="live-dot" id="pm-live-dot"></i>LIVE</span>
     </h2>
-    <p>프리미엄은 재정거래 유인의 크기입니다. 라벨링된 지갑 없이도 가격만으로 잡히기 때문에, 실제 자금이 움직이기 전에 먼저 나타나는 경우가 많습니다. <span id="pm-updated">&nbsp;</span></p>
+    <p>프리미엄은 재정거래 유인의 크기입니다. 라벨링된 지갑 없이도 가격만으로 잡히기 때문에, 실제 자금이 움직이기 전에 먼저 나타나는 경우가 많습니다.</p>
+    <p id="pm-updated">&nbsp;</p>
   </div>
   <div class="figs prem-figs">
     <div class="fig"><p class="fig-k">평균 프리미엄</p><p class="fig-v" id="pm-avg">—</p><p class="fig-s" id="pm-fx">&nbsp;</p></div>
