@@ -88,8 +88,8 @@
       const ticks = [-100, -50, 50, 100]
         .map((b) => `<i class="gtick" style="left:${pos(b)}%"></i>`).join("");
       return `<li class="grow grow-asset">
-        <button type="button" class="gsym gsym-btn" data-i="${i}" aria-expanded="false"
-          aria-label="${a.symbol} 발행사 개요 열기">${a.symbol}</button>
+        <button type="button" class="gsym sym-btn" data-i="${i}" aria-expanded="false"
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button>
         <span class="gstrip" role="img" aria-label="${a.symbol} 페그 편차 ${has ? signed(a.dev_bp, 1) + "bp" : "측정 불가"}">
           <i class="gband"></i>${ticks}<i class="gdatum"></i>
           <i class="gbar is-${g}" style="left:50%;width:0" data-l="${barL}" data-w="${barW}"></i>
@@ -129,115 +129,138 @@
     }
   }
 
-  // ── 계기판 종목 개요 (호버 / 탭 / 키보드) ────────────────
+  // ── 종목 개요 패널 (호버 / 탭 / 키보드) ───────────────────
+  // 계기판 행과 "종목별 현황" 표 행이 같은 패널·같은 규칙을 쓴다. 여는 조건과
+  // 위치 보정은 전부 여기 한 곳에만 있고, 붙는 자리마다 bindAssetPop 으로
+  // "무엇을 트리거로 볼지 / 어떤 데이터를 보여줄지"만 달리 넘긴다.
+  //
   // 호버가 되는 기기인지의 판정 기준은 CSS 와 같은 질의문을 쓴다.
   // (style.css 의 @media (hover: hover) and (pointer: fine) 블록과 짝)
   const HOVER_MQ = "(hover: hover) and (pointer: fine)";
+  const POP_TRIG = ".sym-btn"; // 개요를 여는 버튼 (계기판·표 공용)
+  const canHover = () => matchMedia(HOVER_MQ).matches;
 
-  function initAssetPop() {
-    const pop = $("#asset-pop"), list = $("#gauge-list");
-    if (!pop || !list) return;
-    const canHover = () => matchMedia(HOVER_MQ).matches;
+  // 개요는 화면 전체에서 한 번에 하나만 열린다.
+  const POP = { trig: null, anchor: null, pinned: false, raf: 0, bound: false };
 
-    let openBtn = null;   // 지금 열려 있는 행의 버튼 (하나뿐이다)
-    let pinned = false;   // 클릭/탭으로 고정된 상태인지
-    let raf = 0;
+  function popPlace() {
+    const pop = $("#asset-pop");
+    if (!pop || !POP.trig) return;
+    const r = (POP.anchor || POP.trig).getBoundingClientRect();
+    const p = pop.getBoundingClientRect();
+    const M = 8; // 화면 가장자리 여백
+    // 기본은 행 아래쪽. 아래가 모자라면 위로 뒤집고, 그래도 넘치면 화면 안으로 민다.
+    let top = r.bottom + 6;
+    if (top + p.height > window.innerHeight - M) top = r.top - p.height - 6;
+    top = clamp(top, M, Math.max(M, window.innerHeight - p.height - M));
+    let left = r.left + 12;
+    left = clamp(left, M, Math.max(M, window.innerWidth - p.width - M));
+    pop.style.top = top + "px";
+    pop.style.left = left + "px";
+  }
 
-    const place = () => {
-      if (!openBtn) return;
-      const r = openBtn.closest("li").getBoundingClientRect();
-      const p = pop.getBoundingClientRect();
-      const M = 8; // 화면 가장자리 여백
-      // 기본은 행 아래쪽. 아래가 모자라면 위로 뒤집고, 그래도 넘치면 화면 안으로 민다.
-      let top = r.bottom + 6;
-      if (top + p.height > window.innerHeight - M) top = r.top - p.height - 6;
-      top = clamp(top, M, Math.max(M, window.innerHeight - p.height - M));
-      let left = r.left + 12;
-      left = clamp(left, M, Math.max(M, window.innerWidth - p.width - M));
-      pop.style.top = top + "px";
-      pop.style.left = left + "px";
-    };
+  function popClose() {
+    const pop = $("#asset-pop");
+    if (!POP.trig) return;
+    POP.trig.setAttribute("aria-expanded", "false");
+    POP.trig.removeAttribute("aria-describedby");
+    POP.trig = null; POP.anchor = null; POP.pinned = false;
+    if (pop) pop.hidden = true;
+  }
 
-    const reposition = () => {
-      if (!openBtn || raf) return;
-      raf = requestAnimationFrame(() => { raf = 0; place(); });
-    };
+  function popOpen(trig, a, anchor, pin) {
+    const pop = $("#asset-pop");
+    if (!pop || !a) return;
+    if (POP.trig && POP.trig !== trig) popClose();
+    $("#ap-sym").textContent = a.symbol || "—";
+    $("#ap-name").textContent = a.name || "";
+    $("#ap-issuer").textContent = a.issuer || "확인 필요";
+    $("#ap-country").textContent = a.issuer_country || "확인 필요";
+    $("#ap-mcap").textContent = "$" + usd(a.mcap_usd);
+    $("#ap-share").textContent = a.share != null ? a.share.toFixed(2) + "%" : "—";
+    const note = $("#ap-note");
+    note.textContent = a.issuer_note || "";
+    note.hidden = !a.issuer_note;
 
-    const close = () => {
-      if (!openBtn) return;
-      openBtn.setAttribute("aria-expanded", "false");
-      openBtn.removeAttribute("aria-describedby");
-      openBtn = null; pinned = false;
-      pop.hidden = true;
-    };
+    pop.hidden = false;
+    trig.setAttribute("aria-expanded", "true");
+    trig.setAttribute("aria-describedby", "asset-pop");
+    POP.trig = trig; POP.anchor = anchor || trig; POP.pinned = !!pin;
+    popPlace();
+  }
 
-    const open = (btn, pin) => {
-      const a = GAUGE_ROWS[Number(btn.dataset.i)];
-      if (!a) return;
-      if (openBtn && openBtn !== btn) close(); // 개요는 한 번에 하나만
-      $("#ap-sym").textContent = a.symbol || "—";
-      $("#ap-name").textContent = a.name || "";
-      $("#ap-issuer").textContent = a.issuer || "확인 필요";
-      $("#ap-country").textContent = a.issuer_country || "확인 필요";
-      $("#ap-mcap").textContent = "$" + usd(a.mcap_usd);
-      $("#ap-share").textContent = a.share != null ? a.share.toFixed(2) + "%" : "—";
-      const note = $("#ap-note");
-      note.textContent = a.issuer_note || "";
-      note.hidden = !a.issuer_note;
-
-      pop.hidden = false;
-      btn.setAttribute("aria-expanded", "true");
-      btn.setAttribute("aria-describedby", "asset-pop");
-      openBtn = btn; pinned = !!pin;
-      place();
-    };
-
-    const btnOf = (e) => e.target.closest && e.target.closest(".gsym-btn");
+  // container 안의 트리거들에 개요를 붙인다. resolve(트리거)는 보여줄 종목
+  // 데이터를, anchorOf(트리거)는 패널을 붙일 기준 요소를 돌려준다.
+  // container 자체에 위임하므로 안쪽 내용을 다시 그려도 다시 걸 필요가 없다.
+  function bindAssetPop(container, resolve, anchorOf) {
+    if (!container) return;
+    const trigOf = (e) => (e.target.closest ? e.target.closest(POP_TRIG) : null);
+    const openFrom = (trig, pin) =>
+      popOpen(trig, resolve(trig), anchorOf ? anchorOf(trig) : trig, pin);
 
     // 데스크톱: 커서를 올리면 뜨고 벗어나면 사라진다.
-    list.addEventListener("pointerover", (e) => {
-      if (!canHover() || e.pointerType === "touch" || pinned) return;
-      const btn = btnOf(e);
-      if (btn && btn !== openBtn) open(btn, false);
+    container.addEventListener("pointerover", (e) => {
+      if (!canHover() || e.pointerType === "touch" || POP.pinned) return;
+      const trig = trigOf(e);
+      if (trig && trig !== POP.trig) openFrom(trig, false);
     });
-    list.addEventListener("pointerout", (e) => {
-      if (!canHover() || e.pointerType === "touch" || pinned) return;
-      const btn = btnOf(e);
-      if (btn && !btn.contains(e.relatedTarget)) close();
+    container.addEventListener("pointerout", (e) => {
+      if (!canHover() || e.pointerType === "touch" || POP.pinned) return;
+      const trig = trigOf(e);
+      if (trig && !trig.contains(e.relatedTarget)) popClose();
     });
 
     // 터치 기기: 탭하면 열리고, 같은 행을 다시 탭하면 닫힌다.
     // 데스크톱에서도 클릭하면 고정되어 커서가 벗어나도 남는다.
-    list.addEventListener("click", (e) => {
-      const btn = btnOf(e);
-      if (!btn) return;
-      if (openBtn === btn && (pinned || !canHover())) close();
-      else open(btn, true);
+    container.addEventListener("click", (e) => {
+      const trig = trigOf(e);
+      if (!trig) return;
+      if (POP.trig === trig && (POP.pinned || !canHover())) popClose();
+      else openFrom(trig, true);
     });
 
-    // 키보드: Tab 으로 포커스가 오면 열리고, Escape 로 닫힌다.
-    list.addEventListener("focusin", (e) => {
-      const btn = btnOf(e);
-      if (btn && btn !== openBtn && btn.matches(":focus-visible")) open(btn, false);
+    // 키보드: Tab 으로 포커스가 오면 열린다. (닫기는 Escape 와 focusout)
+    container.addEventListener("focusin", (e) => {
+      const trig = trigOf(e);
+      if (trig && trig !== POP.trig && trig.matches(":focus-visible")) openFrom(trig, false);
     });
-    list.addEventListener("focusout", (e) => {
-      if (pinned) return;
-      const btn = btnOf(e);
-      if (btn === openBtn) close();
+    container.addEventListener("focusout", (e) => {
+      if (POP.pinned) return;
+      if (trigOf(e) === POP.trig) popClose();
     });
+  }
+
+  function initAssetPop() {
+    if (POP.bound) return;
+    POP.bound = true;
+
+    const reposition = () => {
+      if (!POP.trig || POP.raf) return;
+      POP.raf = requestAnimationFrame(() => { POP.raf = 0; popPlace(); });
+    };
+
+    // Escape 로 닫는다. 여기서 트리거에 focus() 를 다시 주면 focusin 이 그대로
+    // 되받아 개요를 다시 열어버린다. 키보드로 연 경우엔 이미 트리거가 포커스를
+    // 갖고 있으니 되돌릴 것도 없다 — 닫기만 한다.
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && openBtn) { const b = openBtn; close(); b.focus(); }
+      if (e.key === "Escape" && POP.trig) popClose();
     });
 
     // 다른 곳을 탭/클릭하면 닫는다.
     document.addEventListener("pointerdown", (e) => {
-      if (!openBtn) return;
-      if (btnOf(e) || pop.contains(e.target)) return;
-      close();
+      const pop = $("#asset-pop");
+      if (!POP.trig) return;
+      if (e.target.closest && e.target.closest(POP_TRIG)) return;
+      if (pop && pop.contains(e.target)) return;
+      popClose();
     });
 
-    addEventListener("scroll", reposition, { passive: true });
+    // 표는 가로로 따로 스크롤되므로 창 스크롤만 봐서는 안 된다(capture).
+    addEventListener("scroll", reposition, { passive: true, capture: true });
     addEventListener("resize", reposition);
+
+    bindAssetPop($("#gauge-list"), (t) => GAUGE_ROWS[Number(t.dataset.i)], (t) => t.closest("li"));
+    bindAssetPop($("#tbl tbody"), (t) => TABLE_ROWS[Number(t.dataset.i)], null);
   }
 
   // ── SVG 라인차트 ────────────────────────────────────────
@@ -275,15 +298,71 @@
     });
   }
 
+  // 차트 타이포·선 굵기는 여기 상수 하나로 모든 차트가 같이 간다.
+  // lineChart 를 쓰는 차트(발행잔액·순증감률·프리미엄·코너 흐름 ETH/XRP)는
+  // 전부 이 값을 그대로 따르므로, 통일하려면 여기만 고치면 된다.
+  const AX_BASE = 520;          // 세로/가로 비율 기준 폭 (아래 REF 참고)
+  const AX_SIZE = 12.5;         // 축 라벨 크기 (CSS 픽셀)
+  const AX_CHAR = AX_SIZE * 0.62; // 모노스페이스 한 글자 폭 어림값
+  const LINE_W = 2.2;           // 데이터 선 굵기
+  const LAST_R = 3.6;           // 마지막 데이터 점 반지름
+
+  // viewBox 를 실제 그려지는 폭에 맞춘다. 예전처럼 520 으로 고정해두면 SVG 가
+  // 컨테이너 폭에 맞춰 통째로 늘어나기 때문에, 같은 9px·1.6px 를 써도 좁은
+  // 2단 차트와 가로 전폭 차트의 글씨·선 굵기가 두 배 가까이 벌어진다. 폭을
+  // 실측해 넣으면 viewBox 한 칸이 곧 1 CSS 픽셀이라 여섯 차트가 같은 굵기로
+  // 그려진다. 세로 비율은 예전 그대로 유지한다(H = W × 기준높이 / 520).
+  function drawChart(el) {
+    const st = el._chart;
+    if (!st) return;
+    let w = Math.round(el.clientWidth);
+    if (!w) {
+      // 숨은 탭 안이라 폭이 없다. ResizeObserver 가 있으면 탭이 열려 폭이
+      // 생기는 순간 다시 불러 주므로 그때 제대로 그린다. (없는 브라우저에서만
+      // 기준 폭으로 미리 그려 둔다 — 예전처럼 컨테이너에 맞춰 늘어난다.)
+      if (chartRO) return;
+      w = AX_BASE;
+    }
+    if (w === st.w) return;
+    st.w = w;
+    paintChart(el, st.pts, st.opts, w);
+  }
+
+  const chartRO = typeof ResizeObserver === "function"
+    ? new ResizeObserver((es) => es.forEach((e) => drawChart(e.target)))
+    : null;
+
+  // 숨은 탭 안의 차트는 폭이 0이라 그릴 수 없다. 탭이 열려 폭이 생기는 순간과
+  // 창 크기가 바뀌는 순간을 ResizeObserver 가 잡아 같은 자리에서 다시 그린다.
   function lineChart(el, pts, opts) {
-    if (!pts || pts.length < 2) { el.innerHTML = '<p class="foot">시계열 없음</p>'; return; }
-    const W = 520, H = opts.height || 170, ml = 46, mr = 8, mt = 10, mb = 22;
+    if (!pts || pts.length < 2) {
+      el._chart = null;
+      el.innerHTML = '<p class="foot">시계열 없음</p>';
+      return;
+    }
+    el._chart = { pts, opts, w: 0 };
+    if (chartRO && !el._chartObserved) { el._chartObserved = true; chartRO.observe(el); }
+    drawChart(el);
+  }
+
+  function paintChart(el, pts, opts, W) {
+    const H = Math.round(W * (opts.height || 170) / AX_BASE), mt = 12, mb = 26;
     const xs = pts.map((p) => p.t), ys = pts.map((p) => p.v);
     let y0 = Math.min(...ys), y1 = Math.max(...ys);
     if (opts.zero) { y0 = Math.min(y0, 0); y1 = Math.max(y1, 0); }
     const padY = (y1 - y0) * 0.12 || 1;
     y0 -= padY; y1 += padY;
     const x0 = Math.min(...xs), x1 = Math.max(...xs);
+
+    // 눈금값과 최신값 라벨을 먼저 만들어 두고, 그 글자 폭만큼 좌우 여백을 잡는다.
+    // 축 글씨가 커진 만큼 고정 여백(46/8)으로는 라벨이 잘리기 때문이다.
+    const gy = [y0 + (y1 - y0) * 0.08, (y0 + y1) / 2, y1 - (y1 - y0) * 0.08];
+    const gLab = gy.map((v) => opts.fmt(v));
+    const last = pts[pts.length - 1];
+    const lastLab = opts.fmt(last.v);
+    const ml = clamp(Math.max(...gLab.map((s) => s.length)) * AX_CHAR + 10, 40, 130);
+    const mr = clamp(lastLab.length * AX_CHAR + 14, 14, 140);
+
     const X = (t) => ml + ((t - x0) / (x1 - x0 || 1)) * (W - ml - mr);
     const Y = (v) => mt + (1 - (v - y0) / (y1 - y0 || 1)) * (H - mt - mb);
 
@@ -291,30 +370,37 @@
     const base = opts.zero ? Y(0) : H - mb;
     const area = line + ` L${X(x1).toFixed(1)} ${base.toFixed(1)} L${X(x0).toFixed(1)} ${base.toFixed(1)} Z`;
 
-    const gy = [y0 + (y1 - y0) * 0.08, (y0 + y1) / 2, y1 - (y1 - y0) * 0.08];
-    const grid = gy.map((v) => `<line x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--rule-soft)"/>
-      <text x="${ml - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" class="ax">${opts.fmt(v)}</text>`).join("");
+    const grid = gy.map((v, i) => `<line x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--rule-soft)"/>
+      <text x="${(ml - 7).toFixed(1)}" y="${(Y(v) + AX_SIZE * 0.35).toFixed(1)}" text-anchor="end" class="ax">${esc(gLab[i])}</text>`).join("");
 
     const zeroLine = opts.zero
-      ? `<line x1="${ml}" x2="${W - mr}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--ink)" stroke-opacity=".5"/>` : "";
+      ? `<line x1="${ml}" x2="${W - mr}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--ink)" stroke-opacity=".5" stroke-width="1.6"/>` : "";
 
     const tick = (t) => new Date(t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "short" });
     const xt = [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]]
-      .map((p, i) => `<text x="${X(p.t).toFixed(1)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 2 ? "end" : "middle"}" class="ax">${tick(p.t)}</text>`).join("");
+      .map((p, i) => `<text x="${X(p.t).toFixed(1)}" y="${H - 8}" text-anchor="${i === 0 ? "start" : i === 2 ? "end" : "middle"}" class="ax">${tick(p.t)}</text>`).join("");
 
-    const last = pts[pts.length - 1];
+    // 마지막 점 옆에 최신값을 그대로 붙인다. 축을 훑지 않아도 지금 값이 읽힌다.
+    const lx = X(last.t), ly = Y(last.v);
+    const lty = clamp(ly + AX_SIZE * 0.35, mt + AX_SIZE * 0.8, H - mb - 2);
+    const lastTag =
+      `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="${LAST_R}" fill="${opts.color}"/>
+       <text x="${(lx + LAST_R + 4).toFixed(1)}" y="${lty.toFixed(1)}" class="ax ax-last"
+         style="fill:${opts.color}">${esc(lastLab)}</text>`;
+
     const cross = opts.interactive
       ? `<line class="ch-cross" x1="0" x2="0" y1="${mt}" y2="${H - mb}" stroke="var(--ink)" stroke-opacity=".45" stroke-dasharray="2 2"/>
-         <circle class="ch-dot" cx="0" cy="0" r="3.4" fill="${opts.color}" stroke="var(--card)" stroke-width="1.4"/>` : "";
+         <circle class="ch-dot" cx="0" cy="0" r="3.6" fill="${opts.color}" stroke="var(--card)" stroke-width="1.4"/>` : "";
 
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-        aria-label="${opts.label}. 최근값 ${opts.fmt(last.v)}">
-      <style>.ax{font-family:var(--mono);font-size:9px;fill:var(--dim)}
+        aria-label="${opts.label}. 최근값 ${esc(lastLab)}">
+      <style>.ax{font-family:var(--mono);font-size:${AX_SIZE}px;font-weight:600;fill:var(--ink)}
+        .ax-last{letter-spacing:-.02em}
         .ch-cross,.ch-dot{opacity:0;pointer-events:none}</style>
       ${grid}${zeroLine}
       <path d="${area}" fill="${opts.color}" fill-opacity=".1"/>
-      <path d="${line}" fill="none" stroke="${opts.color}" stroke-width="1.6" stroke-linejoin="round"/>
-      <circle cx="${X(last.t).toFixed(1)}" cy="${Y(last.v).toFixed(1)}" r="2.8" fill="${opts.color}"/>
+      <path d="${line}" fill="none" stroke="${opts.color}" stroke-width="${LINE_W}" stroke-linejoin="round" stroke-linecap="round"/>
+      ${lastTag}
       ${xt}${cross}
     </svg>${opts.interactive ? '<div class="ch-tip" hidden></div>' : ""}`;
 
@@ -471,9 +557,13 @@
   }
 
   // ── 표 ──────────────────────────────────────────────────
+  let TABLE_ROWS = []; // 개요 패널이 참조할 행 데이터 (GAUGE_ROWS 와 같은 역할)
+
   function renderTable(d) {
-    $("#tbl tbody").innerHTML = d.assets.map((a) => `<tr>
-      <td><span class="tsym">${a.symbol}</span><span class="tname">${a.name || ""}</span></td>
+    TABLE_ROWS = d.assets;
+    $("#tbl tbody").innerHTML = d.assets.map((a, i) => `<tr>
+      <td><button type="button" class="tsym sym-btn" data-i="${i}" aria-expanded="false"
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></td>
       <td>${a.mechanism_ko}</td>
       <td>${a.peg_currency}</td>
       <td class="num">$${usd(a.mcap_usd)}</td>
@@ -777,8 +867,9 @@
 
     renderStatus(snap);
     renderGauge(snap);
-    initAssetPop();
     renderTable(snap);
+    initAssetPop(); // 계기판·표를 다 그린 뒤 한 번만 건다
+
     renderThresholds(snap.meta.thresholds);
     initTrend(hist);
 

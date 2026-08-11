@@ -23,6 +23,13 @@ body{
   margin:0;background:var(--paper);color:var(--ink);
   font-family:var(--sans);font-size:15px;line-height:1.6;
   font-feature-settings:"tnum" 1;
+  /* 한국어 본문은 어절 단위로만 접는다. keep-all 이 없으면 브라우저가 한글
+     사이 아무 데서나 접고, lang="ko" 에서는 가운뎃점(·)도 줄바꿈 자리로 봐서
+     "USDT·USDC" 나 "Binance·OKX·Bybit" 가 토막난다. 영문 약어·숫자+단위
+     ("$264.0B", "HHI")도 keep-all 이 한 덩어리로 묶어 준다.
+     break-word 는 한 줄에 도저히 안 들어가는 긴 토큰에만 쓰이는 최후 수단. */
+  word-break:keep-all;
+  overflow-wrap:break-word;
 }
 .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -142,14 +149,17 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
 .gsym{font-family:var(--mono);font-size:.82rem;font-weight:500;letter-spacing:-.01em}
 .gstrip{position:relative;height:30px}
 .gband{position:absolute;inset-block:9px;left:41.666%;width:16.667%;background:#12405812}
-.gdatum{position:absolute;inset-block:3px;left:50%;width:1px;background:var(--ink);opacity:.55}
+/* 차트 선 굵기(2.2)에 맞춰 계기판 기준선도 함께 올렸다. 다만 레인 높이가
+   30px 뿐이라 차트와 같은 값은 답답해 보여서 한 급 얇게 잡는다. */
+.gdatum{position:absolute;inset-block:3px;left:50%;width:2px;transform:translateX(-1px);
+  background:var(--ink);opacity:.6}
 .gtick{position:absolute;inset-block:13px;width:1px;background:var(--rule)}
 .gmark{
   position:absolute;top:50%;width:9px;height:9px;
   transform:translate(-50%,-50%) rotate(45deg);
   transition:left .9s cubic-bezier(.2,.75,.25,1);
 }
-.gbar{position:absolute;top:50%;height:2px;transform:translateY(-50%);opacity:.42;
+.gbar{position:absolute;top:50%;height:3px;transform:translateY(-50%);opacity:.45;
   transition:left .9s cubic-bezier(.2,.75,.25,1),width .9s cubic-bezier(.2,.75,.25,1)}
 .gval{font-family:var(--mono);font-size:.78rem;text-align:right;padding-right:.1rem}
 .gval.na{color:var(--dim)}
@@ -164,31 +174,33 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   .gmark,.gbar{transition:none}
 }
 
-/* ── 계기판 종목 개요 ─────────────────────────────────────
-   .grow 는 동결 조치 탭의 지갑 레인과 공유하므로, 개요가 붙는 계기판 행에만
-   .grow-asset 을 두고 여기 있는 규칙은 전부 그 클래스 안으로 한정한다. */
+/* ── 종목 개요 트리거 (계기판 행 · 종목별 현황 표 공용) ────
+   .sym-btn 은 계기판(.grow-asset)과 표(#tbl) 양쪽이 같이 쓴다. 글자 크기만
+   붙는 자리에서 정하고 나머지 생김새·상호작용 힌트는 여기 한 곳에 둔다. */
 .gcap{
   font-family:var(--mono);font-size:.68rem;line-height:1.5;color:var(--dim);
   margin:0 0 .9rem;
 }
 .gauge-hint{color:var(--dim)}
-.grow-asset .gsym-btn{
+.sym-btn{
   appearance:none;background:transparent;border:0;padding:0;margin:0;
-  font:inherit;font-family:var(--mono);font-size:.82rem;font-weight:500;letter-spacing:-.01em;
+  font:inherit;font-family:var(--mono);font-weight:500;letter-spacing:-.01em;
   color:inherit;text-align:left;cursor:pointer;justify-self:start;
   border-bottom:1px dotted var(--rule);
 }
-.grow-asset .gsym-btn[aria-expanded="true"]{color:var(--petrol);border-bottom-color:var(--petrol)}
-.grow-asset .gsym-btn:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+.sym-btn[aria-expanded="true"]{color:var(--petrol);border-bottom-color:var(--petrol)}
+.sym-btn:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+/* .gsym 보다 뒤에 오는 font:inherit 이 크기를 지워버리므로 여기서 되돌린다. */
+.grow-asset .sym-btn{font-size:.82rem}
 
 /* 호버가 되는 기기에서만 커서 힌트를 준다. 판정 질의는 app.js 의 HOVER_MQ 와 같다. */
 @media (hover:hover) and (pointer:fine){
-  .grow-asset .gsym-btn{cursor:help}
-  .grow-asset .gsym-btn:hover{color:var(--petrol);border-bottom-color:var(--petrol)}
+  .sym-btn{cursor:help}
+  .sym-btn:hover{color:var(--petrol);border-bottom-color:var(--petrol)}
 }
 /* 호버가 없는 기기(터치)에서는 탭으로 여는 것임을 점으로 알린다. */
 @media not all and (hover:hover) and (pointer:fine){
-  .grow-asset .gsym-btn::after{
+  .sym-btn::after{
     content:"";display:inline-block;width:4px;height:4px;border-radius:50%;
     background:var(--dim);vertical-align:.35em;margin-left:.3rem;
   }
@@ -208,7 +220,7 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   padding-top:.5rem;border-top:1px solid var(--rule-soft);
 }
 .ap-grid dt{font-family:var(--mono);font-size:.68rem;letter-spacing:.05em;color:var(--mid)}
-.ap-grid dd{margin:0;font-size:.8rem;text-align:right;overflow-wrap:anywhere}
+.ap-grid dd{margin:0;font-size:.8rem;text-align:right;overflow-wrap:break-word}
 .ap-note{
   margin:.6rem 0 0;padding-top:.5rem;border-top:1px solid var(--rule-soft);
   font-size:.71rem;line-height:1.5;color:var(--dim);
@@ -243,7 +255,7 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
 .ch-tip-v{font-weight:500}
 
 .charts{display:grid;grid-template-columns:1fr 1fr;column-gap:2.4rem}
-.chart{margin:0;background:var(--card);padding:1.1rem 0 0.6rem}
+.chart{margin:0;background:var(--card);padding:1.1rem 0 0.6rem;min-width:0}
 .chart+.chart{border-left:1px solid var(--rule);padding-left:2.4rem}
 .chart figcaption{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;color:var(--mid);margin-bottom:.6rem}
 .chart .unit{color:var(--dim)}
@@ -251,7 +263,10 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
 
 /* ── panels & bars ────────────────────────────────────── */
 .cols{display:grid;grid-template-columns:repeat(3,1fr);column-gap:2.2rem;border-top:1px solid var(--rule);padding-top:1.6rem}
-.panel{background:var(--card);padding:0 0 1.5rem}
+/* min-width:0 이 없으면 그리드 칸이 안쪽 표의 min-width(520px)까지 벌어져서,
+   가로 스크롤을 맡은 .tablewrap 이 줄어들지 못하고 좁은 화면에서 페이지 전체가
+   옆으로 밀린다(360px 기준 177px). 차트 칸도 같은 이유로 함께 막아 둔다. */
+.panel{background:var(--card);padding:0 0 1.5rem;min-width:0}
 .panel+.panel{border-left:1px solid var(--rule);padding-left:2.2rem}
 .panel h3{font-size:.8rem;font-family:var(--mono);letter-spacing:.08em;color:var(--mid);
   margin:0 0 1.1rem;font-weight:500;text-transform:uppercase}
@@ -357,7 +372,7 @@ tbody tr:hover{background:#fff}
   @page{size:A4;margin:14mm}
   body{background:#fff;font-size:11px}
   .skip,.band,.live-badge,.asset-pop,.chart-tools,.ch-tip{display:none}
-  .grow-asset .gsym-btn{border-bottom:0;color:var(--ink)}
+  .sym-btn{border-bottom:0;color:var(--ink)}
   .masthead{background:#fff;color:var(--ink);border-bottom:2px solid var(--ink)}
   .eyebrow{color:var(--mid)}
   .lede{color:var(--mid)}
