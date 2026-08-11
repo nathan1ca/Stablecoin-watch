@@ -587,6 +587,41 @@ def head_status(url: str, timeout: int = 15) -> str:
         return f"실패 ({e})"
 
 
+def verify_icons(snap: dict, sample_size: int = 3) -> None:
+    """수집 직후, 만든 아이콘 URL 이 정말 그림을 주는지 표본으로 확인한다.
+
+    ICON_SLUG_FIELDS 후보가 슬러그가 아니었다면 URL 은 전부 404 가 된다. 그대로
+    내보내면 브라우저가 종목 수만큼 404 를 때리게 되므로(화면상으로는 onerror
+    덕에 빈 원으로 보이지만 낭비다), 그럴 때는 icon_url 을 비워서 내보낸다.
+
+    404 가 아닌 실패(연결 실패·시간 초과)는 CDN 일시 장애일 수 있으니 값을
+    건드리지 않는다 — 잠깐 죽은 것 때문에 멀쩡한 슬러그를 버리지 않기 위해서다.
+    """
+    sample = [r for r in snap["assets"] if r["icon_url"]][:sample_size]
+    if not sample:
+        return
+
+    results = [(r["symbol"], head_status(r["icon_url"])) for r in sample]
+    ok = [s for s, st in results if st.startswith("HTTP 2")]
+    if ok:
+        print(f"       아이콘 확인: 표본 {len(ok)}/{len(results)}종 정상")
+        return
+
+    if all(st == "HTTP 404" for _, st in results):
+        for r in snap["assets"]:
+            r["icon_url"] = ""
+        snap["meta"]["icon_coverage"] = f"0/{len(snap['assets'])}"
+        snap["meta"]["icon_note"] += (
+            " 이번 수집에서는 표본 URL 이 전부 404 라 슬러그 필드가 틀린 것으로 보고 비웠다.")
+        print(f"       아이콘 확인: 표본 {len(results)}종이 모두 404 — "
+              f"{'/'.join(ICON_SLUG_FIELDS)} 가 슬러그가 아니다. icon_url 을 전부 비웠다. "
+              "--probe 로 실제 필드명을 확인하십시오.", file=sys.stderr)
+    else:
+        detail = ", ".join(f"{s} {st}" for s, st in results)
+        print(f"       아이콘 확인: 판정 불가({detail}) — CDN 일시 장애로 보고 값은 그대로 둔다.",
+              file=sys.stderr)
+
+
 def probe_icons(assets: list[dict]):
     """아이콘 URL 을 어떤 필드로 만들 수 있는지 응답에서 직접 확인한다.
 
@@ -746,6 +781,8 @@ def main():
     issuers = load_issuers()
     yb = load_yield_bearing()
     snap = build_snapshot(assets, chains, issuers, yb)
+    # 슬러그 필드를 잘못 골랐으면 여기서 걸러진다. 표본이 전부 404 면 비우고 간다.
+    verify_icons(snap)
 
     print(f"4/4 종목별 시계열 수집… (상위 {SERIES_ASSET_COUNT}종)")
     series = fetch_asset_series(snap["assets"])
