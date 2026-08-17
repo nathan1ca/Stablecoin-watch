@@ -4,6 +4,15 @@
 
 의존성이 없습니다. 파이썬 표준 라이브러리로 데이터를 받아 JSON으로 떨어뜨리고, 브라우저는 그 JSON을 읽어 그립니다. 서버도 데이터베이스도 API 키도 필요 없습니다.
 
+## 최근 개선 (위험 모니터링)
+
+- **합성 위험점수 (0–100)**: 페그 편차 · 상환 압력 · 발행사 집중도(HHI) · 알고리즘형 비중 · 가격 품질을 가중 평균. 임계값은 `etl/thresholds.json`.
+- **다중 가격 교차검증**: DefiLlama 오라클 + CoinGecko. 소스 간 편차 ≥ 30bp 이면 `price_quality=degraded`.
+- **스테이블코인 김치프리미엄**: 업비트 `KRW-USDT` · `KRW-USDC`를 $1 기준으로 측정 (임계 0.5% / 1.5%). BTC·ETH·XRP는 기존과 동일.
+- **임계값 외부화**: `etl/thresholds.json` — ETL과 화면 메타가 같은 값을 공유.
+- **공유 라이브러리**: `etl/lib/` (http · metrics · config). 단위 테스트 `tests/test_metrics.py`.
+- **다크 모드**: 시스템 선호 감지 + 수동 토글 (설정 로컬 저장).
+
 ## 처음 실행
 
 ```bash

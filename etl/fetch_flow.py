@@ -41,7 +41,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 API = "https://api.etherscan.io/v2/api"
-UA = "stablecoin-watch/0.1"
+UA = "stablecoin-watch/0.2"
 PAUSE = 0.25
 CHAIN_ID = 1  # 이더리움 메인넷
 

@@ -42,6 +42,8 @@
     if (m.is_sample) $("#sample-band").hidden = false;
 
     const g = t.system_grade;
+    const verdict = $("#verdict");
+    if (verdict) verdict.setAttribute("data-grade", g || "unknown");
     $("#verdict-dot").className = "dot is-" + g;
     $("#verdict-label").textContent = "시스템 " + (GRADE_KO[g] || g);
     $("#verdict-label").className = "verdict-label t-" + g;
@@ -59,6 +61,41 @@
     $("#f-total-s").textContent = "1일 순증감 " + (t.net_1d_usd >= 0 ? "+$" : "−$") + usd(Math.abs(t.net_1d_usd));
     $("#f-peg").textContent = `${t.breach_count} / ${t.watch_count}`;
     $("#f-peg").className = "fig-v t-" + (t.breach_count ? "breach" : t.watch_count ? "watch" : "sound");
+
+    // 합성 위험점수 (구버전 snapshot 에는 없을 수 있음)
+    const riskEl = $("#f-risk");
+    if (riskEl) {
+      const rs = t.risk_score != null ? t.risk_score : (d.risk && d.risk.score);
+      const rg = t.risk_grade || (d.risk && d.risk.grade) || "unknown";
+      const rgCls = rg === "breach" ? "breach" : rg === "watch" ? "watch" : "sound";
+      riskEl.textContent = rs != null ? Number(rs).toFixed(1) : "—";
+      riskEl.className = "fig-v t-" + rgCls;
+      const thrR = m.thresholds || {};
+      const rsNote = $("#f-risk-s");
+      if (rsNote) {
+        rsNote.textContent = rs != null
+          ? `주의 ${thrR.risk_watch ?? 35} · 경보 ${thrR.risk_breach ?? 60}` +
+            (t.price_degraded_count ? ` · 가격품질 저하 ${t.price_degraded_count}종` : "")
+          : "0–100 · 페그·상환·집중·알고·가격품질";
+      }
+      // 미니 바: 숫자 아래에 위험 정도를 한눈에
+      let meter = riskEl.parentElement && riskEl.parentElement.querySelector(".risk-meter");
+      if (!meter && riskEl.parentElement && rs != null) {
+        meter = document.createElement("span");
+        meter.className = "risk-meter";
+        meter.setAttribute("aria-hidden", "true");
+        meter.innerHTML = "<i></i>";
+        riskEl.parentElement.appendChild(meter);
+      }
+      if (meter) {
+        meter.className = "risk-meter is-" + rgCls;
+        const fill = meter.querySelector("i");
+        if (fill) {
+          const w = Math.max(0, Math.min(100, Number(rs) || 0));
+          requestAnimationFrame(() => { fill.style.width = w + "%"; });
+        }
+      }
+    }
 
     const hhiV = c.hhi_issuer, thr = m.thresholds.hhi_concentrated;
     $("#f-hhi").textContent = hhiV.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -821,27 +858,72 @@
     $("#premium-sec").hidden = false;
     $("#premium-empty").hidden = true;
 
-    const grade = p.basket_grade;
-    $("#pm-avg").textContent = signed(p.basket_avg_pct, 2, "%");
-    $("#pm-avg").className = "fig-v t-" + grade;
+    const thr = p.meta.thresholds || {};
+    const sw = thr.stable_watch_pct != null ? thr.stable_watch_pct : 0.5;
+    const sb = thr.stable_breach_pct != null ? thr.stable_breach_pct : 1.5;
+    const cw = thr.watch_pct != null ? thr.watch_pct : 3.0;
+    const cb = thr.breach_pct != null ? thr.breach_pct : 7.0;
+
+    const gradeOf = (prem, stable) => {
+      if (prem == null) return "unknown";
+      const w = stable ? sw : cw, b = stable ? sb : cb;
+      if (prem <= (thr.inverted_pct != null ? thr.inverted_pct : -1)) return "watch";
+      if (prem >= b) return "breach";
+      if (prem >= w) return "watch";
+      return "sound";
+    };
+
+    // 스테이블 평균 (신규 필드, 없으면 basket으로 폴백)
+    const stableAvg = p.stable_avg_pct != null ? p.stable_avg_pct : null;
+    const stableGrade = p.stable_grade || gradeOf(stableAvg, true);
+    const pmStable = $("#pm-stable");
+    if (pmStable) {
+      pmStable.textContent = stableAvg != null ? signed(stableAvg, 2, "%") : "—";
+      pmStable.className = "fig-v t-" + (stableAvg != null ? stableGrade : "unknown");
+    }
+
+    const cryptoAvg = p.crypto_avg_pct != null ? p.crypto_avg_pct : p.basket_avg_pct;
+    const cryptoGrade = p.crypto_grade || p.basket_grade || gradeOf(cryptoAvg, false);
+    $("#pm-avg").textContent = cryptoAvg != null ? signed(cryptoAvg, 2, "%") : "—";
+    $("#pm-avg").className = "fig-v t-" + (cryptoAvg != null ? cryptoGrade : "unknown");
     $("#pm-fx").textContent = `USD/KRW ${p.meta.fx_usdkrw.toLocaleString()}`;
 
     const byAsset = {};
     p.assets.forEach((a) => (byAsset[a.asset] = a));
+
+    ["usdt", "usdc"].forEach((k) => {
+      const a = byAsset[k.toUpperCase()];
+      const el = $("#pm-" + k);
+      if (!el) return;
+      if (!a || a.premium_pct == null) { el.textContent = "—"; return; }
+      el.textContent = signed(a.premium_pct, 2, "%");
+      el.className = "fig-v t-" + (a.grade || gradeOf(a.premium_pct, true));
+    });
+
     ["btc", "eth", "xrp"].forEach((k) => {
       const a = byAsset[k.toUpperCase()];
       const el = $("#pm-" + k);
+      if (!el) return;
       if (!a || a.premium_pct == null) { el.textContent = "—"; return; }
       el.textContent = signed(a.premium_pct, 2, "%");
-      el.className = "fig-v t-" + (a.premium_pct >= p.meta.thresholds.breach_pct ? "breach"
-        : a.premium_pct >= p.meta.thresholds.watch_pct ? "watch" : "sound");
+      el.className = "fig-v t-" + (a.grade || gradeOf(a.premium_pct, false));
     });
 
-    if (hist && hist.points && hist.points.length > 1) {
-      const pts = hist.points.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
+    const btcPts = (hist && (hist.points_btc || hist.points)) || null;
+    if (btcPts && btcPts.length > 1) {
+      const pts = btcPts.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
       lineChart($("#chart-premium"), pts, {
         color: "var(--petrol)", label: "BTC 프리미엄 추이", zero: true,
         fmt: (v) => v.toFixed(1) + "%",
+      });
+    }
+    const usdtPts = hist && hist.points_usdt;
+    const usdtChart = $("#chart-premium-usdt");
+    if (usdtChart && usdtPts && usdtPts.length > 1) {
+      const pts = usdtPts.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
+      lineChart(usdtChart, pts, {
+        color: "var(--accent)", label: "USDT 프리미엄 추이", zero: true,
+        fmt: (v) => v.toFixed(2) + "%",
       });
     }
   }
@@ -1103,6 +1185,24 @@
     }
   }
 
+  // ── 테마 토글 ──────────────────────────────────────────
+  function initTheme() {
+    const btn = $("#theme-toggle");
+    if (!btn) return;
+    const apply = (t) => {
+      document.documentElement.dataset.theme = t;
+      try { localStorage.setItem("scw-theme", t); } catch (e) {}
+      btn.setAttribute("aria-label", t === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환");
+      btn.textContent = t === "dark" ? "라이트" : "다크";
+    };
+    const cur = document.documentElement.dataset.theme || "light";
+    apply(cur === "dark" ? "dark" : "light");
+    btn.addEventListener("click", () => {
+      apply(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
+  }
+
+  initTheme();
   initTabs();
   boot();
 })();

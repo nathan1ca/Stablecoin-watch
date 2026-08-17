@@ -1,0 +1,53 @@
+{
+  "_meta": {
+    "purpose": "스테이블코인 위험 모니터링 관측선. 법정 기준이 아니라 이 대시보드의 편의상 설정값이다.",
+    "principle": "임계값은 근거를 갖고 조정한다. 화면 메타에 실려 가므로 ETL과 UI가 항상 같은 값을 본다.",
+    "updated": "2026-08-14"
+  },
+  "peg": {
+    "watch_bp": 25,
+    "breach_bp": 100,
+    "comment": "1bp = 0.01%. ±25bp는 정상 시장 스프레드, ±100bp는 명백한 이탈."
+  },
+  "redemption": {
+    "watch_pct": -10.0,
+    "breach_pct": -25.0,
+    "comment": "30일 순소각률(%). 마이너스가 깊을수록 상환 압력."
+  },
+  "concentration": {
+    "hhi_concentrated": 2500,
+    "comment": "US DOJ/FTC 수평결합지침의 '고집중' 구간 하한(2500)을 준용."
+  },
+  "algorithmic": {
+    "share_watch_pct": 5.0,
+    "comment": "담보 없는 알고리즘형 발행 잔액 비중 주의선."
+  },
+  "display": {
+    "min_mcap_usd": 50000000,
+    "comment": "계기판·경보 목록에 표시할 최소 발행잔액(USD)."
+  },
+  "price_quality": {
+    "source_disagreement_bp": 30,
+    "comment": "다중 가격 소스 간 편차가 이 값을 넘으면 price_quality=degraded."
+  },
+  "premium": {
+    "watch_pct": 3.0,
+    "breach_pct": 7.0,
+    "inverted_pct": -1.0,
+    "stable_watch_pct": 0.5,
+    "stable_breach_pct": 1.5,
+    "comment": "김치프리미엄. 스테이블코인 페어는 임계값이 훨씬 낮다(재정거래 마찰이 작음)."
+  },
+  "risk_score": {
+    "comment": "0~100 합성 위험점수. 높을수록 위험. 가중치는 상대적 중요도.",
+    "weights": {
+      "peg": 0.35,
+      "redemption": 0.25,
+      "concentration": 0.20,
+      "algorithmic": 0.10,
+      "price_quality": 0.10
+    },
+    "watch": 35,
+    "breach": 60
+  }
+}

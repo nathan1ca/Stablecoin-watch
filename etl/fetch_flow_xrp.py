@@ -42,7 +42,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 BASE = "https://api.xrpscan.com/api/v1"
-UA = "stablecoin-watch/0.1"
+UA = "stablecoin-watch/0.2"
 PAUSE = 0.35  # 무료 공개 API 예의상 텀
 
 KR_NAMES = {"Upbit", "Bithumb"}

@@ -17,17 +17,47 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+# 공유 라이브러리 (표준 라이브러리만)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.config import load_thresholds, thresholds_for_meta  # noqa: E402
+from lib.http import UA  # noqa: E402
+from lib.metrics import (  # noqa: E402
+    composite_risk_score,
+    grade_peg as _grade_peg,
+    grade_redemption as _grade_redemption,
+    hhi,
+    median,
+    peg_amount,
+    peg_currency,
+    pct_change,
+    worse_grade,
+)
+
 BASE = "https://stablecoins.llama.fi"
-UA = "stablecoin-watch/0.1 (public supervisory dashboard; contact: <your-email>)"
+
+# CoinGecko 심볼 → id 매핑 (다중 가격 교차검증용, 상위 종목만)
+CG_STABLE_IDS = {
+    "USDT": "tether",
+    "USDC": "usd-coin",
+    "DAI": "dai",
+    "USDE": "ethena-usde",
+    "USDS": "usds",
+    "PYUSD": "paypal-usd",
+    "FDUSD": "first-digital-usd",
+    "TUSD": "true-usd",
+    "FRAX": "frax",
+    "GUSD": "gemini-dollar",
+    "RLUSD": "ripple-usd",
+    "EURC": "euro-coin",
+}
 
 # 발행사·발행국가 대조표. DefiLlama 응답에는 이 정보가 없어 손으로 채운다.
 ISSUERS_PATH = Path(__file__).resolve().parent / "issuers.json"
@@ -87,23 +117,15 @@ def icon_url(slug: str) -> str:
     return f"{ICON_CDN}/{quote(slug, safe='')}?w={ICON_SIZE}&h={ICON_SIZE}"
 
 # ── 감독 임계치 ────────────────────────────────────────────────────────────
-# 법정 기준이 아니라 이 대시보드의 편의상 설정값이다. 근거를 갖고 조정할 것.
-THRESHOLDS = {
-    "peg_watch_bp": 25,       # 페그 편차 주의 (basis point)
-    "peg_breach_bp": 100,     # 페그 편차 경보
-    "redemption_watch": -10.0,  # 30일 순소각률(%) 주의
-    "redemption_breach": -25.0,  # 30일 순소각률(%) 경보
-    "hhi_concentrated": 2500,   # 집중 시장 판단선 (US DOJ/FTC 수평결합지침 준용)
-    "algo_share_watch": 5.0,    # 알고리즘형 비중(%) 주의
-    "min_mcap_usd": 50_000_000,  # 계기판 표시 최소 발행잔액
-}
+# 법정 기준이 아니라 이 대시보드의 편의상 설정값이다.
+# 정본은 etl/thresholds.json — 여기서는 기동 시 한 번 읽어 모듈 전역으로 둔다.
+THRESHOLDS = load_thresholds()
 
 
 # ── HTTP ──────────────────────────────────────────────────────────────────
 def get(path: str, params: dict | None = None, retries: int = 3):
     url = BASE + path
     if params:
-        from urllib.parse import urlencode
         url += "?" + urlencode(params)
     last = None
     for attempt in range(retries):
@@ -119,27 +141,28 @@ def get(path: str, params: dict | None = None, retries: int = 3):
     raise RuntimeError(f"{url} 수집 실패: {last}")
 
 
-# ── 값 추출 헬퍼 ──────────────────────────────────────────────────────────
-# DefiLlama는 금액을 {"peggedUSD": 1234.5} 처럼 페그통화 키로 감싸서 준다.
-def peg_amount(box) -> float:
-    """{'peggedUSD': n} 형태에서 숫자를 꺼낸다. 스키마가 바뀌어도 죽지 않게."""
-    if box is None:
-        return 0.0
-    if isinstance(box, (int, float)):
-        return float(box)
-    if isinstance(box, dict):
-        for v in box.values():
-            if isinstance(v, (int, float)):
-                return float(v)
-    return 0.0
-
-
-def peg_currency(box, fallback: str = "USD") -> str:
-    if isinstance(box, dict):
-        for k in box:
-            if k.startswith("pegged"):
-                return k.replace("pegged", "") or fallback
-    return fallback
+def fetch_coingecko_prices(symbols: list[str]) -> dict[str, float]:
+    """심볼 → USD 가격. 실패해도 빈 dict — 교차검증은 보조 신호일 뿐."""
+    ids = [CG_STABLE_IDS[s] for s in symbols if s in CG_STABLE_IDS]
+    if not ids:
+        return {}
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price?" + urlencode({
+            "ids": ",".join(ids), "vs_currencies": "usd",
+        })
+        req = Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+        with urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        inv = {v: k for k, v in CG_STABLE_IDS.items()}
+        out: dict[str, float] = {}
+        for cid, box in data.items():
+            sym = inv.get(cid)
+            if sym and isinstance(box, dict) and "usd" in box:
+                out[sym] = float(box["usd"])
+        return out
+    except Exception as e:
+        print(f"  CoinGecko 교차가격 수집 실패({e}) — DefiLlama 단독으로 진행", file=sys.stderr)
+        return {}
 
 
 # ── 발행사 대조표 ─────────────────────────────────────────────────────────
@@ -232,36 +255,12 @@ def yield_bearing_reason(asset: dict, table: dict) -> str | None:
     return None
 
 
-def pct_change(now: float, prev: float) -> float | None:
-    if not prev:
-        return None
-    return (now - prev) / prev * 100.0
-
-
-def hhi(shares_pct: list[float]) -> float:
-    """허핀달-허시만 지수. 점유율(%) 리스트를 받아 0~10000 스케일로 반환."""
-    return round(sum(s * s for s in shares_pct), 1)
-
-
 def grade_peg(dev_bp: float | None) -> str:
-    if dev_bp is None:
-        return "unknown"
-    a = abs(dev_bp)
-    if a >= THRESHOLDS["peg_breach_bp"]:
-        return "breach"
-    if a >= THRESHOLDS["peg_watch_bp"]:
-        return "watch"
-    return "sound"
+    return _grade_peg(dev_bp, THRESHOLDS)
 
 
 def grade_redemption(chg_30d: float | None) -> str:
-    if chg_30d is None:
-        return "unknown"
-    if chg_30d <= THRESHOLDS["redemption_breach"]:
-        return "breach"
-    if chg_30d <= THRESHOLDS["redemption_watch"]:
-        return "watch"
-    return "sound"
+    return _grade_redemption(chg_30d, THRESHOLDS)
 
 
 WORST = {"unknown": 0, "sound": 1, "watch": 2, "breach": 3}
@@ -308,9 +307,11 @@ MECHANISM_KO = {
 
 
 def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None = None,
-                   yield_bearing: dict | None = None) -> dict:
+                   yield_bearing: dict | None = None,
+                   external_prices: dict[str, float] | None = None) -> dict:
     issuers = load_issuers() if issuers is None else issuers
     yield_bearing = load_yield_bearing() if yield_bearing is None else yield_bearing
+    external_prices = external_prices or {}
     rows = []
     for a in assets:
         circ_box = a.get("circulating")
@@ -321,9 +322,28 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         price = a.get("price")
         price = float(price) if isinstance(price, (int, float)) else None
         cur = peg_currency(circ_box)
+        symbol = str(a.get("symbol") or "").strip().upper()
+
+        # 다중 소스 교차검증: DefiLlama + CoinGecko 중위값으로 페그 편차 계산
+        # 소스 간 편차가 크면 price_quality=degraded
+        prices_for_med: list[float] = []
+        if price is not None:
+            prices_for_med.append(price)
+        cg = external_prices.get(symbol)
+        if cg is not None:
+            prices_for_med.append(cg)
+        median_price = median(prices_for_med) if prices_for_med else None
+        price_spread_bp = None
+        price_quality = "ok"
+        if len(prices_for_med) >= 2 and median_price:
+            price_spread_bp = round((max(prices_for_med) - min(prices_for_med)) * 10_000, 1)
+            if price_spread_bp >= THRESHOLDS["source_disagreement_bp"]:
+                price_quality = "degraded"
+        # 페그 판정에는 중위값을 우선 사용 (단일 소스 이상치 완화)
+        peg_price = median_price if median_price is not None else price
 
         # 비USD 페그는 발행잔액을 가격으로 환산해 USD 기준으로 비교
-        mcap_usd = circ * price if price else circ
+        mcap_usd = circ * (price or 1.0) if price else circ
 
         prev_d = peg_amount(a.get("circulatingPrevDay"))
         prev_w = peg_amount(a.get("circulatingPrevWeek"))
@@ -339,13 +359,16 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         # 이자부 상품은 목표가 자체가 $1이 아니므로 편차를 재지 않는다 — 재면
         # 정상적인 이자 누적이 +1300bp 대의 '페그 이탈'로 잘못 잡힌다.
         dev_bp = None
-        if price is not None and cur == "USD" and not is_yb:
-            dev_bp = round((price - 1.0) * 10_000, 2)
+        if peg_price is not None and cur == "USD" and not is_yb:
+            dev_bp = round((peg_price - 1.0) * 10_000, 2)
 
         chg_30d = pct_change(circ, prev_m)
         peg_g = grade_peg(dev_bp)
         red_g = grade_redemption(chg_30d)
-        overall = max(peg_g, red_g, key=lambda g: WORST[g])
+        overall = worse_grade(peg_g, red_g)
+        # 가격 품질 저하만으로 breach 로 올리지는 않는다 — 관측 신뢰도 신호.
+        if price_quality == "degraded" and overall == "sound":
+            overall = "watch"
 
         # 체인별 분포
         chain_circ = {}
@@ -376,6 +399,10 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "circulating": round(circ, 2),
             "mcap_usd": round(mcap_usd, 2),
             "price": price,
+            "price_median": round(peg_price, 6) if peg_price is not None else None,
+            "price_sources": len(prices_for_med),
+            "price_spread_bp": price_spread_bp,
+            "price_quality": price_quality,
             "dev_bp": dev_bp,
             "chg_1d": round(pct_change(circ, prev_d), 3) if pct_change(circ, prev_d) is not None else None,
             "chg_7d": round(pct_change(circ, prev_w), 3) if pct_change(circ, prev_w) is not None else None,
@@ -458,11 +485,30 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
     alerts = [r for r in visible if r["grade"] in ("watch", "breach")]
     alerts.sort(key=lambda r: (-WORST[r["grade"]], -r["mcap_usd"]))
 
-    # 시스템 등급 = 개별 경보 + 구조 지표를 함께 본다
+    # 합성 위험점수 입력값
+    peg_devs = [abs(r["dev_bp"]) for r in visible if r["dev_bp"] is not None and not r["yield_bearing"]]
+    max_abs_dev = max(peg_devs) if peg_devs else None
+    reds = [r["chg_30d"] for r in visible if r["chg_30d"] is not None]
+    worst_red = min(reds) if reds else None  # 가장 깊은 순소각
+    priced = [r for r in visible if r.get("price_sources", 0) >= 1 and not r["yield_bearing"]]
+    degraded_n = sum(1 for r in priced if r.get("price_quality") == "degraded")
+    degraded_share = (degraded_n / len(priced)) if priced else 0.0
+
+    risk = composite_risk_score(
+        max_abs_dev_bp=max_abs_dev,
+        worst_redemption_pct=worst_red,
+        hhi_issuer=conc["hhi_issuer"],
+        algo_share=algo_share,
+        price_degraded_share=degraded_share,
+        thr=THRESHOLDS,
+    )
+
+    # 시스템 등급 = 개별 경보 + 구조 지표 + 합성 위험점수를 함께 본다
     system = "sound"
-    if any(r["grade"] == "breach" for r in visible):
+    if any(r["grade"] == "breach" for r in visible) or risk["grade"] == "breach":
         system = "breach"
-    elif alerts or conc["hhi_issuer"] >= THRESHOLDS["hhi_concentrated"] or algo_share >= THRESHOLDS["algo_share_watch"]:
+    elif (alerts or conc["hhi_issuer"] >= THRESHOLDS["hhi_concentrated"]
+          or algo_share >= THRESHOLDS["algo_share_watch"] or risk["grade"] == "watch"):
         system = "watch"
 
     total_1d = sum(r["mcap_usd"] for r in rows) - sum(
@@ -475,9 +521,11 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "source": "DefiLlama",
             "source_url": "https://defillama.com/stablecoins",
             "is_sample": False,
-            "thresholds": THRESHOLDS,
+            "thresholds": thresholds_for_meta(THRESHOLDS),
             "asset_count": len(rows),
-            "price_basis": "DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님)",
+            "price_basis": "DefiLlama 오라클 + CoinGecko 교차검증(중위값). 소스 간 편차 ≥ "
+                           f"{THRESHOLDS['source_disagreement_bp']}bp 이면 price_quality=degraded",
+            "price_crosscheck": "CoinGecko simple/price (상위 스테이블코인)",
             "issuer_source": "etl/issuers.json (수기 관리)",
             "issuer_unknown_label": UNKNOWN_ISSUER,
             "yield_bearing_source": "etl/yield_bearing.json (수기 관리 — 응답에 구분 필드 없음)",
@@ -487,6 +535,7 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "icon_note": "아이콘 슬러그는 응답 필드에서만 가져온다. 필드가 없으면 icon_url 은 "
                          "빈 값이고 화면은 심볼 텍스트만 표시한다(이름을 소문자+하이픈으로 추측하지 않는다).",
             "icon_coverage": f"{sum(1 for r in rows if r['icon_url'])}/{len(rows)}",
+            "risk_methodology": "합성점수 = 페그·상환·집중도·알고리즘비중·가격품질 가중평균 (etl/thresholds.json)",
         },
         "totals": {
             "circulating_usd": round(total, 2),
@@ -494,7 +543,11 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "breach_count": sum(1 for r in visible if r["grade"] == "breach"),
             "watch_count": sum(1 for r in visible if r["grade"] == "watch"),
             "system_grade": system,
+            "risk_score": risk["score"],
+            "risk_grade": risk["grade"],
+            "price_degraded_count": degraded_n,
         },
+        "risk": risk,
         "concentration": conc,
         "yield_bearing": yb_rows,
         "by_mechanism": mech_rows,
@@ -502,7 +555,8 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         "by_chain": chain_rows[:15],
         "alerts": [
             {k: r[k] for k in ("symbol", "name", "grade", "grade_peg", "grade_redemption",
-                               "dev_bp", "chg_30d", "mcap_usd")}
+                               "dev_bp", "chg_30d", "mcap_usd", "price_quality", "price_spread_bp")
+             if k in r}
             for r in alerts[:12]
         ],
         "assets": visible[:60],
@@ -768,23 +822,33 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    print("1/4 발행 현황 수집…")
+    print("1/5 발행 현황 수집…")
     assets = fetch_assets()
     print(f"    {len(assets)}개 종목")
 
-    print("2/4 체인별 집계 수집…")
+    print("2/5 체인별 집계 수집…")
     chains = fetch_chains()
 
-    print("3/4 시장 전체 시계열 수집…")
+    print("3/5 시장 전체 시계열 수집…")
     history = fetch_history()
+
+    print("4/5 교차 가격 수집 (CoinGecko)…")
+    # 상위 심볼 위주로 교차검증. 실패해도 스냅샷은 계속 만든다.
+    top_syms = []
+    for a in sorted(assets, key=lambda x: -peg_amount(x.get("circulating")))[:30]:
+        s = str(a.get("symbol") or "").upper()
+        if s in CG_STABLE_IDS:
+            top_syms.append(s)
+    cg_prices = fetch_coingecko_prices(top_syms)
+    print(f"    CoinGecko {len(cg_prices)}/{len(top_syms)}종 확보")
 
     issuers = load_issuers()
     yb = load_yield_bearing()
-    snap = build_snapshot(assets, chains, issuers, yb)
+    snap = build_snapshot(assets, chains, issuers, yb, external_prices=cg_prices)
     # 슬러그 필드를 잘못 골랐으면 여기서 걸러진다. 표본이 전부 404 면 비우고 간다.
     verify_icons(snap)
 
-    print(f"4/4 종목별 시계열 수집… (상위 {SERIES_ASSET_COUNT}종)")
+    print(f"5/5 종목별 시계열 수집… (상위 {SERIES_ASSET_COUNT}종)")
     series = fetch_asset_series(snap["assets"])
     print(f"    {len(series)}종 확보")
 
@@ -798,6 +862,8 @@ def main():
     t = snap["totals"]
     print(f"\n완료 — 총 발행잔액 ${t['circulating_usd']/1e9:,.1f}B / "
           f"시스템 등급 {t['system_grade']} / 경보 {t['breach_count']}건 주의 {t['watch_count']}건")
+    print(f"       위험점수 {t.get('risk_score', '—')} ({t.get('risk_grade', '—')}) "
+          f"/ 가격품질 저하 {t.get('price_degraded_count', 0)}종")
     print(f"       HHI(발행사) {snap['concentration']['hhi_issuer']:,.0f}")
     unknown = sum(1 for r in snap["assets"] if r["issuer"] == UNKNOWN_ISSUER)
     print(f"       발행사 대조: {len(snap['assets']) - unknown}/{len(snap['assets'])}종 확인, "

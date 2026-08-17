@@ -5,11 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>스테이블코인 모니터링 · Stablecoin Monitor</title>
 <meta name="description" content="공개 블록체인 원장 기반 스테이블코인 발행·페그·집중도 상시 모니터링. 감독 목적 지표를 매일 갱신합니다.">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="light dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script>
+  // 테마: 저장된 선호 > 시스템 선호. body 클래스 전에 적용해 FOUC 방지.
+  (function () {
+    try {
+      var t = localStorage.getItem("scw-theme");
+      if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+      else if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
 
@@ -22,11 +32,14 @@
       <h1>스테이블코인 모니터링</h1>
       <p class="lede">공개 원장에 기록된 발행·소각과 시장가격만으로 페그 유지 상태, 상환 압력, 시장 집중도를 매일 측정합니다.</p>
     </div>
-    <dl class="stamp">
-      <dt>기준시각</dt><dd id="stamp-time">—</dd>
-      <dt>출처</dt><dd id="stamp-src">—</dd>
-      <dt>대상</dt><dd id="stamp-count">—</dd>
-    </dl>
+    <div class="masthead-right">
+      <button type="button" class="theme-btn" id="theme-toggle" aria-label="테마 전환" title="라이트/다크 전환">다크</button>
+      <dl class="stamp">
+        <dt>기준시각</dt><dd id="stamp-time">—</dd>
+        <dt>출처</dt><dd id="stamp-src">—</dd>
+        <dt>대상</dt><dd id="stamp-count">—</dd>
+      </dl>
+    </div>
   </div>
 </header>
 
@@ -49,6 +62,7 @@
   <div class="figs">
     <div class="fig"><p class="fig-k"><span class="fig-tag">TOTAL</span>총 발행잔액</p><p class="fig-v" id="f-total">—</p><p class="fig-s" id="f-total-s">&nbsp;</p></div>
     <div class="fig"><p class="fig-k"><span class="fig-tag">PEG</span>페그 이탈</p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">RISK</span>합성 위험점수</p><p class="fig-v" id="f-risk">—</p><p class="fig-s" id="f-risk-s">0–100 · 페그·상환·집중·알고·가격품질</p></div>
     <div class="fig"><p class="fig-k"><span class="fig-tag"><abbr title="허핀달-허시만 지수">HHI</abbr></span>발행사 집중도</p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
     <div class="fig"><p class="fig-k"><span class="fig-tag">ALGO</span>알고리즘형 비중</p><p class="fig-v" id="f-algo">—</p><p class="fig-s">담보 없는 발행 잔액 비율</p></div>
   </div>
@@ -263,16 +277,26 @@
     <p id="pm-updated">&nbsp;</p>
   </div>
   <div class="figs prem-figs">
-    <div class="fig"><p class="fig-k">평균 프리미엄</p><p class="fig-v" id="pm-avg">—</p><p class="fig-s" id="pm-fx">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">스테이블 평균</p><p class="fig-v" id="pm-stable">—</p><p class="fig-s">USDT·USDC vs $1</p></div>
+    <div class="fig"><p class="fig-k">USDT</p><p class="fig-v" id="pm-usdt">—</p><p class="fig-s">업비트 KRW</p></div>
+    <div class="fig"><p class="fig-k">USDC</p><p class="fig-v" id="pm-usdc">—</p><p class="fig-s">업비트 KRW</p></div>
+    <div class="fig"><p class="fig-k">암호화폐 평균</p><p class="fig-v" id="pm-avg">—</p><p class="fig-s" id="pm-fx">BTC·ETH·XRP</p></div>
+  </div>
+  <div class="figs prem-figs prem-figs-2">
     <div class="fig"><p class="fig-k">BTC</p><p class="fig-v" id="pm-btc">—</p><p class="fig-s">기준 자산</p></div>
     <div class="fig"><p class="fig-k">ETH</p><p class="fig-v" id="pm-eth">—</p><p class="fig-s">&nbsp;</p></div>
     <div class="fig"><p class="fig-k">XRP</p><p class="fig-v" id="pm-xrp">—</p><p class="fig-s">국내 재정거래 최다 이용 이력</p></div>
   </div>
   <figure class="chart chart-wide">
+    <figcaption>USDT 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
+    <div id="chart-premium-usdt"></div>
+  </figure>
+  <figure class="chart chart-wide">
     <figcaption>BTC 기준 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
     <div id="chart-premium"></div>
   </figure>
-  <p class="foot">평균은 BTC·ETH·XRP 3종 단순 평균이며 거래량 가중치는 적용하지 않았습니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
+  <p class="foot">스테이블 프리미엄은 업비트 KRW 가격 ÷ 환율을 $1과 비교합니다(임계 0.5%/1.5%).
+    암호화폐 프리미엄은 해외 CEX 대비입니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
 </section>
 
 <div class="wrap empty-state" id="premium-empty">

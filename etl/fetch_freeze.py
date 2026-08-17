@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from keccak import topic0  # noqa: E402
 
 API = "https://api.etherscan.io/v2/api"  # V1은 2025-08-15 종료. chainid 파라미터로 체인 지정.
-UA = "stablecoin-watch/0.1"
+UA = "stablecoin-watch/0.2"
 PAUSE = 0.25  # 무료 티어 초당 5회 제한 대응
 
 # 발행사별 컨트랙트와 이벤트 시그니처.
