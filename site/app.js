@@ -1,4 +1,4 @@
-/* 스테이블코인 감시 — 정적 JSON을 읽어 화면을 그린다. 의존성 없음. */
+/* 스테이블코인 모니터링 — 정적 JSON을 읽어 화면을 그린다. 의존성 없음. */
 (() => {
   "use strict";
 
@@ -19,6 +19,8 @@
     n == null || !isFinite(n) ? "—" : (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(d) + suf;
   const pct = (n, d = 2) => (n == null ? "—" : n.toFixed(d) + "%");
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const esc = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   const fmtTime = (iso) => {
     const dt = new Date(iso);
@@ -40,6 +42,8 @@
     if (m.is_sample) $("#sample-band").hidden = false;
 
     const g = t.system_grade;
+    const verdict = $("#verdict");
+    if (verdict) verdict.setAttribute("data-grade", g || "unknown");
     $("#verdict-dot").className = "dot is-" + g;
     $("#verdict-label").textContent = "시스템 " + (GRADE_KO[g] || g);
     $("#verdict-label").className = "verdict-label t-" + g;
@@ -58,6 +62,41 @@
     $("#f-peg").textContent = `${t.breach_count} / ${t.watch_count}`;
     $("#f-peg").className = "fig-v t-" + (t.breach_count ? "breach" : t.watch_count ? "watch" : "sound");
 
+    // 합성 위험점수 (구버전 snapshot 에는 없을 수 있음)
+    const riskEl = $("#f-risk");
+    if (riskEl) {
+      const rs = t.risk_score != null ? t.risk_score : (d.risk && d.risk.score);
+      const rg = t.risk_grade || (d.risk && d.risk.grade) || "unknown";
+      const rgCls = rg === "breach" ? "breach" : rg === "watch" ? "watch" : "sound";
+      riskEl.textContent = rs != null ? Number(rs).toFixed(1) : "—";
+      riskEl.className = "fig-v t-" + rgCls;
+      const thrR = m.thresholds || {};
+      const rsNote = $("#f-risk-s");
+      if (rsNote) {
+        rsNote.textContent = rs != null
+          ? `주의 ${thrR.risk_watch ?? 35} · 경보 ${thrR.risk_breach ?? 60}` +
+            (t.price_degraded_count ? ` · 가격품질 저하 ${t.price_degraded_count}종` : "")
+          : "0–100 · 페그·상환·집중·알고·가격품질";
+      }
+      // 미니 바: 숫자 아래에 위험 정도를 한눈에
+      let meter = riskEl.parentElement && riskEl.parentElement.querySelector(".risk-meter");
+      if (!meter && riskEl.parentElement && rs != null) {
+        meter = document.createElement("span");
+        meter.className = "risk-meter";
+        meter.setAttribute("aria-hidden", "true");
+        meter.innerHTML = "<i></i>";
+        riskEl.parentElement.appendChild(meter);
+      }
+      if (meter) {
+        meter.className = "risk-meter is-" + rgCls;
+        const fill = meter.querySelector("i");
+        if (fill) {
+          const w = Math.max(0, Math.min(100, Number(rs) || 0));
+          requestAnimationFrame(() => { fill.style.width = w + "%"; });
+        }
+      }
+    }
+
     const hhiV = c.hhi_issuer, thr = m.thresholds.hhi_concentrated;
     $("#f-hhi").textContent = hhiV.toLocaleString("en-US", { maximumFractionDigits: 0 });
     $("#f-hhi").className = "fig-v t-" + (hhiV >= thr ? "watch" : "sound");
@@ -68,20 +107,59 @@
   }
 
   // ── 시그니처: 페그 편차 계기판 ──────────────────────────
+  // 계기판 행에서만 쓰는 클래스는 .grow-asset 로 따로 둔다. .grow 는 동결 조치
+  // 탭의 지갑 레인과 공유하므로 여기서 스타일을 얹으면 그쪽까지 번진다.
+  let GAUGE_ROWS = []; // 개요 패널이 참조할 행 데이터
+
+  // 이자부(가격 누적형) 상품인지. 판정은 ETL(etl/yield_bearing.json)이 하고
+  // 화면은 행에 붙어 온 yield_bearing 플래그만 읽는다. 다만 이 커밋 이전에
+  // 만들어진 snapshot.json 에는 그 필드가 없어서, 그런 파일을 열었을 때 USYC 가
+  // 다시 +1300bp 로 튀지 않도록 심볼 몇 개만 최소한의 대비책으로 들고 있는다.
+  // 목록 관리의 정본은 어디까지나 etl/yield_bearing.json 쪽이다.
+  const YB_FALLBACK = new Set(["USYC", "USDY", "OUSG", "USTB", "TBILL"]);
+  const isYieldBearing = (a) =>
+    a.yield_bearing === true || (a.yield_bearing == null && YB_FALLBACK.has(String(a.symbol || "").toUpperCase()));
+
+  // ── 종목 로고 ───────────────────────────────────────────
+  // icon_url 은 ETL 이 응답 필드로 슬러그를 만들 수 있었을 때만 채워진다.
+  // 비어 있으면(예전 수집분이거나 필드가 없는 경우) 아이콘 자리를 아예 만들지
+  // 않고 심볼 텍스트만 남긴다.
+  //
+  // 외부 CDN 은 언제든 죽을 수 있다. onerror 로 img 만 감추면 감싼 원이 자리를
+  // 지키고 있어서 행 높이도 열 정렬도 흔들리지 않는다. 깨진 이미지 아이콘이
+  // 보이는 일은 없다.
+  const hasIcons = (rows) => rows.some((a) => a && a.icon_url);
+  const iconCell = (a) => `<span class="cicon">${a.icon_url
+    ? `<img src="${esc(a.icon_url)}" alt="" width="24" height="24" loading="lazy"
+        decoding="async" referrerpolicy="no-referrer" onerror="this.hidden=true">`
+    : ""}</span>`;
+
   function renderGauge(d) {
     const list = $("#gauge-list");
-    const rows = d.assets.filter((a) => a.peg_currency === "USD").slice(0, 16);
+    const rows = d.assets
+      .filter((a) => a.peg_currency === "USD" && !isYieldBearing(a))
+      .slice(0, 16);
+    GAUGE_ROWS = rows;
     const pos = (bp) => 50 + (clamp(bp, -SCALE_BP, SCALE_BP) / SCALE_BP) * 50;
 
-    list.innerHTML = rows.map((a) => {
+    // 아이콘이 하나라도 있으면 모든 행에 자리를 만들어 종목 칸을 넓힌다.
+    // 하나도 없으면 예전 폭 그대로 간다.
+    const icons = hasIcons(rows);
+    list.classList.toggle("has-icons", icons);
+    const ghead = document.querySelector("#gauge .ghead");
+    if (ghead) ghead.classList.toggle("has-icons", icons);
+
+    list.innerHTML = rows.map((a, i) => {
       const g = a.grade_peg;
       const has = a.dev_bp != null;
       const p = has ? pos(a.dev_bp) : 50;
       const barL = Math.min(50, p), barW = Math.abs(p - 50);
       const ticks = [-100, -50, 50, 100]
         .map((b) => `<i class="gtick" style="left:${pos(b)}%"></i>`).join("");
-      return `<li class="grow">
-        <span class="gsym">${a.symbol}</span>
+      return `<li class="grow grow-asset">
+        <span class="gsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="gsym sym-btn"
+          data-i="${i}" aria-expanded="false"
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button></span>
         <span class="gstrip" role="img" aria-label="${a.symbol} 페그 편차 ${has ? signed(a.dev_bp, 1) + "bp" : "측정 불가"}">
           <i class="gband"></i>${ticks}<i class="gdatum"></i>
           <i class="gbar is-${g}" style="left:50%;width:0" data-l="${barL}" data-w="${barW}"></i>
@@ -100,20 +178,288 @@
       bars[i].style.left = bars[i].dataset.l + "%";
       bars[i].style.width = bars[i].dataset.w + "%";
     };
-    if (reduce) { marks.forEach((_, i) => place(i)); return; }
-    requestAnimationFrame(() => marks.forEach((_, i) => setTimeout(() => place(i), 60 + i * 45)));
+    if (reduce) { marks.forEach((_, i) => place(i)); }
+    else requestAnimationFrame(() => marks.forEach((_, i) => setTimeout(() => place(i), 60 + i * 45)));
+
+    // [B] 가격 출처와 기준시각
+    const basis = d.meta.price_basis
+      || "DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님)";
+    $("#gauge-basis").textContent =
+      `가격 출처: ${basis} · 기준시각: ${fmtTime(d.meta.generated_at)}`;
+
+    // [C] 계기판에서 빠진 비USD 페그 종목 안내
+    const nonUsd = d.assets.filter((a) => a.peg_currency !== "USD");
+    const el = $("#gauge-nonusd");
+    if (nonUsd.length) {
+      const curs = [...new Set(nonUsd.map((a) => a.peg_currency))].slice(0, 3).join("·");
+      el.textContent = `${curs} 등 비USD 페그 ${nonUsd.length}종은 제외 — 아래 발행 구조 › 페그 통화별 패널 참고`;
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+
+    // [D] 편차 계산에서 빠진 이자부 상품 안내 — 어떤 종목이 왜 빠졌는지 밝힌다
+    const yb = (d.yield_bearing && d.yield_bearing.length)
+      ? d.yield_bearing
+      : d.assets.filter(isYieldBearing);
+    const ybEl = $("#gauge-yield");
+    if (ybEl) {
+      if (yb.length) {
+        const syms = yb.slice(0, 6).map((a) => a.symbol).join("·");
+        ybEl.textContent =
+          `이번 수집분에서 제외된 이자부 상품 ${yb.length}종: ${syms}`
+          + " — 이자가 토큰 가격에 누적되는 구조라 $1이 목표가가 아닙니다. 아래 종목별 현황 표에서 편차가 “—”로 표시됩니다.";
+        ybEl.hidden = false;
+      } else {
+        ybEl.hidden = true;
+      }
+    }
+  }
+
+  // ── 종목 개요 패널 (호버 / 탭 / 키보드) ───────────────────
+  // 계기판 행과 "종목별 현황" 표 행이 같은 패널·같은 규칙을 쓴다. 여는 조건과
+  // 위치 보정은 전부 여기 한 곳에만 있고, 붙는 자리마다 bindAssetPop 으로
+  // "무엇을 트리거로 볼지 / 어떤 데이터를 보여줄지"만 달리 넘긴다.
+  //
+  // 호버가 되는 기기인지의 판정 기준은 CSS 와 같은 질의문을 쓴다.
+  // (style.css 의 @media (hover: hover) and (pointer: fine) 블록과 짝)
+  const HOVER_MQ = "(hover: hover) and (pointer: fine)";
+  const POP_TRIG = ".sym-btn"; // 개요를 여는 버튼 (계기판·표 공용)
+  const canHover = () => matchMedia(HOVER_MQ).matches;
+
+  // 개요는 화면 전체에서 한 번에 하나만 열린다.
+  const POP = { trig: null, anchor: null, pinned: false, raf: 0, bound: false };
+
+  function popPlace() {
+    const pop = $("#asset-pop");
+    if (!pop || !POP.trig) return;
+    const r = (POP.anchor || POP.trig).getBoundingClientRect();
+    const p = pop.getBoundingClientRect();
+    const M = 8; // 화면 가장자리 여백
+    // 기본은 행 아래쪽. 아래가 모자라면 위로 뒤집고, 그래도 넘치면 화면 안으로 민다.
+    let top = r.bottom + 6;
+    if (top + p.height > window.innerHeight - M) top = r.top - p.height - 6;
+    top = clamp(top, M, Math.max(M, window.innerHeight - p.height - M));
+    let left = r.left + 12;
+    left = clamp(left, M, Math.max(M, window.innerWidth - p.width - M));
+    pop.style.top = top + "px";
+    pop.style.left = left + "px";
+  }
+
+  function popClose() {
+    const pop = $("#asset-pop");
+    if (!POP.trig) return;
+    POP.trig.setAttribute("aria-expanded", "false");
+    POP.trig.removeAttribute("aria-describedby");
+    POP.trig = null; POP.anchor = null; POP.pinned = false;
+    if (pop) pop.hidden = true;
+  }
+
+  function popOpen(trig, a, anchor, pin) {
+    const pop = $("#asset-pop");
+    if (!pop || !a) return;
+    if (POP.trig && POP.trig !== trig) popClose();
+    $("#ap-sym").textContent = a.symbol || "—";
+    $("#ap-name").textContent = a.name || "";
+    $("#ap-issuer").textContent = a.issuer || "확인 필요";
+    $("#ap-country").textContent = a.issuer_country || "확인 필요";
+    $("#ap-mcap").textContent = "$" + usd(a.mcap_usd);
+    $("#ap-share").textContent = a.share != null ? a.share.toFixed(2) + "%" : "—";
+    const note = $("#ap-note");
+    note.textContent = a.issuer_note || "";
+    note.hidden = !a.issuer_note;
+
+    pop.hidden = false;
+    trig.setAttribute("aria-expanded", "true");
+    trig.setAttribute("aria-describedby", "asset-pop");
+    POP.trig = trig; POP.anchor = anchor || trig; POP.pinned = !!pin;
+    popPlace();
+  }
+
+  // container 안의 트리거들에 개요를 붙인다. resolve(트리거)는 보여줄 종목
+  // 데이터를, anchorOf(트리거)는 패널을 붙일 기준 요소를 돌려준다.
+  // container 자체에 위임하므로 안쪽 내용을 다시 그려도 다시 걸 필요가 없다.
+  function bindAssetPop(container, resolve, anchorOf) {
+    if (!container) return;
+    const trigOf = (e) => (e.target.closest ? e.target.closest(POP_TRIG) : null);
+    const openFrom = (trig, pin) =>
+      popOpen(trig, resolve(trig), anchorOf ? anchorOf(trig) : trig, pin);
+
+    // 데스크톱: 커서를 올리면 뜨고 벗어나면 사라진다.
+    container.addEventListener("pointerover", (e) => {
+      if (!canHover() || e.pointerType === "touch" || POP.pinned) return;
+      const trig = trigOf(e);
+      if (trig && trig !== POP.trig) openFrom(trig, false);
+    });
+    container.addEventListener("pointerout", (e) => {
+      if (!canHover() || e.pointerType === "touch" || POP.pinned) return;
+      const trig = trigOf(e);
+      if (trig && !trig.contains(e.relatedTarget)) popClose();
+    });
+
+    // 터치 기기: 탭하면 열리고, 같은 행을 다시 탭하면 닫힌다.
+    // 데스크톱에서도 클릭하면 고정되어 커서가 벗어나도 남는다.
+    container.addEventListener("click", (e) => {
+      const trig = trigOf(e);
+      if (!trig) return;
+      if (POP.trig === trig && (POP.pinned || !canHover())) popClose();
+      else openFrom(trig, true);
+    });
+
+    // 키보드: Tab 으로 포커스가 오면 열린다. (닫기는 Escape 와 focusout)
+    container.addEventListener("focusin", (e) => {
+      const trig = trigOf(e);
+      if (trig && trig !== POP.trig && trig.matches(":focus-visible")) openFrom(trig, false);
+    });
+    container.addEventListener("focusout", (e) => {
+      if (POP.pinned) return;
+      if (trigOf(e) === POP.trig) popClose();
+    });
+  }
+
+  function initAssetPop() {
+    if (POP.bound) return;
+    POP.bound = true;
+
+    const reposition = () => {
+      if (!POP.trig || POP.raf) return;
+      POP.raf = requestAnimationFrame(() => { POP.raf = 0; popPlace(); });
+    };
+
+    // Escape 로 닫는다. 여기서 트리거에 focus() 를 다시 주면 focusin 이 그대로
+    // 되받아 개요를 다시 열어버린다. 키보드로 연 경우엔 이미 트리거가 포커스를
+    // 갖고 있으니 되돌릴 것도 없다 — 닫기만 한다.
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && POP.trig) popClose();
+    });
+
+    // 다른 곳을 탭/클릭하면 닫는다.
+    document.addEventListener("pointerdown", (e) => {
+      const pop = $("#asset-pop");
+      if (!POP.trig) return;
+      if (e.target.closest && e.target.closest(POP_TRIG)) return;
+      if (pop && pop.contains(e.target)) return;
+      popClose();
+    });
+
+    // 표는 가로로 따로 스크롤되므로 창 스크롤만 봐서는 안 된다(capture).
+    addEventListener("scroll", reposition, { passive: true, capture: true });
+    addEventListener("resize", reposition);
+
+    bindAssetPop($("#gauge-list"), (t) => GAUGE_ROWS[Number(t.dataset.i)], (t) => t.closest("li"));
+    bindAssetPop($("#tbl tbody"), (t) => TABLE_ROWS[Number(t.dataset.i)], null);
   }
 
   // ── SVG 라인차트 ────────────────────────────────────────
+  // 넓은 화면일수록 세로를 키운다. viewBox 비율이 곧 화면 크기가 된다.
+  function chartHeight() {
+    const w = window.innerWidth;
+    if (w >= 1400) return 300;
+    if (w >= 1100) return 250;
+    if (w >= 760) return 200;
+    return 170;
+  }
+
+  const fullDate = (t) => new Date(t * 1000).toLocaleDateString("ko-KR", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+  });
+
+  // 툴팁은 화면 전체에서 한 번에 하나만 남긴다.
+  function hideChartTip(plot) {
+    const tip = plot.querySelector(".ch-tip");
+    if (!tip || tip.hidden) return;
+    tip.hidden = true;
+    plot.querySelectorAll(".ch-cross,.ch-dot").forEach((n) => { n.style.opacity = 0; });
+  }
+
+  // 차트 밖을 탭/클릭하면 닫는다. 차트를 다시 그려도 중복 등록되지 않게 한 번만 건다.
+  let tipDismissBound = false;
+  function bindTipDismiss() {
+    if (tipDismissBound) return;
+    tipDismissBound = true;
+    document.addEventListener("pointerdown", (e) => {
+      const inPlot = e.target.closest ? e.target.closest(".chart-plot") : null;
+      document.querySelectorAll(".chart-plot").forEach((p) => {
+        if (p !== inPlot) hideChartTip(p);
+      });
+    });
+  }
+
+  // 차트 타이포·선 굵기는 여기 상수 하나로 모든 차트가 같이 간다.
+  // lineChart 를 쓰는 차트(발행잔액·순증감률·프리미엄·코너 흐름 ETH/XRP)는
+  // 전부 이 값을 그대로 따르므로, 통일하려면 여기만 고치면 된다.
+  const AX_BASE = 520;          // 세로/가로 비율 기준 폭 (아래 REF 참고)
+  const AX_SIZE = 12.5;         // 축 라벨 크기 (CSS 픽셀)
+  const AX_CHAR = AX_SIZE * 0.62; // 모노스페이스 한 글자 폭 어림값
+  const LINE_W = 2.2;           // 데이터 선 굵기
+  const LAST_R = 3.6;           // 마지막 데이터 점 반지름
+
+  // viewBox 를 실제 그려지는 폭에 맞춘다. 예전처럼 520 으로 고정해두면 SVG 가
+  // 컨테이너 폭에 맞춰 통째로 늘어나기 때문에, 같은 9px·1.6px 를 써도 좁은
+  // 2단 차트와 가로 전폭 차트의 글씨·선 굵기가 두 배 가까이 벌어진다. 폭을
+  // 실측해 넣으면 viewBox 한 칸이 곧 1 CSS 픽셀이라 여섯 차트가 같은 굵기로
+  // 그려진다. 세로 비율은 예전 그대로 유지한다(H = W × 기준높이 / 520).
+  function drawChart(el) {
+    const st = el._chart;
+    if (!st) return;
+    let w = Math.round(el.clientWidth);
+    if (!w) {
+      // 숨은 탭 안이라 폭이 없다. ResizeObserver 가 있으면 탭이 열려 폭이
+      // 생기는 순간 다시 불러 주므로 그때 제대로 그린다. (없는 브라우저에서만
+      // 기준 폭으로 미리 그려 둔다 — 예전처럼 컨테이너에 맞춰 늘어난다.)
+      if (chartRO) return;
+      w = AX_BASE;
+    }
+    if (w === st.w) return;
+    st.w = w;
+    paintChart(el, st.pts, st.opts, w);
+  }
+
+  const chartRO = typeof ResizeObserver === "function"
+    ? new ResizeObserver((es) => es.forEach((e) => drawChart(e.target)))
+    : null;
+
+  // 숨은 탭 안의 차트는 폭이 0이라 그릴 수 없다. 탭이 열려 폭이 생기는 순간과
+  // 창 크기가 바뀌는 순간을 ResizeObserver 가 잡아 같은 자리에서 다시 그린다.
   function lineChart(el, pts, opts) {
-    if (!pts || pts.length < 2) { el.innerHTML = '<p class="foot">시계열 없음</p>'; return; }
-    const W = 520, H = 170, ml = 46, mr = 8, mt = 10, mb = 22;
+    if (!pts || pts.length < 2) {
+      el._chart = null;
+      el.innerHTML = '<p class="foot">시계열 없음</p>';
+      return;
+    }
+    el._chart = { pts, opts, w: 0 };
+    if (chartRO && !el._chartObserved) { el._chartObserved = true; chartRO.observe(el); }
+    drawChart(el);
+  }
+
+  // 그라데이션 채움은 한 페이지에 여러 차트가 있어도 서로 물리지 않게
+  // id 를 하나씩 새로 딴다.
+  let gradSeq = 0;
+
+  function paintChart(el, pts, opts, W) {
+    // 세로는 폭에 비례해 잡는다(AX_BASE 주석 참고). 다만 발행 현황 탭의 차트는
+    // 카드 전폭을 혼자 쓰기 때문에 비례만 따르면 1400px 화면에서 1000px 가 넘게
+    // 솟는다. hMin/hMax 를 주는 차트만 그 범위로 눌러 4:1 안팎을 유지한다.
+    let H = Math.round(W * (opts.height || 170) / AX_BASE);
+    if (opts.hMin) H = Math.max(H, opts.hMin);
+    if (opts.hMax) H = Math.min(H, opts.hMax);
+    const mt = 12, mb = 26;
     const xs = pts.map((p) => p.t), ys = pts.map((p) => p.v);
     let y0 = Math.min(...ys), y1 = Math.max(...ys);
     if (opts.zero) { y0 = Math.min(y0, 0); y1 = Math.max(y1, 0); }
     const padY = (y1 - y0) * 0.12 || 1;
     y0 -= padY; y1 += padY;
     const x0 = Math.min(...xs), x1 = Math.max(...xs);
+
+    // 눈금값과 최신값 라벨을 먼저 만들어 두고, 그 글자 폭만큼 좌우 여백을 잡는다.
+    // 축 글씨가 커진 만큼 고정 여백(46/8)으로는 라벨이 잘리기 때문이다.
+    const gy = [y0 + (y1 - y0) * 0.08, (y0 + y1) / 2, y1 - (y1 - y0) * 0.08];
+    const gLab = gy.map((v) => opts.fmt(v));
+    const last = pts[pts.length - 1];
+    const lastLab = opts.fmt(last.v);
+    const ml = clamp(Math.max(...gLab.map((s) => s.length)) * AX_CHAR + 10, 40, 130);
+    const mr = clamp(lastLab.length * AX_CHAR + 14, 14, 140);
+
     const X = (t) => ml + ((t - x0) / (x1 - x0 || 1)) * (W - ml - mr);
     const Y = (v) => mt + (1 - (v - y0) / (y1 - y0 || 1)) * (H - mt - mb);
 
@@ -121,27 +467,284 @@
     const base = opts.zero ? Y(0) : H - mb;
     const area = line + ` L${X(x1).toFixed(1)} ${base.toFixed(1)} L${X(x0).toFixed(1)} ${base.toFixed(1)} Z`;
 
-    const gy = [y0 + (y1 - y0) * 0.08, (y0 + y1) / 2, y1 - (y1 - y0) * 0.08];
-    const grid = gy.map((v) => `<line x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--rule-soft)"/>
-      <text x="${ml - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" class="ax">${opts.fmt(v)}</text>`).join("");
+    const grid = gy.map((v, i) => `<line x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--rule-soft)"/>
+      <text x="${(ml - 7).toFixed(1)}" y="${(Y(v) + AX_SIZE * 0.35).toFixed(1)}" text-anchor="end" class="ax">${esc(gLab[i])}</text>`).join("");
 
     const zeroLine = opts.zero
-      ? `<line x1="${ml}" x2="${W - mr}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--ink)" stroke-opacity=".5"/>` : "";
+      ? `<line x1="${ml}" x2="${W - mr}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--ink)" stroke-opacity=".5" stroke-width="1.6"/>` : "";
 
     const tick = (t) => new Date(t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "short" });
     const xt = [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]]
-      .map((p, i) => `<text x="${X(p.t).toFixed(1)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 2 ? "end" : "middle"}" class="ax">${tick(p.t)}</text>`).join("");
+      .map((p, i) => `<text x="${X(p.t).toFixed(1)}" y="${H - 8}" text-anchor="${i === 0 ? "start" : i === 2 ? "end" : "middle"}" class="ax">${tick(p.t)}</text>`).join("");
 
-    const last = pts[pts.length - 1];
+    // 마지막 점 옆에 최신값을 그대로 붙인다. 축을 훑지 않아도 지금 값이 읽힌다.
+    const lx = X(last.t), ly = Y(last.v);
+    const lty = clamp(ly + AX_SIZE * 0.35, mt + AX_SIZE * 0.8, H - mb - 2);
+    const lastTag =
+      `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="${LAST_R}" fill="${opts.color}"/>
+       <text x="${(lx + LAST_R + 4).toFixed(1)}" y="${lty.toFixed(1)}" class="ax ax-last"
+         style="fill:${opts.color}">${esc(lastLab)}</text>`;
+
+    const cross = opts.interactive
+      ? `<line class="ch-cross" x1="0" x2="0" y1="${mt}" y2="${H - mb}" stroke="var(--ink)" stroke-opacity=".45" stroke-dasharray="2 2"/>
+         <circle class="ch-dot" cx="0" cy="0" r="3.6" fill="${opts.color}" stroke="var(--card)" stroke-width="1.4"/>` : "";
+
+    // 위쪽이 진하고 아래로 갈수록 옅어지는 세로 그라데이션. 켜는 차트만 켠다
+    // (발행 현황 탭의 두 차트). 나머지 차트는 예전처럼 균일한 옅은 채움이다.
+    let defs = "", areaFill = `fill="${opts.color}" fill-opacity=".1"`;
+    if (opts.fillGradient) {
+      const gid = "chfill" + (++gradSeq);
+      defs = `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse"
+          x1="0" y1="${mt}" x2="0" y2="${(H - mb).toFixed(1)}">
+        <stop offset="0" stop-color="${opts.color}" stop-opacity=".42"/>
+        <stop offset=".55" stop-color="${opts.color}" stop-opacity=".16"/>
+        <stop offset="1" stop-color="${opts.color}" stop-opacity=".03"/>
+      </linearGradient></defs>`;
+      areaFill = `fill="url(#${gid})"`;
+    }
+
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-        aria-label="${opts.label}. 최근값 ${opts.fmt(last.v)}">
-      <style>.ax{font-family:var(--mono);font-size:9px;fill:var(--dim)}</style>
-      ${grid}${zeroLine}
-      <path d="${area}" fill="${opts.color}" fill-opacity=".1"/>
-      <path d="${line}" fill="none" stroke="${opts.color}" stroke-width="1.6" stroke-linejoin="round"/>
-      <circle cx="${X(last.t).toFixed(1)}" cy="${Y(last.v).toFixed(1)}" r="2.8" fill="${opts.color}"/>
-      ${xt}
-    </svg>`;
+        aria-label="${opts.label}. 최근값 ${esc(lastLab)}">
+      <style>.ax{font-family:var(--mono);font-size:${AX_SIZE}px;font-weight:600;fill:var(--ink)}
+        .ax-last{letter-spacing:-.02em}
+        .ch-cross,.ch-dot{opacity:0;pointer-events:none}</style>
+      ${defs}${grid}${zeroLine}
+      <path d="${area}" ${areaFill}/>
+      <path d="${line}" fill="none" stroke="${opts.color}" stroke-width="${LINE_W}" stroke-linejoin="round" stroke-linecap="round"/>
+      ${lastTag}
+      ${xt}${cross}
+    </svg>${opts.interactive ? '<div class="ch-tip" hidden></div>' : ""}`;
+
+    if (!opts.interactive) return;
+
+    // ── 크로스헤어 툴팁 ──
+    // 데스크톱은 커서 이동으로, 터치 기기는 탭·드래그로 같은 값을 읽는다.
+    const svg = el.querySelector("svg");
+    const cLine = svg.querySelector(".ch-cross");
+    const cDot = svg.querySelector(".ch-dot");
+    const tip = el.querySelector(".ch-tip");
+
+    const show = (clientX) => {
+      const r = svg.getBoundingClientRect();
+      if (!r.width) return;
+      const vx = ((clientX - r.left) / r.width) * W;
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = Math.abs(X(pts[i].t) - vx);
+        if (dx < bd) { bd = dx; best = i; }
+      }
+      const p = pts[best], px = X(p.t), py = Y(p.v);
+
+      cLine.setAttribute("x1", px.toFixed(1));
+      cLine.setAttribute("x2", px.toFixed(1));
+      cLine.style.opacity = 1;
+      cDot.setAttribute("cx", px.toFixed(1));
+      cDot.setAttribute("cy", py.toFixed(1));
+      cDot.style.opacity = 1;
+
+      tip.innerHTML = `<span class="ch-tip-d">${fullDate(p.t)}</span>` +
+        `<span class="ch-tip-v">${opts.fmt(p.v)}</span>`;
+      tip.hidden = false;
+
+      // 컨테이너 기준 좌표로 옮기고, 좌우 끝에서 잘리지 않게 민다.
+      const box = el.getBoundingClientRect();
+      const offX = r.left - box.left, offY = r.top - box.top;
+      const half = tip.offsetWidth / 2;
+      tip.style.left = clamp((px / W) * r.width + offX, half + 2, box.width - half - 2) + "px";
+      tip.style.top = ((py / H) * r.height + offY) + "px";
+    };
+
+    svg.addEventListener("pointermove", (e) => show(e.clientX));
+    svg.addEventListener("pointerdown", (e) => show(e.clientX));
+    // 터치는 손을 떼는 순간 pointerleave 가 따라오므로 마우스일 때만 닫는다.
+    // 터치 기기에서는 차트 밖을 탭할 때 bindTipDismiss 가 닫는다.
+    svg.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "touch") hideChartTip(el);
+    });
+    bindTipDismiss();
+  }
+
+  // ── 발행잔액·순증감률 차트 (전체 시장 / 종목별) ──────────
+  // metric 은 세그먼트 토글이 고르는 지표다. 두 차트를 동시에 보여주던 것을
+  // 한 번에 하나만 보여주는 방식으로 바꿨다 — 드롭다운·툴팁·CSV 는 그대로다.
+  const TREND = { opts: [], key: "__all__", metric: "total" };
+  const isoDate = (t) => new Date(t * 1000).toISOString().slice(0, 10);
+  const TREND_COLOR = "var(--accent)";
+
+  function trendOptions(hist) {
+    const all = {
+      key: "__all__", short: "전체 시장", label: "전체 시장",
+      total: hist.total_circulating || [], flow: hist.net_30d_pct || [],
+    };
+    const each = (hist.series || [])
+      .filter((s) => (s.total_circulating || []).length > 1)
+      .map((s) => ({
+        key: String(s.id || s.symbol),
+        short: s.symbol || "",
+        label: s.symbol + (s.name ? ` — ${s.name}` : ""),
+        total: s.total_circulating || [],
+        flow: s.net_30d_pct || [],
+      }));
+    return [all, ...each];
+  }
+
+  function currentTrend() {
+    return TREND.opts.find((o) => o.key === TREND.key) || TREND.opts[0];
+  }
+
+  // 카드 머리의 큰 숫자. 지금 고른 종목·지표의 최신값을 그대로 보여준다.
+  function renderTrendKpi(o) {
+    const flow = TREND.metric === "flow";
+    const tag = o.key === "__all__" ? "TOTAL" : (o.short || "").toUpperCase();
+    const pts = flow ? o.flow : o.total;
+    const last = pts && pts.length ? pts[pts.length - 1] : null;
+
+    $("#tk-label").textContent = `${tag} ${flow ? "30일 순증감률" : "발행잔액"}`;
+    $("#tk-value").textContent = last
+      ? (flow ? signed(last.v, 2, "%") : "$" + usd(last.v))
+      : "—";
+    $("#tk-sub").textContent = last
+      ? `최근 관측 ${fullDate(last.t)} · ${pts.length}일 시계열`
+      : "시계열 없음";
+  }
+
+  function renderTrend() {
+    const o = currentTrend();
+    if (!o) return;
+    const whole = o.key === "__all__";
+    $("#cap-total").textContent = whole ? "총 발행잔액" : `${o.short} 발행잔액`;
+    $("#cap-flow").textContent = whole ? "30일 순증감률" : `${o.short} 30일 순증감률`;
+
+    // 고르지 않은 쪽은 숨긴다. 숨은 동안에는 폭이 0이라 그려지지 않고,
+    // 다시 보이는 순간 ResizeObserver 가 같은 자리에서 그려 준다.
+    const flow = TREND.metric === "flow";
+    $("#fig-total").hidden = flow;
+    $("#fig-flow").hidden = !flow;
+    $("#seg-total").setAttribute("aria-pressed", String(!flow));
+    $("#seg-flow").setAttribute("aria-pressed", String(flow));
+    renderTrendKpi(o);
+
+    const height = chartHeight();
+    const box = { height, hMin: 200, hMax: Math.round(height * 1.5) };
+    lineChart($("#chart-total"), o.total, {
+      ...box, color: TREND_COLOR, label: `${o.short} 발행잔액 추이`, interactive: true,
+      fillGradient: true, fmt: (v) => "$" + usd(v),
+    });
+    lineChart($("#chart-flow"), o.flow, {
+      ...box, color: TREND_COLOR, label: `${o.short} 30일 순증감률`, zero: true, interactive: true,
+      fillGradient: true, fmt: (v) => v.toFixed(1) + "%",
+    });
+  }
+
+  // 내려받기 이름은 CSV·PNG 가 같은 규칙을 쓴다.
+  function trendFileName(ext) {
+    const o = currentTrend();
+    const who = !o || o.key === "__all__" ? "market" : o.short;
+    const what = ext === "png" ? (TREND.metric === "flow" ? "_net30d" : "_supply") : "";
+    return `stablecoin-monitor_${who}${what}_${isoDate(Math.floor(Date.now() / 1000))}.${ext}`;
+  }
+
+  function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // 서버를 거치지 않고 브라우저에서 바로 CSV를 만들어 내려받는다.
+  // 보이는 차트가 하나뿐이어도 CSV 는 예전처럼 두 열을 다 담는다.
+  function downloadTrendCsv() {
+    const o = currentTrend();
+    if (!o || !o.total.length) return;
+    const flowBy = new Map(o.flow.map((p) => [p.t, p.v]));
+    const lines = ["날짜,발행잔액(USD),30일 순증감률(%)"];
+    o.total.forEach((p) => {
+      const f = flowBy.get(p.t);
+      lines.push(`${isoDate(p.t)},${p.v},${f == null ? "" : f}`);
+    });
+    // BOM 을 붙여야 엑셀에서 한글 머리글이 깨지지 않는다.
+    saveBlob(new Blob(["﻿" + lines.join("\r\n") + "\r\n"],
+      { type: "text/csv;charset=utf-8" }), trendFileName("csv"));
+  }
+
+  // 지금 보이는 차트를 PNG 로 굽는다.
+  //
+  // SVG 를 문서에서 떼어내면 var(--...) 가 풀리지 않는다 — 선 색과 글꼴이
+  // 통째로 날아가므로, 직렬화한 뒤 계산된 값으로 바꿔 넣는다. blob: 대신
+  // data: URL 을 쓰는 이유는 캔버스 오염(tainted canvas) 없이 확실히
+  // toBlob() 까지 가기 위해서다.
+  function downloadTrendPng() {
+    const host = TREND.metric === "flow" ? $("#chart-flow") : $("#chart-total");
+    const svg = host && host.querySelector("svg");
+    if (!svg) return;
+    const vb = svg.viewBox.baseVal;
+    const W = Math.round(vb.width || host.clientWidth || 520);
+    const H = Math.round(vb.height || 170);
+    if (!W || !H) return;
+
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", W);
+    clone.setAttribute("height", H);
+    const cs = getComputedStyle(document.documentElement);
+    const markup = new XMLSerializer().serializeToString(clone)
+      .replace(/var\(\s*(--[\w-]+)\s*\)/g, (m, name) => (cs.getPropertyValue(name) || "#000").trim());
+
+    const scale = 2; // 보고서에 붙여도 흐리지 않을 정도
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = W * scale;
+      cv.height = H * scale;
+      const ctx = cv.getContext("2d");
+      ctx.fillStyle = (cs.getPropertyValue("--card") || "#fff").trim();
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob((b) => { if (b) saveBlob(b, trendFileName("png")); });
+    };
+    img.onerror = () => console.warn("PNG 변환 실패 — 차트를 이미지로 굽지 못했습니다.");
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
+  }
+
+  function initTrend(hist) {
+    TREND.opts = trendOptions(hist);
+    const sel = $("#series-pick"), hint = $("#series-hint");
+    sel.innerHTML = TREND.opts
+      .map((o) => `<option value="${esc(o.key)}">${esc(o.label)}</option>`).join("");
+    if (TREND.opts.length <= 1) {
+      sel.disabled = true;
+      hint.textContent = "종목별 시계열이 아직 없습니다 — python etl/fetch.py 를 다시 실행하면 채워집니다.";
+    } else {
+      hint.textContent = `종목별 ${TREND.opts.length - 1}종`;
+    }
+    sel.addEventListener("change", () => { TREND.key = sel.value; renderTrend(); });
+    $("#csv-dl").addEventListener("click", downloadTrendCsv);
+    $("#png-dl").addEventListener("click", downloadTrendPng);
+
+    // 세그먼트 토글 — 발행잔액 ↔ 30일 순증감률
+    document.querySelectorAll(".seg-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const m = b.dataset.metric;
+        if (m === TREND.metric) return;
+        TREND.metric = m;
+        renderTrend();
+      });
+    });
+    renderTrend();
+
+    // 화면 폭이 바뀌어 차트 높이 구간이 달라질 때만 다시 그린다.
+    let timer = 0, lastH = chartHeight();
+    addEventListener("resize", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const h = chartHeight();
+        if (h !== lastH) { lastH = h; renderTrend(); }
+      }, 180);
+    });
   }
 
   // ── 막대 ────────────────────────────────────────────────
@@ -155,14 +758,22 @@
   }
 
   // ── 표 ──────────────────────────────────────────────────
+  let TABLE_ROWS = []; // 개요 패널이 참조할 행 데이터 (GAUGE_ROWS 와 같은 역할)
+
   function renderTable(d) {
-    $("#tbl tbody").innerHTML = d.assets.map((a) => `<tr>
-      <td><span class="tsym">${a.symbol}</span><span class="tname">${a.name || ""}</span></td>
+    TABLE_ROWS = d.assets;
+    const icons = hasIcons(d.assets);
+    $("#tbl tbody").innerHTML = d.assets.map((a, i) => `<tr>
+      <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
+          data-i="${i}" aria-expanded="false"
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></span></td>
       <td>${a.mechanism_ko}</td>
       <td>${a.peg_currency}</td>
       <td class="num">$${usd(a.mcap_usd)}</td>
       <td class="num">${a.share.toFixed(2)}%</td>
-      <td class="num t-${a.grade_peg}">${a.dev_bp == null ? "—" : signed(a.dev_bp, 1)}</td>
+      <td class="num t-${a.grade_peg}"${a.dev_bp == null && isYieldBearing(a)
+        ? ' title="이자부 토큰화 상품 — $1 고정이 목표가 아니라 편차를 계산하지 않습니다"' : ""
+      }>${a.dev_bp == null ? "—" : signed(a.dev_bp, 1)}</td>
       <td class="num">${signed(a.chg_7d, 1, "%")}</td>
       <td class="num t-${a.grade_redemption}">${signed(a.chg_30d, 1, "%")}</td>
       <td><span class="pill is-${a.grade} t-${a.grade}">${GRADE_KO[a.grade]}</span></td>
@@ -188,6 +799,7 @@
     const sec = $("#freeze-sec");
     if (!f || !f.issuers || !f.issuers.length) return;
     sec.hidden = false;
+    $("#freeze-empty").hidden = true;
 
     const t = f.totals, days = f.meta.lookback_days;
     $("#fz-freeze").textContent = t.freeze.toLocaleString();
@@ -244,28 +856,74 @@
   function renderPremium(p, hist) {
     if (!p || !p.assets || !p.assets.length) return;
     $("#premium-sec").hidden = false;
+    $("#premium-empty").hidden = true;
 
-    const grade = p.basket_grade;
-    $("#pm-avg").textContent = signed(p.basket_avg_pct, 2, "%");
-    $("#pm-avg").className = "fig-v t-" + grade;
+    const thr = p.meta.thresholds || {};
+    const sw = thr.stable_watch_pct != null ? thr.stable_watch_pct : 0.5;
+    const sb = thr.stable_breach_pct != null ? thr.stable_breach_pct : 1.5;
+    const cw = thr.watch_pct != null ? thr.watch_pct : 3.0;
+    const cb = thr.breach_pct != null ? thr.breach_pct : 7.0;
+
+    const gradeOf = (prem, stable) => {
+      if (prem == null) return "unknown";
+      const w = stable ? sw : cw, b = stable ? sb : cb;
+      if (prem <= (thr.inverted_pct != null ? thr.inverted_pct : -1)) return "watch";
+      if (prem >= b) return "breach";
+      if (prem >= w) return "watch";
+      return "sound";
+    };
+
+    // 스테이블 평균 (신규 필드, 없으면 basket으로 폴백)
+    const stableAvg = p.stable_avg_pct != null ? p.stable_avg_pct : null;
+    const stableGrade = p.stable_grade || gradeOf(stableAvg, true);
+    const pmStable = $("#pm-stable");
+    if (pmStable) {
+      pmStable.textContent = stableAvg != null ? signed(stableAvg, 2, "%") : "—";
+      pmStable.className = "fig-v t-" + (stableAvg != null ? stableGrade : "unknown");
+    }
+
+    const cryptoAvg = p.crypto_avg_pct != null ? p.crypto_avg_pct : p.basket_avg_pct;
+    const cryptoGrade = p.crypto_grade || p.basket_grade || gradeOf(cryptoAvg, false);
+    $("#pm-avg").textContent = cryptoAvg != null ? signed(cryptoAvg, 2, "%") : "—";
+    $("#pm-avg").className = "fig-v t-" + (cryptoAvg != null ? cryptoGrade : "unknown");
     $("#pm-fx").textContent = `USD/KRW ${p.meta.fx_usdkrw.toLocaleString()}`;
 
     const byAsset = {};
     p.assets.forEach((a) => (byAsset[a.asset] = a));
+
+    ["usdt", "usdc"].forEach((k) => {
+      const a = byAsset[k.toUpperCase()];
+      const el = $("#pm-" + k);
+      if (!el) return;
+      if (!a || a.premium_pct == null) { el.textContent = "—"; return; }
+      el.textContent = signed(a.premium_pct, 2, "%");
+      el.className = "fig-v t-" + (a.grade || gradeOf(a.premium_pct, true));
+    });
+
     ["btc", "eth", "xrp"].forEach((k) => {
       const a = byAsset[k.toUpperCase()];
       const el = $("#pm-" + k);
+      if (!el) return;
       if (!a || a.premium_pct == null) { el.textContent = "—"; return; }
       el.textContent = signed(a.premium_pct, 2, "%");
-      el.className = "fig-v t-" + (a.premium_pct >= p.meta.thresholds.breach_pct ? "breach"
-        : a.premium_pct >= p.meta.thresholds.watch_pct ? "watch" : "sound");
+      el.className = "fig-v t-" + (a.grade || gradeOf(a.premium_pct, false));
     });
 
-    if (hist && hist.points && hist.points.length > 1) {
-      const pts = hist.points.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
+    const btcPts = (hist && (hist.points_btc || hist.points)) || null;
+    if (btcPts && btcPts.length > 1) {
+      const pts = btcPts.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
       lineChart($("#chart-premium"), pts, {
         color: "var(--petrol)", label: "BTC 프리미엄 추이", zero: true,
         fmt: (v) => v.toFixed(1) + "%",
+      });
+    }
+    const usdtPts = hist && hist.points_usdt;
+    const usdtChart = $("#chart-premium-usdt");
+    if (usdtChart && usdtPts && usdtPts.length > 1) {
+      const pts = usdtPts.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
+      lineChart(usdtChart, pts, {
+        color: "var(--accent)", label: "USDT 프리미엄 추이", zero: true,
+        fmt: (v) => v.toFixed(2) + "%",
       });
     }
   }
@@ -274,6 +932,7 @@
   function renderFlow(f) {
     if (!f || !f.totals) return;
     $("#flow-sec").hidden = false;
+    $("#flow-empty").hidden = true;
 
     const t = f.totals;
     $("#fl-net").textContent = (t.net_outflow_usd >= 0 ? "+$" : "−$") + usd(Math.abs(t.net_outflow_usd));
@@ -330,6 +989,7 @@
   function renderAttestation(a) {
     if (!a || !a.entries || !a.entries.length) return;
     $("#attest-sec").hidden = false;
+    $("#attest-empty").hidden = true;
     $("#attest-tbl tbody").innerHTML = a.entries.map((e) => `<tr>
       <td>${e.issuer} <span class="tname">${e.symbol}</span></td>
       <td>${e.as_of_date}</td>
@@ -346,6 +1006,7 @@
   function renderFlowXRP(f) {
     if (!f || !f.totals) return;
     $("#flowxrp-sec").hidden = false;
+    $("#flowxrp-empty").hidden = true;
 
     const t = f.totals;
     $("#fx-net").textContent = (t.net_outflow_xrp >= 0 ? "+" : "−") + usd(Math.abs(t.net_outflow_xrp)) + " XRP";
@@ -407,6 +1068,34 @@
     }
   }
 
+  // ── 탭 전환 ─────────────────────────────────────────────
+  function initTabs() {
+    const tabs = Array.from(document.querySelectorAll(".tab-btn"));
+    if (!tabs.length) return;
+    const panels = tabs.map((t) => document.getElementById(t.getAttribute("aria-controls")));
+
+    const activate = (i, focus) => {
+      tabs.forEach((t, j) => {
+        const on = j === i;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        if (panels[j]) panels[j].hidden = !on;
+      });
+      if (focus) tabs[i].focus();
+    };
+
+    tabs.forEach((t, i) => {
+      t.addEventListener("click", () => activate(i, false));
+      t.addEventListener("keydown", (e) => {
+        const n = tabs.length;
+        if (e.key === "ArrowRight") { e.preventDefault(); activate((i + 1) % n, true); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); activate((i - 1 + n) % n, true); }
+        else if (e.key === "Home") { e.preventDefault(); activate(0, true); }
+        else if (e.key === "End") { e.preventDefault(); activate(n - 1, true); }
+      });
+    });
+  }
+
   // ── 부팅 ────────────────────────────────────────────────
   async function boot() {
     let snap, hist;
@@ -429,7 +1118,10 @@
     renderStatus(snap);
     renderGauge(snap);
     renderTable(snap);
+    initAssetPop(); // 계기판·표를 다 그린 뒤 한 번만 건다
+
     renderThresholds(snap.meta.thresholds);
+    initTrend(hist);
 
     bars($("#mech-bars"), snap.by_mechanism.map((m) => ({
       label: m.label, share: m.share, amount: m.amount, algo: m.mechanism === "algorithmic",
@@ -491,16 +1183,26 @@
       setInterval(() => { if (!document.hidden) liveTick(); }, 60000);
       document.addEventListener("visibilitychange", () => { if (!document.hidden) liveTick(); });
     }
+  }
 
-    lineChart($("#chart-total"), hist.total_circulating, {
-      color: "var(--petrol)", label: "총 발행잔액 추이",
-      fmt: (v) => "$" + usd(v),
-    });
-    lineChart($("#chart-flow"), hist.net_30d_pct, {
-      color: "var(--petrol)", label: "30일 순증감률", zero: true,
-      fmt: (v) => v.toFixed(0) + "%",
+  // ── 테마 토글 ──────────────────────────────────────────
+  function initTheme() {
+    const btn = $("#theme-toggle");
+    if (!btn) return;
+    const apply = (t) => {
+      document.documentElement.dataset.theme = t;
+      try { localStorage.setItem("scw-theme", t); } catch (e) {}
+      btn.setAttribute("aria-label", t === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환");
+      btn.textContent = t === "dark" ? "라이트" : "다크";
+    };
+    const cur = document.documentElement.dataset.theme || "light";
+    apply(cur === "dark" ? "dark" : "light");
+    btn.addEventListener("click", () => {
+      apply(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
     });
   }
 
+  initTheme();
+  initTabs();
   boot();
 })();

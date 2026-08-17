@@ -7,6 +7,11 @@
   --rule:#C9D0D8;
   --rule-soft:#DCE1E7;
   --petrol:#123F58;
+  /* 발행 현황 탭의 KPI·차트 카드에서만 쓰는 강조색. 처음 잡은 #2B6CB0 은 옆에
+     놓인 --petrol(#123F58)보다 채도가 높아 계기판·표까지 시선을 끌어갔다.
+     채도를 한 급 낮춰 두 색이 같은 계열로 읽히게 맞췄다. 흰 글자 대비는 6.17:1
+     (#2B6CB0 은 5.42:1) 로 WCAG AA 를 넘기므로 알약 토글의 활성 배지에 그대로 쓴다. */
+  --accent:#2C6595;
   --sound:#2C6650;
   --watch:#9C6612;
   --breach:#9E2A25;
@@ -23,6 +28,13 @@ body{
   margin:0;background:var(--paper);color:var(--ink);
   font-family:var(--sans);font-size:15px;line-height:1.6;
   font-feature-settings:"tnum" 1;
+  /* 한국어 본문은 어절 단위로만 접는다. keep-all 이 없으면 브라우저가 한글
+     사이 아무 데서나 접고, lang="ko" 에서는 가운뎃점(·)도 줄바꿈 자리로 봐서
+     "USDT·USDC" 나 "Binance·OKX·Bybit" 가 토막난다. 영문 약어·숫자+단위
+     ("$264.0B", "HHI")도 keep-all 이 한 덩어리로 묶어 준다.
+     break-word 는 한 줄에 도저히 안 들어가는 긴 토큰에만 쓰이는 최후 수단. */
+  word-break:keep-all;
+  overflow-wrap:break-word;
 }
 .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -61,20 +73,70 @@ a{color:var(--petrol)}
 .statuswrap{padding-block:clamp(1.5rem,4vw,2.5rem)}
 .status{
   display:grid;grid-template-columns:minmax(220px,1fr) 2.4fr;
-  background:var(--card);border:1px solid var(--rule);
+  background:var(--card);border-top:2px solid var(--ink);border-bottom:1px solid var(--rule);
 }
 .verdict{display:flex;gap:1rem;align-items:center;padding:1.4rem 1.3rem;border-right:1px solid var(--rule)}
 .dot{width:14px;height:14px;flex:none;border-radius:50%;background:var(--dim);box-shadow:0 0 0 4px currentColor}
 .dot{color:transparent}
 .verdict-label{font-size:1.15rem;font-weight:600;margin:0;letter-spacing:-.02em}
 .verdict-note{margin:.15rem 0 0;font-size:.8rem;color:var(--mid)}
-.figs{display:grid;grid-template-columns:repeat(4,1fr)}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+.statuswrap .figs{grid-template-columns:repeat(5,1fr)}
+@media (max-width:900px){
+  .statuswrap .figs{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:560px){
+  .statuswrap .figs{grid-template-columns:repeat(2,1fr)}
+}
 .fig{padding:1.4rem 1.2rem;border-left:1px solid var(--rule-soft)}
 .fig:first-child{border-left:0}
 .fig-k{margin:0;font-size:.71rem;font-family:var(--mono);letter-spacing:.06em;color:var(--mid)}
 .fig-v{margin:.4rem 0 0;font-family:var(--mono);font-size:1.5rem;font-weight:500;letter-spacing:-.03em;line-height:1}
 .fig-s{margin:.35rem 0 0;font-size:.72rem;color:var(--dim)}
 abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
+
+/* 상단 KPI 카드만 DefiLlama 풍으로. .fig/.figs 는 동결·프리미엄·코너흐름 탭이
+   같이 쓰므로 반드시 .statuswrap 안쪽으로 한정한다 — 여기서 범위를 넓히면
+   그 탭들의 수치 블록까지 같이 커진다. */
+.statuswrap .status{
+  border:1px solid var(--rule);border-radius:14px;overflow:hidden;
+  box-shadow:0 2px 6px rgba(13,17,23,.06);
+}
+.statuswrap .fig-k{
+  display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;
+  font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);
+}
+.fig-tag{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.14em;color:var(--accent)}
+/* 숫자는 2.4rem/700. IBM Plex Mono 700 은 index.html 에서 같이 받아온다 —
+   400·500·600 만 받아오면 브라우저가 합성 볼드로 뭉개 그린다. */
+.statuswrap .fig-v{
+  margin:.55rem 0 0;font-size:clamp(1.75rem,5.4vw,2.4rem);font-weight:700;letter-spacing:-.04em;
+}
+
+/* ── tabs ─────────────────────────────────────────────── */
+.tabbar{background:var(--card);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.tabbar-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.tablist{display:flex;gap:.2rem;width:max-content;min-width:100%}
+.tab-btn{
+  appearance:none;background:transparent;border:0;border-bottom:2px solid transparent;
+  font-family:var(--mono);font-size:.76rem;letter-spacing:.03em;color:var(--mid);
+  padding:.9rem 1.05rem;cursor:pointer;white-space:nowrap;line-height:1.2;
+}
+.tab-btn:hover{color:var(--ink)}
+.tab-btn[aria-selected="true"]{color:var(--petrol);font-weight:600;border-bottom-color:var(--petrol)}
+.tabpanel{outline:none}
+.tabpanel > .block:first-child,.tabpanel > .empty-state:first-child{border-top:0}
+
+/* ── empty state ──────────────────────────────────────── */
+.empty-state{padding-block:clamp(2.5rem,7vw,4.5rem)}
+.empty-box{
+  max-width:52ch;margin:0 auto;text-align:center;background:var(--card);
+  border:1px dashed var(--rule);padding:2.2rem 1.6rem;
+}
+.empty-box h3{margin:0 0 .6rem;font-size:1rem;font-weight:600;color:var(--ink)}
+.empty-box p{margin:.4rem 0 0;font-size:.85rem;color:var(--mid);line-height:1.6}
+.empty-box code{font-family:var(--mono);font-size:.85em;background:#0d111710;padding:.1em .4em}
+.empty-reason{font-family:var(--mono);font-size:.72rem;color:var(--dim)}
 
 /* ── blocks ───────────────────────────────────────────── */
 .block{padding-block:clamp(2rem,5vw,3.25rem);border-top:1px solid var(--rule)}
@@ -94,7 +156,14 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   0%,100%{box-shadow:0 0 0 0 rgba(44,102,80,.5)}
   50%{box-shadow:0 0 0 4px rgba(44,102,80,0)}
 }
-#pm-updated{font-family:var(--mono);font-size:.72rem;color:var(--dim)}
+/* 갱신 상태는 안내 문단과 성격이 다른 정보다. 문단 끝에 인라인으로 붙어 있으면
+   "…나타나는 경우가 많습니다. 정적 값 · 기준시각 …" 처럼 한 문장으로 이어 읽혀서
+   산만하다. 블록으로 떼어내고 위 여백을 줘 한 줄로 분리한다.
+   (.block-head p 의 margin:0 을 이기려면 ID 선택자여야 한다.) */
+#pm-updated{
+  display:block;font-family:var(--mono);font-size:.72rem;letter-spacing:.01em;
+  color:var(--dim);margin:.65rem 0 0;
+}
 @media (prefers-reduced-motion:reduce){.live-dot.live-on{animation:none}}
 .block-head p{margin:0;color:var(--mid);font-size:.9rem}
 .foot{font-size:.75rem;color:var(--dim);margin:1rem 0 0}
@@ -117,14 +186,17 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
 .gsym{font-family:var(--mono);font-size:.82rem;font-weight:500;letter-spacing:-.01em}
 .gstrip{position:relative;height:30px}
 .gband{position:absolute;inset-block:9px;left:41.666%;width:16.667%;background:#12405812}
-.gdatum{position:absolute;inset-block:3px;left:50%;width:1px;background:var(--ink);opacity:.55}
+/* 차트 선 굵기(2.2)에 맞춰 계기판 기준선도 함께 올렸다. 다만 레인 높이가
+   30px 뿐이라 차트와 같은 값은 답답해 보여서 한 급 얇게 잡는다. */
+.gdatum{position:absolute;inset-block:3px;left:50%;width:2px;transform:translateX(-1px);
+  background:var(--ink);opacity:.6}
 .gtick{position:absolute;inset-block:13px;width:1px;background:var(--rule)}
 .gmark{
   position:absolute;top:50%;width:9px;height:9px;
   transform:translate(-50%,-50%) rotate(45deg);
   transition:left .9s cubic-bezier(.2,.75,.25,1);
 }
-.gbar{position:absolute;top:50%;height:2px;transform:translateY(-50%);opacity:.42;
+.gbar{position:absolute;top:50%;height:3px;transform:translateY(-50%);opacity:.45;
   transition:left .9s cubic-bezier(.2,.75,.25,1),width .9s cubic-bezier(.2,.75,.25,1)}
 .gval{font-family:var(--mono);font-size:.78rem;text-align:right;padding-right:.1rem}
 .gval.na{color:var(--dim)}
@@ -139,16 +211,175 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   .gmark,.gbar{transition:none}
 }
 
+/* ── 종목 개요 트리거 (계기판 행 · 종목별 현황 표 공용) ────
+   .sym-btn 은 계기판(.grow-asset)과 표(#tbl) 양쪽이 같이 쓴다. 글자 크기만
+   붙는 자리에서 정하고 나머지 생김새·상호작용 힌트는 여기 한 곳에 둔다. */
+.gcap{
+  font-family:var(--mono);font-size:.68rem;line-height:1.5;color:var(--dim);
+  margin:0 0 .9rem;
+}
+.gauge-hint{color:var(--dim)}
+.sym-btn{
+  appearance:none;background:transparent;border:0;padding:0;margin:0;
+  font:inherit;font-family:var(--mono);font-weight:500;letter-spacing:-.01em;
+  color:inherit;text-align:left;cursor:pointer;justify-self:start;
+  border-bottom:1px dotted var(--rule);
+}
+.sym-btn[aria-expanded="true"]{color:var(--petrol);border-bottom-color:var(--petrol)}
+.sym-btn:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+/* .gsym 보다 뒤에 오는 font:inherit 이 크기를 지워버리므로 여기서 되돌린다. */
+.grow-asset .sym-btn{font-size:.82rem}
+
+/* 호버가 되는 기기에서만 커서 힌트를 준다. 판정 질의는 app.js 의 HOVER_MQ 와 같다. */
+@media (hover:hover) and (pointer:fine){
+  .sym-btn{cursor:help}
+  .sym-btn:hover{color:var(--petrol);border-bottom-color:var(--petrol)}
+}
+/* 호버가 없는 기기(터치)에서는 탭으로 여는 것임을 점으로 알린다. */
+@media not all and (hover:hover) and (pointer:fine){
+  .sym-btn::after{
+    content:"";display:inline-block;width:4px;height:4px;border-radius:50%;
+    background:var(--dim);vertical-align:.35em;margin-left:.3rem;
+  }
+}
+
+/* ── 종목 로고 (계기판 행 · 종목별 현황 표 공용) ───────────
+   자리는 항상 24px 로 고정해 둔다. 외부 CDN 이 죽어 이미지가 안 오더라도
+   (app.js 의 onerror 가 img 를 숨긴다) 빈 원만 남고 행 정렬은 그대로다.
+   icon_url 이 아예 없으면 app.js 가 이 자리 자체를 만들지 않는다. */
+.cicon{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:24px;height:24px;border-radius:50%;overflow:hidden;background:#0d11170d;
+}
+.cicon img{width:100%;height:100%;object-fit:contain;display:block;border-radius:50%}
+.cicon img[hidden]{display:none}
+.gsym-cell,.tsym-cell{display:inline-flex;align-items:center;gap:.45rem;min-width:0}
+.tsym-cell .tname{margin-left:0}
+/* 아이콘이 붙는 만큼 종목 칸을 넓힌다. 아이콘이 없는 수집분에서는 이 클래스가
+   붙지 않으므로 예전 폭 그대로다. */
+.gauge.has-icons .grow,.ghead.has-icons{grid-template-columns:8rem 1fr 5rem}
+
+.asset-pop{
+  position:fixed;top:0;left:0;z-index:40;width:min(19rem,calc(100vw - 1rem));
+  background:var(--card);border:1px solid var(--rule);border-top:2px solid var(--petrol);
+  box-shadow:0 6px 20px #0d111722;padding:.75rem .85rem .8rem;
+}
+.asset-pop[hidden]{display:none}
+.ap-head{margin:0 0 .5rem;display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap}
+.ap-sym{font-family:var(--mono);font-size:.85rem;font-weight:600;letter-spacing:-.01em}
+.ap-name{font-size:.75rem;color:var(--dim)}
+.ap-grid{
+  display:grid;grid-template-columns:auto 1fr;gap:.3rem .8rem;margin:0;
+  padding-top:.5rem;border-top:1px solid var(--rule-soft);
+}
+.ap-grid dt{font-family:var(--mono);font-size:.68rem;letter-spacing:.05em;color:var(--mid)}
+.ap-grid dd{margin:0;font-size:.8rem;text-align:right;overflow-wrap:break-word}
+.ap-note{
+  margin:.6rem 0 0;padding-top:.5rem;border-top:1px solid var(--rule-soft);
+  font-size:.71rem;line-height:1.5;color:var(--dim);
+}
+.ap-note[hidden]{display:none}
+
 /* ── charts ───────────────────────────────────────────── */
-.charts{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--rule);border:1px solid var(--rule)}
-.chart{margin:0;background:var(--card);padding:1.1rem 1.2rem 0.6rem}
+.chart-tools{
+  display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:1.1rem;
+}
+.ct-label{font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;color:var(--mid)}
+.ct-select{
+  font-family:var(--mono);font-size:.78rem;color:var(--ink);background:var(--card);
+  border:1px solid var(--rule);padding:.35rem .5rem;max-width:min(22rem,60vw);
+}
+.ct-select:disabled{color:var(--dim);background:transparent}
+.ct-hint{font-family:var(--mono);font-size:.68rem;color:var(--dim)}
+
+/* ── 발행잔액·순증감률 카드 ────────────────────────────────
+   여기 있는 규칙은 전부 .tcard 안쪽으로 한정한다. .chart / .charts / .chart-tools
+   는 프리미엄·코너흐름 탭의 차트도 같이 쓰는 클래스라, 범위를 풀면 그쪽 생김새까지
+   따라 바뀐다. */
+.tcard{
+  background:var(--card);border:1px solid var(--rule);border-radius:14px;
+  box-shadow:0 2px 6px rgba(13,17,23,.06);padding:1.35rem 1.35rem 1rem;
+}
+.tcard-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:1rem 1.5rem;flex-wrap:wrap;margin-bottom:1.25rem;
+}
+.tk-label{
+  margin:0;font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--mid);
+}
+.tk-value{
+  margin:.5rem 0 0;font-family:var(--mono);font-size:clamp(1.75rem,5.4vw,2.4rem);
+  font-weight:700;letter-spacing:-.04em;line-height:1;
+}
+.tk-sub{margin:.4rem 0 0;font-size:.72rem;color:var(--dim)}
+.tcard-actions{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
+
+/* 세그먼트 토글. 활성 여부를 색으로만 알리지 않는다 — 굵기(500→600)도 같이
+   올려서 색 구분이 어려워도 어느 쪽이 켜져 있는지 보이게 한다. */
+.seg{
+  display:inline-flex;gap:.2rem;background:var(--paper);border:1px solid var(--rule);
+  border-radius:999px;padding:.22rem;
+}
+.seg-btn{
+  appearance:none;border:0;background:transparent;border-radius:999px;
+  font-family:var(--mono);font-size:.76rem;font-weight:500;letter-spacing:.02em;
+  color:var(--mid);padding:.5rem 1.05rem;min-height:38px;cursor:pointer;white-space:nowrap;
+  transition:background-color .15s ease,color .15s ease;
+}
+.seg-btn:hover{color:var(--ink)}
+.seg-btn[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:600}
+.seg-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.tcard-export{display:inline-flex;gap:.45rem;flex-wrap:wrap}
+.pill-btn{
+  display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--rule);
+  border-radius:999px;background:var(--card);color:var(--mid);
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;
+  padding:.45rem .9rem;min-height:38px;cursor:pointer;white-space:nowrap;
+}
+.pill-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pill-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pill-btn svg{width:13px;height:13px;flex:none}
+
+/* 토글로 한 번에 하나만 보이므로 2단 격자와 칸 사이 경계선을 걷어낸다. */
+.tcard .charts{grid-template-columns:1fr;column-gap:0}
+.tcard .chart{background:transparent;padding:0}
+.tcard .chart+.chart{border-left:0;padding-left:0;border-top:0;padding-top:0;margin-top:0}
+.tcard .chart[hidden]{display:none}
+.tcard .chart-tools{margin-bottom:.9rem}
+.chart-plot{position:relative}
+.chart-plot svg{touch-action:pan-y}
+/* 툴팁 글자는 축 라벨(app.js AX_SIZE=12.5px / weight 600)에 맞춰 읽는다.
+   .76rem = 12.16px 로 축 라벨과 거의 같은 눈높이가 되고, 값 줄은 축 라벨과
+   같은 600 으로 잡아 날짜 줄(500)과 위계를 준다. 여기만 작게 두면 같은
+   모노스페이스인데도 축 라벨 옆에서 흐릿해 보인다.
+   700 은 쓰지 않는다 — index.html 이 IBM Plex Mono 를 400·500·600 만 받아와서
+   700 을 주면 브라우저가 합성 볼드로 뭉개 그린다. */
+.ch-tip{
+  position:absolute;transform:translate(-50%,calc(-100% - 10px));pointer-events:none;
+  background:var(--ink);color:#E8EBEF;padding:.34rem .55rem;white-space:nowrap;
+  font-family:var(--mono);font-size:.76rem;font-weight:500;line-height:1.35;
+  display:grid;gap:.08rem;z-index:5;
+}
+.ch-tip[hidden]{display:none}
+.ch-tip-d{color:#A8B1BC;font-weight:500}
+.ch-tip-v{font-weight:600;letter-spacing:-.01em}
+
+.charts{display:grid;grid-template-columns:1fr 1fr;column-gap:2.4rem}
+.chart{margin:0;background:var(--card);padding:1.1rem 0 0.6rem;min-width:0}
+.chart+.chart{border-left:1px solid var(--rule);padding-left:2.4rem}
 .chart figcaption{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;color:var(--mid);margin-bottom:.6rem}
 .chart .unit{color:var(--dim)}
 .chart svg{display:block;width:100%;height:auto}
 
 /* ── panels & bars ────────────────────────────────────── */
-.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule)}
-.panel{background:var(--card);padding:1.3rem 1.3rem 1.5rem}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);column-gap:2.2rem;border-top:1px solid var(--rule);padding-top:1.6rem}
+/* min-width:0 이 없으면 그리드 칸이 안쪽 표의 min-width(520px)까지 벌어져서,
+   가로 스크롤을 맡은 .tablewrap 이 줄어들지 못하고 좁은 화면에서 페이지 전체가
+   옆으로 밀린다(360px 기준 177px). 차트 칸도 같은 이유로 함께 막아 둔다. */
+.panel{background:var(--card);padding:0 0 1.5rem;min-width:0}
+.panel+.panel{border-left:1px solid var(--rule);padding-left:2.2rem}
 .panel h3{font-size:.8rem;font-family:var(--mono);letter-spacing:.08em;color:var(--mid);
   margin:0 0 1.1rem;font-weight:500;text-transform:uppercase}
 .bars{display:grid;gap:.85rem}
@@ -166,15 +397,15 @@ abbr{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
 .thr-v{font-family:var(--mono)}
 
 /* ── table ────────────────────────────────────────────── */
-.tablewrap{overflow-x:auto;border:1px solid var(--rule);background:var(--card)}
+.tablewrap{overflow-x:auto;background:var(--card)}
 table{border-collapse:collapse;width:100%;min-width:760px;font-size:.85rem}
 th,td{padding:.62rem .85rem;text-align:left;border-bottom:1px solid var(--rule-soft);white-space:nowrap}
 thead th{
   font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.07em;
-  color:var(--mid);text-transform:uppercase;border-bottom:1px solid var(--rule);
+  color:var(--mid);text-transform:uppercase;border-top:2px solid var(--ink);border-bottom:1px solid var(--rule);
   position:sticky;top:0;background:var(--card);
 }
-tbody tr:last-child td{border-bottom:0}
+tbody tr:last-child td{border-bottom:1px solid var(--rule)}
 tbody tr:hover{background:#fff}
 .num{text-align:right;font-family:var(--mono)}
 .tsym{font-family:var(--mono);font-weight:500}
@@ -190,7 +421,7 @@ tbody tr:hover{background:#fff}
 
 /* ── 동결 조치 ────────────────────────────────────────── */
 .fz-figs{display:grid;grid-template-columns:repeat(4,1fr);background:var(--card);
-  border:1px solid var(--rule);margin-bottom:2rem}
+  border-top:2px solid var(--ink);border-bottom:1px solid var(--rule);margin-bottom:2rem}
 .fz-figs .fig{border-left:1px solid var(--rule-soft)}
 .fz-figs .fig:first-child{border-left:0}
 .fz-head{align-items:end;margin-bottom:.2rem}
@@ -229,17 +460,361 @@ tbody tr:hover{background:#fff}
   .fig:nth-child(3){border-left:0}
   .fig:nth-child(n+3){border-top:1px solid var(--rule-soft)}
   .cols{grid-template-columns:1fr}
+  .panel+.panel{border-left:0;padding-left:0;border-top:1px solid var(--rule);padding-top:1.6rem;margin-top:1.6rem}
   .fz-cols{grid-template-columns:1fr}
   .fz-cols3{grid-template-columns:1fr}
   .fz-figs{grid-template-columns:1fr 1fr}
   .fz-figs .fig:nth-child(3){border-left:0}
   .fz-figs .fig:nth-child(n+3){border-top:1px solid var(--rule-soft)}
   .charts{grid-template-columns:1fr}
+  .tab-btn{padding:.8rem .85rem;font-size:.72rem}
+  .chart+.chart{border-left:0;padding-left:0;border-top:1px solid var(--rule);padding-top:1.1rem;margin-top:.6rem}
+  .tcard .chart+.chart{border-top:0;padding-top:0;margin-top:0}
+}
+/* 좁은 화면에서 알약 토글이 잘리거나 눌리기 어려워지지 않게 한다. 카드 좌우
+   여백을 줄이고, 토글은 한 줄을 통째로 쓰되 두 칸이 폭을 반씩 나눠 갖는다. */
+@media (max-width:560px){
+  .tcard{padding:1.1rem .95rem .9rem;border-radius:14px}
+  .tcard-head{gap:1rem}
+  .tcard-actions{width:100%;justify-content:space-between}
+  .seg{flex:1 1 100%}
+  .seg-btn{flex:1 1 0;padding:.55rem .6rem;min-height:42px;text-align:center}
+  .tcard-export{flex:1 1 100%}
+  .pill-btn{flex:1 1 0;justify-content:center;min-height:42px}
 }
 @media (max-width:620px){
   .figs{grid-template-columns:1fr 1fr}
   .grow,.ghead{grid-template-columns:3.6rem 1fr 4.4rem}
+  .gauge.has-icons .grow,.ghead.has-icons{grid-template-columns:5.9rem 1fr 4.4rem}
   .ghead{font-size:.58rem}
+  /* 좁은 화면에서는 −25/+25 라벨이 가운데 1.0000 과 겹쳐 둘 다 못 읽게 된다.
+     ±25 허용 구간은 옅은 띠와 머리글 설명이 이미 알려주므로 라벨만 접는다. */
+  .scale > span:nth-child(3),.scale > span:nth-child(5){display:none}
   .masthead-in{gap:1.5rem}
   .stamp{align-content:start}
+  .empty-box{padding:1.6rem 1.1rem}
+}
+
+/* ── print (A4 배포용) ────────────────────────────────── */
+@media print{
+  @page{size:A4;margin:14mm}
+  body{background:#fff;font-size:11px}
+  .skip,.band,.live-badge,.asset-pop,.chart-tools,.ch-tip,.tcard-actions{display:none}
+  .tcard,.statuswrap .status{box-shadow:none}
+  .sym-btn{border-bottom:0;color:var(--ink)}
+  .masthead{background:#fff;color:var(--ink);border-bottom:2px solid var(--ink)}
+  .eyebrow{color:var(--mid)}
+  .lede{color:var(--mid)}
+  .stamp dt{color:var(--mid)}
+  .stamp dd{color:var(--ink)}
+  a{color:var(--ink);text-decoration:underline}
+  .status,.block,.charts,.cols,.fz-figs,.tablewrap,figure,table,.gauge{break-inside:avoid}
+  .tw-inner{max-height:none;overflow:visible}
+  .grow:hover,tbody tr:hover{background:transparent}
+}
+
+/* ── theme toggle & dark mode ─────────────────────────── */
+.masthead-right{display:flex;flex-direction:column;align-items:flex-end;gap:.75rem}
+.theme-btn{
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;
+  background:transparent;color:#A8B1BC;border:1px solid #3A424C;border-radius:999px;
+  padding:.35rem .85rem;cursor:pointer;
+}
+.theme-btn:hover{color:#E8EBEF;border-color:#6D7784}
+
+html[data-theme="dark"]{
+  --paper:#0D1117;
+  --card:#161B22;
+  --ink:#E6EDF3;
+  --mid:#9BA3AE;
+  --dim:#6E7681;
+  --rule:#30363D;
+  --rule-soft:#21262D;
+  --petrol:#58A6FF;
+  --accent:#3B8DD1;
+  --sound:#3FB950;
+  --watch:#D29922;
+  --breach:#F85149;
+  --band:#3D2E00;
+}
+html[data-theme="dark"] body{background:var(--paper);color:var(--ink)}
+html[data-theme="dark"] .masthead{background:#010409;color:#E6EDF3}
+html[data-theme="dark"] .eyebrow{color:#6E7681}
+html[data-theme="dark"] .lede{color:#8B949E}
+html[data-theme="dark"] .stamp dt{color:#6E7681}
+html[data-theme="dark"] .stamp dd{color:#C9D1D9}
+html[data-theme="dark"] .band{background:#3D2E00;border-bottom-color:#6E4F00;color:#E6EDF3}
+html[data-theme="dark"] .status,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .tcard,
+html[data-theme="dark"] .tablewrap,
+html[data-theme="dark"] .empty-box{background:var(--card);border-color:var(--rule)}
+html[data-theme="dark"] .tab-btn[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--petrol)}
+html[data-theme="dark"] a{color:var(--petrol)}
+html[data-theme="dark"] .theme-btn{color:#8B949E;border-color:#30363D}
+html[data-theme="dark"] .theme-btn:hover{color:#E6EDF3;border-color:#6E7681}
+
+.prem-figs-2{margin-top:.5rem}
+
+/* ═══════════════════════════════════════════════════════════
+   Design polish — supervisory dashboard refinements
+   ═══════════════════════════════════════════════════════════ */
+
+/* 부드러운 테마 전환 (색만, 레이아웃 흔들림 없음) */
+html{color-scheme:light dark}
+@media (prefers-reduced-motion:no-preference){
+  body, .status, .tcard, .panel, .tablewrap, .tabbar, .masthead, .fig, .grow, .asset-pop{
+    transition:background-color .2s ease,color .15s ease,border-color .2s ease,box-shadow .2s ease;
+  }
+}
+
+/* 선택 영역 */
+::selection{background:color-mix(in srgb, var(--petrol) 28%, transparent);color:var(--ink)}
+
+/* 스크롤바 (Firefox + WebKit) — 방해되지 않게 */
+*{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-thumb{background:var(--rule);border-radius:4px}
+*::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+/* ── 시스템 상태: 등급별 왼쪽 강조선 ───────────────────── */
+.statuswrap .verdict{
+  position:relative;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, var(--paper)) 0%, var(--card) 100%);
+}
+.statuswrap .verdict::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--dim);border-radius:0;
+}
+.statuswrap .verdict[data-grade="sound"]::before{background:var(--sound)}
+.statuswrap .verdict[data-grade="watch"]::before{background:var(--watch)}
+.statuswrap .verdict[data-grade="breach"]::before{background:var(--breach)}
+.statuswrap .verdict[data-grade="sound"] .dot{box-shadow:0 0 0 4px color-mix(in srgb, var(--sound) 22%, transparent)}
+.statuswrap .verdict[data-grade="watch"] .dot{box-shadow:0 0 0 4px color-mix(in srgb, var(--watch) 25%, transparent)}
+.statuswrap .verdict[data-grade="breach"] .dot{
+  box-shadow:0 0 0 4px color-mix(in srgb, var(--breach) 28%, transparent);
+}
+@media (prefers-reduced-motion:no-preference){
+  .statuswrap .verdict[data-grade="breach"] .dot{
+    animation:breach-pulse 2s ease-in-out infinite;
+  }
+}
+@keyframes breach-pulse{
+  0%,100%{box-shadow:0 0 0 4px color-mix(in srgb, var(--breach) 22%, transparent)}
+  50%{box-shadow:0 0 0 7px color-mix(in srgb, var(--breach) 8%, transparent)}
+}
+
+/* KPI 카드 호버 — 데스크톱만, 과하지 않게 */
+@media (hover:hover) and (pointer:fine){
+  .statuswrap .fig{transition:background-color .15s ease}
+  .statuswrap .fig:hover{background:color-mix(in srgb, var(--paper) 55%, var(--card))}
+}
+
+/* 위험점수 미니 바 */
+.risk-meter{
+  display:block;height:3px;margin-top:.55rem;border-radius:2px;
+  background:var(--rule-soft);overflow:hidden;
+}
+.risk-meter > i{
+  display:block;height:100%;width:0;border-radius:2px;
+  background:var(--sound);transition:width .7s cubic-bezier(.2,.75,.25,1);
+}
+.risk-meter.is-watch > i{background:var(--watch)}
+.risk-meter.is-breach > i{background:var(--breach)}
+.risk-meter.is-sound > i{background:var(--sound)}
+
+/* ── sticky 탭바 ──────────────────────────────────────── */
+.tabbar{
+  position:sticky;top:0;z-index:20;
+  backdrop-filter:saturate(1.2) blur(10px);
+  -webkit-backdrop-filter:saturate(1.2) blur(10px);
+  background:color-mix(in srgb, var(--card) 88%, transparent);
+}
+html[data-theme="dark"] .tabbar{
+  background:color-mix(in srgb, var(--card) 82%, transparent);
+  border-color:var(--rule);
+}
+
+/* 탭 활성 표시를 조금 더 또렷하게 */
+.tab-btn{
+  position:relative;
+  transition:color .15s ease,border-color .15s ease;
+}
+.tab-btn[aria-selected="true"]{
+  border-bottom-width:2.5px;
+}
+
+/* ── 계기판 정교화 ────────────────────────────────────── */
+.gband{
+  border-radius:1px;
+  background:color-mix(in srgb, var(--petrol) 10%, transparent);
+}
+.gdatum{opacity:.55}
+.grow-asset{min-height:36px}
+.grow-asset .gstrip{height:32px}
+@media (hover:hover) and (pointer:fine){
+  .grow-asset:hover{background:color-mix(in srgb, var(--paper) 70%, var(--card))}
+}
+/* 터치 영역 확대 */
+.grow-asset .sym-btn{padding:.35rem 0;min-height:32px}
+
+/* ── 등급 필 ──────────────────────────────────────────── */
+.pill{
+  border-radius:999px;
+  padding:.18rem .55rem;
+  font-weight:600;
+  letter-spacing:.05em;
+}
+.pill.is-sound{
+  color:var(--sound);
+  background:color-mix(in srgb, var(--sound) 12%, transparent);
+  border-color:color-mix(in srgb, var(--sound) 35%, transparent);
+}
+.pill.is-watch{
+  color:var(--watch);
+  background:color-mix(in srgb, var(--watch) 12%, transparent);
+  border-color:color-mix(in srgb, var(--watch) 35%, transparent);
+}
+.pill.is-breach{
+  color:var(--breach);
+  background:color-mix(in srgb, var(--breach) 12%, transparent);
+  border-color:color-mix(in srgb, var(--breach) 40%, transparent);
+}
+.pill.is-unknown{
+  color:var(--dim);
+  background:color-mix(in srgb, var(--dim) 10%, transparent);
+  border-color:var(--rule);
+}
+
+/* ── 표 ───────────────────────────────────────────────── */
+tbody tr{transition:background-color .12s ease}
+tbody tr:hover{background:color-mix(in srgb, var(--paper) 65%, var(--card))}
+thead th{
+  letter-spacing:.08em;
+  border-top-width:2px;
+}
+
+/* ── 카드·패널 통일감 ─────────────────────────────────── */
+.tcard, .statuswrap .status, .asset-pop{
+  box-shadow:0 1px 2px rgba(13,17,23,.04), 0 4px 12px rgba(13,17,23,.04);
+}
+.bar-t{
+  border-radius:2px;overflow:hidden;
+  background:color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.bar-f{border-radius:2px;transition:width .6s cubic-bezier(.2,.75,.25,1)}
+
+/* 프리미엄 2단 그리드 */
+.prem-figs{
+  background:var(--card);
+  border:1px solid var(--rule);
+  border-radius:12px;
+  overflow:hidden;
+  margin-bottom:.65rem;
+}
+.prem-figs .fig{border-left:1px solid var(--rule-soft)}
+.prem-figs .fig:first-child{border-left:0}
+.prem-figs-2{
+  margin-top:0;
+  border-radius:12px;
+  background:var(--card);
+  border:1px solid var(--rule);
+  overflow:hidden;
+}
+.prem-figs-2 .fig{border-left:1px solid var(--rule-soft)}
+.prem-figs-2 .fig:first-child{border-left:0}
+
+/* 차트 wide 여백 */
+.chart-wide{
+  margin-top:1.25rem;
+  background:var(--card);
+  border:1px solid var(--rule);
+  border-radius:12px;
+  padding:1rem 1.1rem .8rem;
+}
+
+/* empty state 살짝 정돈 */
+.empty-box{
+  border-radius:12px;
+  border-style:dashed;
+}
+
+/* 푸터 */
+.foot-bar{
+  border-top:1px solid var(--rule);
+  background:color-mix(in srgb, var(--paper) 70%, var(--card));
+}
+.foot-bar p{color:var(--dim)}
+.foot-bar a{color:var(--mid)}
+.foot-bar a:hover{color:var(--petrol)}
+
+/* 테마 버튼 위치·터치 */
+.theme-btn{
+  min-height:32px;
+  transition:color .15s ease,border-color .15s ease,background .15s ease;
+}
+.theme-btn:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+
+/* 모바일: 상태 카드 라운드 유지, 탭 패딩 */
+@media (max-width:960px){
+  .statuswrap .status{border-radius:12px}
+  .statuswrap .verdict{border-radius:12px 12px 0 0}
+  .prem-figs,.prem-figs-2{grid-template-columns:1fr 1fr}
+  .prem-figs .fig:nth-child(3),
+  .prem-figs-2 .fig:nth-child(3){border-left:0}
+  .prem-figs .fig:nth-child(n+3),
+  .prem-figs-2 .fig:nth-child(n+3){border-top:1px solid var(--rule-soft)}
+}
+@media (max-width:560px){
+  .statuswrap{padding-block:1.1rem}
+  .statuswrap .fig{padding:1rem .9rem}
+  .statuswrap .fig-v{font-size:clamp(1.35rem,6vw,1.85rem)}
+  .theme-btn{align-self:flex-end}
+}
+
+/* ── 다크모드 보완 ────────────────────────────────────── */
+html[data-theme="dark"] .grow:hover,
+html[data-theme="dark"] .grow-asset:hover,
+html[data-theme="dark"] tbody tr:hover{
+  background:color-mix(in srgb, var(--paper) 40%, var(--card));
+}
+html[data-theme="dark"] .statuswrap .fig:hover{
+  background:color-mix(in srgb, var(--paper) 50%, var(--card));
+}
+html[data-theme="dark"] .gband{
+  background:color-mix(in srgb, var(--petrol) 16%, transparent);
+}
+html[data-theme="dark"] .cicon{background:color-mix(in srgb, #fff 6%, transparent)}
+html[data-theme="dark"] .seg{background:var(--paper);border-color:var(--rule)}
+html[data-theme="dark"] .seg-btn[aria-pressed="true"]{background:var(--accent);color:#fff}
+html[data-theme="dark"] .pill-btn{background:var(--card);border-color:var(--rule);color:var(--mid)}
+html[data-theme="dark"] .pill-btn:hover{border-color:var(--accent);color:var(--accent)}
+html[data-theme="dark"] .ct-select{background:var(--card);border-color:var(--rule);color:var(--ink)}
+html[data-theme="dark"] .asset-pop{
+  background:var(--card);border-color:var(--rule);
+  box-shadow:0 8px 28px rgba(0,0,0,.45);
+}
+html[data-theme="dark"] .ch-tip{background:#010409;color:#E6EDF3}
+html[data-theme="dark"] .ch-tip-d{color:#8B949E}
+html[data-theme="dark"] .empty-box code,
+html[data-theme="dark"] .band code{background:color-mix(in srgb, #fff 8%, transparent)}
+html[data-theme="dark"] .foot-bar{background:#010409;border-color:var(--rule)}
+html[data-theme="dark"] .foot-bar p{color:#6E7681}
+html[data-theme="dark"] .foot-bar a{color:#8B949E}
+html[data-theme="dark"] .prem-figs,
+html[data-theme="dark"] .prem-figs-2,
+html[data-theme="dark"] .chart-wide{background:var(--card);border-color:var(--rule)}
+html[data-theme="dark"] .tcard,
+html[data-theme="dark"] .statuswrap .status,
+html[data-theme="dark"] .asset-pop{
+  box-shadow:0 1px 2px rgba(0,0,0,.2), 0 6px 16px rgba(0,0,0,.25);
+}
+html[data-theme="dark"] thead th{background:var(--card)}
+html[data-theme="dark"] .bar-t{background:color-mix(in srgb, #fff 8%, transparent)}
+html[data-theme="dark"] .fz-figs{background:var(--card);border-color:var(--rule)}
+
+/* print: 테마 버튼 숨김 */
+@media print{
+  .theme-btn,.risk-meter{display:none}
+  .tabbar{position:static;backdrop-filter:none;background:#fff}
 }

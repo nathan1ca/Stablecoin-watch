@@ -3,13 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>스테이블코인 감시 · Stablecoin Watch</title>
+<title>스테이블코인 모니터링 · Stablecoin Monitor</title>
 <meta name="description" content="공개 블록체인 원장 기반 스테이블코인 발행·페그·집중도 상시 모니터링. 감독 목적 지표를 매일 갱신합니다.">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="light dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script>
+  // 테마: 저장된 선호 > 시스템 선호. body 클래스 전에 적용해 FOUC 방지.
+  (function () {
+    try {
+      var t = localStorage.getItem("scw-theme");
+      if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+      else if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
 
@@ -19,14 +29,17 @@
   <div class="wrap masthead-in">
     <div>
       <p class="eyebrow">ON-CHAIN SUPERVISORY MONITOR</p>
-      <h1>스테이블코인 감시</h1>
+      <h1>스테이블코인 모니터링</h1>
       <p class="lede">공개 원장에 기록된 발행·소각과 시장가격만으로 페그 유지 상태, 상환 압력, 시장 집중도를 매일 측정합니다.</p>
     </div>
-    <dl class="stamp">
-      <dt>기준시각</dt><dd id="stamp-time">—</dd>
-      <dt>출처</dt><dd id="stamp-src">—</dd>
-      <dt>대상</dt><dd id="stamp-count">—</dd>
-    </dl>
+    <div class="masthead-right">
+      <button type="button" class="theme-btn" id="theme-toggle" aria-label="테마 전환" title="라이트/다크 전환">다크</button>
+      <dl class="stamp">
+        <dt>기준시각</dt><dd id="stamp-time">—</dd>
+        <dt>출처</dt><dd id="stamp-src">—</dd>
+        <dt>대상</dt><dd id="stamp-count">—</dd>
+      </dl>
+    </div>
   </div>
 </header>
 
@@ -47,19 +60,37 @@
     </div>
   </div>
   <div class="figs">
-    <div class="fig"><p class="fig-k">총 발행잔액</p><p class="fig-v" id="f-total">—</p><p class="fig-s" id="f-total-s">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">페그 이탈</p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
-    <div class="fig"><p class="fig-k">발행사 집중도 <abbr title="허핀달-허시만 지수">HHI</abbr></p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">알고리즘형 비중</p><p class="fig-v" id="f-algo">—</p><p class="fig-s">담보 없는 발행 잔액 비율</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">TOTAL</span>총 발행잔액</p><p class="fig-v" id="f-total">—</p><p class="fig-s" id="f-total-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">PEG</span>페그 이탈</p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">RISK</span>합성 위험점수</p><p class="fig-v" id="f-risk">—</p><p class="fig-s" id="f-risk-s">0–100 · 페그·상환·집중·알고·가격품질</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag"><abbr title="허핀달-허시만 지수">HHI</abbr></span>발행사 집중도</p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">ALGO</span>알고리즘형 비중</p><p class="fig-v" id="f-algo">—</p><p class="fig-s">담보 없는 발행 잔액 비율</p></div>
   </div>
   </div>
 </section>
+
+<nav class="tabbar" aria-label="화면 구성 탭">
+  <div class="wrap tabbar-scroll">
+    <div class="tablist" role="tablist" aria-label="지표 구분">
+      <button type="button" class="tab-btn" role="tab" id="tab-issuance" aria-controls="panel-issuance" aria-selected="true">발행 현황</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-freeze" aria-controls="panel-freeze" aria-selected="false" tabindex="-1">동결 조치</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-premium" aria-controls="panel-premium" aria-selected="false" tabindex="-1">김치프리미엄</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">코너 흐름 · ETH</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-flowxrp" aria-controls="panel-flowxrp" aria-selected="false" tabindex="-1">코너 흐름 · XRP</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-attest" aria-controls="panel-attest" aria-selected="false" tabindex="-1">어테스테이션</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-method" aria-controls="panel-method" aria-selected="false" tabindex="-1">방법론</button>
+    </div>
+  </div>
+</nav>
+
+<div class="tabpanel" id="panel-issuance" role="tabpanel" aria-labelledby="tab-issuance" tabindex="0">
 
 <section class="wrap block" id="gauge" aria-labelledby="h-gauge">
   <div class="block-head">
     <h2 id="h-gauge">페그 편차 계기판</h2>
     <p>스테이블코인의 유일한 약속은 1.0000입니다. 가운데 세로선이 그 약속이고, 표식이 얼마나 벗어나 있는지를 베이시스포인트로 잽니다. 옅은 띠는 ±25bp 허용 구간입니다.</p>
   </div>
+  <p class="gcap" id="gauge-basis">가격 출처: DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님) · 기준시각: —</p>
   <div class="ghead" aria-hidden="true">
     <span>종목</span>
     <span class="scale">
@@ -70,7 +101,10 @@
     <span class="gunit">편차 bp</span>
   </div>
   <ol class="gauge" id="gauge-list"></ol>
-  <p class="foot">USD 페그 종목만 표시합니다. ±150bp를 넘는 편차는 끝단에 고정되며 수치로 확인하십시오.</p>
+  <p class="foot">USD 페그 종목만 표시합니다. 이자부 토큰화 상품(USYC·USDY 등)은 $1 고정이 목표가 아니므로 편차 계산에서 제외합니다. ±150bp를 넘는 편차는 끝단에 고정되며 수치로 확인하십시오.
+    <span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 발행사 개요가 열립니다.</span></p>
+  <p class="foot" id="gauge-nonusd" hidden></p>
+  <p class="foot" id="gauge-yield" hidden></p>
 </section>
 
 <section class="wrap block" aria-labelledby="h-trend">
@@ -78,16 +112,57 @@
     <h2 id="h-trend">발행잔액과 상환 압력</h2>
     <p>총 발행잔액은 시장에 들어온 돈의 크기이고, 30일 순증감률은 그 방향입니다. 마이너스가 깊어지면 상환이 발행을 앞지르고 있다는 뜻입니다.</p>
   </div>
-  <div class="charts">
-    <figure class="chart">
-      <figcaption>총 발행잔액 <span class="unit">USD</span></figcaption>
-      <div id="chart-total"></div>
-    </figure>
-    <figure class="chart">
-      <figcaption>30일 순증감률 <span class="unit">%</span></figcaption>
-      <div id="chart-flow"></div>
-    </figure>
+  <!-- 이 카드 안쪽만 DefiLlama 풍으로 다시 그렸다. 계기판·표·다른 탭은 그대로다. -->
+  <div class="tcard">
+    <div class="tcard-head">
+      <div class="tcard-kpi">
+        <p class="tk-label" id="tk-label">TOTAL 발행잔액</p>
+        <p class="tk-value" id="tk-value">—</p>
+        <p class="tk-sub" id="tk-sub">&nbsp;</p>
+      </div>
+      <div class="tcard-actions">
+        <div class="seg" role="group" aria-label="차트에 표시할 지표">
+          <button type="button" class="seg-btn" id="seg-total" data-metric="total"
+            aria-pressed="true" aria-controls="fig-total">발행잔액</button>
+          <button type="button" class="seg-btn" id="seg-flow" data-metric="flow"
+            aria-pressed="false" aria-controls="fig-flow">순증감률</button>
+        </div>
+        <div class="tcard-export">
+          <button type="button" class="pill-btn" id="csv-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1.5v8m0 0L4.8 6.3M8 9.5l3.2-3.2M2.5 11.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"
+              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV</button>
+          <button type="button" class="pill-btn" id="png-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6"
+              fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.9" cy="6.4" r="1.15" fill="currentColor"/><path
+              d="M2.2 11.4 5.8 8.2l2.5 2.2 2.4-2 3.1 2.8" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/></svg>PNG</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-tools">
+      <label class="ct-label" for="series-pick">표시 대상</label>
+      <select id="series-pick" class="ct-select">
+        <option value="__all__">전체 시장</option>
+      </select>
+      <span class="ct-hint" id="series-hint"></span>
+    </div>
+
+    <div class="charts">
+      <figure class="chart" id="fig-total">
+        <figcaption><span id="cap-total">총 발행잔액</span> <span class="unit">USD</span></figcaption>
+        <div id="chart-total" class="chart-plot"></div>
+      </figure>
+      <figure class="chart" id="fig-flow" hidden>
+        <figcaption><span id="cap-flow">30일 순증감률</span> <span class="unit">%</span></figcaption>
+        <div id="chart-flow" class="chart-plot"></div>
+      </figure>
+    </div>
   </div>
+  <p class="foot">위 알약형 토글로 발행잔액과 30일 순증감률을 번갈아 봅니다.
+    차트 위에 커서를 올리면(터치 기기는 탭하면) 해당 날짜의 정확한 값이 표시됩니다.
+    CSV 열은 날짜 · 발행잔액(USD) · 30일 순증감률(%) 이고, PNG 는 지금 보이는 차트를 그대로 내려받습니다.</p>
+  <p class="foot">출처: DefiLlama (<a href="https://defillama.com/stablecoins" rel="noopener">https://defillama.com/stablecoins</a>)</p>
 </section>
 
 <section class="wrap block" aria-labelledby="h-struct">
@@ -130,7 +205,12 @@
       <tbody></tbody>
     </table>
   </div>
+  <p class="foot"><span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 계기판과 같은 발행사 개요가 열립니다.</span></p>
 </section>
+
+</div>
+
+<div class="tabpanel" id="panel-freeze" role="tabpanel" aria-labelledby="tab-freeze" tabindex="0" hidden>
 
 <section class="wrap block" id="freeze-sec" aria-labelledby="h-freeze" hidden>
   <div class="block-head">
@@ -176,25 +256,60 @@
   </div>
 </section>
 
+<div class="wrap empty-state" id="freeze-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>발행사 동결·소각 이벤트는 이더리움 온체인 로그에서 수집합니다.</p>
+    <p class="empty-reason">필요 시크릿: <code>ETHERSCAN_API_KEY</code> · 확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “동결 조치 수집” 단계 로그</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-premium" role="tabpanel" aria-labelledby="tab-premium" tabindex="0" hidden>
+
 <section class="wrap block" id="premium-sec" aria-labelledby="h-premium" hidden>
   <div class="block-head">
     <h2 id="h-premium">국경 간 순유출 — 김치프리미엄
       <span class="live-badge" id="pm-live-badge"><i class="live-dot" id="pm-live-dot"></i>LIVE</span>
     </h2>
-    <p>프리미엄은 재정거래 유인의 크기입니다. 라벨링된 지갑 없이도 가격만으로 잡히기 때문에, 실제 자금이 움직이기 전에 먼저 나타나는 경우가 많습니다. <span id="pm-updated">&nbsp;</span></p>
+    <p>프리미엄은 재정거래 유인의 크기입니다. 라벨링된 지갑 없이도 가격만으로 잡히기 때문에, 실제 자금이 움직이기 전에 먼저 나타나는 경우가 많습니다.</p>
+    <p id="pm-updated">&nbsp;</p>
   </div>
   <div class="figs prem-figs">
-    <div class="fig"><p class="fig-k">평균 프리미엄</p><p class="fig-v" id="pm-avg">—</p><p class="fig-s" id="pm-fx">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">스테이블 평균</p><p class="fig-v" id="pm-stable">—</p><p class="fig-s">USDT·USDC vs $1</p></div>
+    <div class="fig"><p class="fig-k">USDT</p><p class="fig-v" id="pm-usdt">—</p><p class="fig-s">업비트 KRW</p></div>
+    <div class="fig"><p class="fig-k">USDC</p><p class="fig-v" id="pm-usdc">—</p><p class="fig-s">업비트 KRW</p></div>
+    <div class="fig"><p class="fig-k">암호화폐 평균</p><p class="fig-v" id="pm-avg">—</p><p class="fig-s" id="pm-fx">BTC·ETH·XRP</p></div>
+  </div>
+  <div class="figs prem-figs prem-figs-2">
     <div class="fig"><p class="fig-k">BTC</p><p class="fig-v" id="pm-btc">—</p><p class="fig-s">기준 자산</p></div>
     <div class="fig"><p class="fig-k">ETH</p><p class="fig-v" id="pm-eth">—</p><p class="fig-s">&nbsp;</p></div>
     <div class="fig"><p class="fig-k">XRP</p><p class="fig-v" id="pm-xrp">—</p><p class="fig-s">국내 재정거래 최다 이용 이력</p></div>
   </div>
   <figure class="chart chart-wide">
+    <figcaption>USDT 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
+    <div id="chart-premium-usdt"></div>
+  </figure>
+  <figure class="chart chart-wide">
     <figcaption>BTC 기준 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
     <div id="chart-premium"></div>
   </figure>
-  <p class="foot">평균은 BTC·ETH·XRP 3종 단순 평균이며 거래량 가중치는 적용하지 않았습니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
+  <p class="foot">스테이블 프리미엄은 업비트 KRW 가격 ÷ 환율을 $1과 비교합니다(임계 0.5%/1.5%).
+    암호화폐 프리미엄은 해외 CEX 대비입니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
 </section>
+
+<div class="wrap empty-state" id="premium-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이 데이터는 시크릿 없이 자동으로 생성됩니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “김치프리미엄 수집” 단계 로그 (외부 API 일시 장애일 수 있습니다)</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-flow" role="tabpanel" aria-labelledby="tab-flow" tabindex="0" hidden>
 
 <section class="wrap block" id="flow-sec" aria-labelledby="h-flow" hidden>
   <div class="block-head">
@@ -241,23 +356,17 @@
   </div>
 </section>
 
-<section class="wrap block" id="attest-sec" aria-labelledby="h-attest" hidden>
-  <div class="block-head">
-    <h2 id="h-attest">어테스테이션 시차</h2>
-    <p>발행사가 공표한 준비금 보고서의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다.</p>
+<div class="wrap empty-state" id="flow-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이더리움 코너 자금흐름은 온체인 이체 로그에서 수집합니다.</p>
+    <p class="empty-reason">필요 시크릿: <code>ETHERSCAN_API_KEY</code> · 확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “국경 간 코너 자금흐름 수집 (이더리움)” 단계 로그</p>
   </div>
-  <div class="tablewrap">
-    <table id="attest-tbl">
-      <thead><tr>
-        <th scope="col">발행사</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
-        <th scope="col" class="num">보고 시점 발행량</th><th scope="col" class="num">현재 발행량</th>
-        <th scope="col" class="num">드리프트</th><th scope="col">등급</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <p class="foot" id="attest-note"></p>
-</section>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-flowxrp" role="tabpanel" aria-labelledby="tab-flowxrp" tabindex="0" hidden>
 
 <section class="wrap block" id="flowxrp-sec" aria-labelledby="h-flowxrp" hidden>
   <div class="block-head">
@@ -294,6 +403,48 @@
   </div>
 </section>
 
+<div class="wrap empty-state" id="flowxrp-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이 데이터는 시크릿 없이 자동으로 생성됩니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “국경 간 코너 자금흐름 수집 (XRP)” 단계 로그 (외부 API 일시 장애일 수 있습니다)</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-attest" role="tabpanel" aria-labelledby="tab-attest" tabindex="0" hidden>
+
+<section class="wrap block" id="attest-sec" aria-labelledby="h-attest" hidden>
+  <div class="block-head">
+    <h2 id="h-attest">어테스테이션 시차</h2>
+    <p>발행사가 공표한 준비금 보고서의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다.</p>
+  </div>
+  <div class="tablewrap">
+    <table id="attest-tbl">
+      <thead><tr>
+        <th scope="col">발행사</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
+        <th scope="col" class="num">보고 시점 발행량</th><th scope="col" class="num">현재 발행량</th>
+        <th scope="col" class="num">드리프트</th><th scope="col">등급</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="foot" id="attest-note"></p>
+</section>
+
+<div class="wrap empty-state" id="attest-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이 항목은 <code>etl/attestations.json</code> 을 손으로 갱신해야 값이 채워지는 수동 데이터입니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “어테스테이션 시차 계산” 단계 로그</p>
+  </div>
+</div>
+
+</div>
+
+<div class="tabpanel" id="panel-method" role="tabpanel" aria-labelledby="tab-method" tabindex="0" hidden>
+
 <section class="wrap block method" aria-labelledby="h-method">
   <div class="block-head">
     <h2 id="h-method">산출 방법과 한계</h2>
@@ -308,7 +459,7 @@
       <h3>읽을 때 유의할 점</h3>
       <ul class="plain">
         <li>발행잔액은 원장상 발행량이지 준비자산의 존재나 충분성을 증명하지 않습니다. 준비금 실사는 온체인 데이터 밖의 문제입니다.</li>
-        <li>가격은 거래소 체결가 기준입니다. 유동성이 얕은 종목은 편차가 과장되어 나타날 수 있습니다.</li>
+        <li>가격은 DefiLlama 가격 오라클이 여러 출처를 집계한 값이며 특정 거래소의 체결가가 아닙니다. 유동성이 얕은 종목은 편차가 과장되어 나타날 수 있습니다.</li>
         <li>브릿지된 잔액이 원본과 이중 계상될 여지가 있어 소형 체인 수치는 보수적으로 보아야 합니다.</li>
         <li>집중도 지수는 발행잔액 기준이며, 결제량이나 실사용자 수 기준과는 다른 그림을 줄 수 있습니다.</li>
       </ul>
@@ -321,6 +472,8 @@
   </div>
 </section>
 
+</div>
+
 </main>
 
 <footer class="masthead foot-bar">
@@ -328,6 +481,19 @@
     <p>데이터 <a href="https://defillama.com/stablecoins" rel="noopener">DefiLlama</a> · 공개 블록체인 원장 기반 · 갱신 <span id="foot-time">—</span></p>
   </div>
 </footer>
+
+<!-- 종목 개요. 계기판과 종목별 현황 표가 같이 쓴다.
+     화면에 하나만 두고 열린 행 옆으로 옮겨 붙인다. -->
+<div class="asset-pop" id="asset-pop" role="tooltip" hidden>
+  <p class="ap-head"><span class="ap-sym" id="ap-sym">—</span><span class="ap-name" id="ap-name"></span></p>
+  <dl class="ap-grid">
+    <dt>발행사</dt><dd id="ap-issuer">—</dd>
+    <dt>발행국가</dt><dd id="ap-country">—</dd>
+    <dt>발행잔액</dt><dd id="ap-mcap">—</dd>
+    <dt>점유율</dt><dd id="ap-share">—</dd>
+  </dl>
+  <p class="ap-note" id="ap-note" hidden></p>
+</div>
 
 <script src="app.js"></script>
 </body>

@@ -41,7 +41,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 API = "https://api.etherscan.io/v2/api"
-UA = "stablecoin-watch/0.1"
+UA = "stablecoin-watch/0.2"
 PAUSE = 0.25
 CHAIN_ID = 1  # 이더리움 메인넷
 
@@ -127,10 +127,15 @@ def collect(days: int, key: str) -> dict:
     from_b = block_at(since, key)
 
     events = []
+    notes = []
     for addr, kr_name in KR_WALLETS.items():
         for symbol, spec in ASSETS.items():
             print(f"  {kr_name} ({addr[:10]}…) {symbol} 이력 조회…")
-            txs = token_transfers(addr, spec["address"], from_b, key)
+            try:
+                txs = token_transfers(addr, spec["address"], from_b, key)
+            except RuntimeError as e:
+                notes.append(f"{kr_name} {symbol}: {e}")
+                continue
             for tx in txs:
                 frm, to = tx.get("from", "").lower(), tx.get("to", "").lower()
                 counterparty = to if frm == addr.lower() else frm
@@ -188,6 +193,7 @@ def collect(days: int, key: str) -> dict:
             "coverage_note": "업비트·빗썸 태그 지갑 ↔ Binance·OKX·Bybit 각 1개 핫월렛 사이의 "
                              "USDT·USDC 직접 이체만 집계. 트론·XRP 통로, 코인원·코빗·고팍스, "
                              "그리고 각 거래소의 다른 지갑들은 제외.",
+            "notes": notes,
         },
         "totals": {
             "inflow_usd": round(inflow, 2), "outflow_usd": round(outflow, 2),
@@ -234,7 +240,11 @@ def main():
         return
 
     print(f"최근 {args.days}일 KR↔해외 3거래소 USDT·USDC 코너 수집…")
-    data = collect(args.days, key)
+    try:
+        data = collect(args.days, key)
+    except RuntimeError as e:
+        print(f"Etherscan 호출 실패로 자금흐름 수집을 건너뜁니다: {e}", file=sys.stderr)
+        return
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -246,6 +256,8 @@ def main():
     print(f"\n완료 — 순{sign} ${abs(t['net_outflow_usd']):,.0f} / 이벤트 {t['event_count']}건")
     for r in data["by_exchange"]:
         print(f"  {r['exchange']:18s} 순유출 ${r['net_outflow']:,.0f}")
+    for n in data["meta"]["notes"]:
+        print(f"  참고: {n}", file=sys.stderr)
 
 
 if __name__ == "__main__":

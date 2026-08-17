@@ -14,30 +14,35 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from fetch import THRESHOLDS, MECHANISM_KO, hhi, grade_peg, grade_redemption, WORST  # noqa
+from fetch import (THRESHOLDS, MECHANISM_KO, SERIES_ASSET_COUNT, UNKNOWN_ISSUER,  # noqa
+                   hhi, grade_peg, grade_redemption, icon_url, issuer_fields,
+                   load_issuers, net_30d_series, WORST)
 
 random.seed(17)
 
+# 마지막 칸은 아이콘 슬러그다. 실제 수집(fetch.py)에서는 응답 필드에서만 뽑지만,
+# 샘플에는 뽑아올 응답이 없으므로 손으로 적어 둔다 — 화면 정렬을 확인하는 용도이고,
+# 슬러그가 틀렸거나 CDN 에 닿지 못하면 아이콘 자리만 비고 심볼 텍스트는 그대로 남는다.
 SPEC = [
-    # symbol, name, mechanism, peg, mcap(USD), dev_bp, chg1, chg7, chg30
-    ("USDT", "Tether",            "fiat-backed",   "USD", 1.585e11,   4, 0.10,  0.9,  3.1),
-    ("USDC", "USD Coin",          "fiat-backed",   "USD", 7.42e10,   -2, 0.22,  1.6,  6.4),
-    ("USDe", "Ethena USDe",       "crypto-backed", "USD", 1.11e10,  -31, -0.9, -4.2, -14.8),
-    ("USDS", "Sky Dollar",        "crypto-backed", "USD", 8.9e9,      1, 0.05,  0.4,  2.2),
-    ("PYUSD", "PayPal USD",       "fiat-backed",   "USD", 3.1e9,     -3, 0.31,  2.8,  9.7),
-    ("DAI",  "Dai",               "crypto-backed", "USD", 2.84e9,     6, -0.02, -0.5, -1.9),
-    ("FDUSD", "First Digital USD","fiat-backed",   "USD", 1.42e9,   -18, -0.4, -2.1, -8.3),
-    ("RLUSD", "Ripple USD",       "fiat-backed",   "USD", 1.05e9,     2, 0.9,   5.1, 18.2),
-    ("USD1", "World Liberty USD", "fiat-backed",   "USD", 9.4e8,     -5, 0.1,   0.8,  4.0),
-    ("TUSD", "TrueUSD",           "fiat-backed",   "USD", 4.9e8,   -142, -1.8, -7.4, -27.6),
-    ("USDD", "USDD",              "crypto-backed", "USD", 3.6e8,    -22, -0.3, -1.2, -6.1),
-    ("EURC", "Euro Coin",         "fiat-backed",   "EUR", 2.9e8,   None, 0.4,   2.2,  7.8),
-    ("USDG", "Global Dollar",     "fiat-backed",   "USD", 2.4e8,      1, 0.6,   3.9, 12.4),
-    ("FRAX", "Frax",              "algorithmic",   "USD", 1.9e8,    -14, -0.2, -1.0, -3.3),
-    ("EURS", "STASIS EURO",       "fiat-backed",   "EUR", 1.4e8,   None, 0.0,   0.1,  0.5),
-    ("XSGD", "XSGD",              "fiat-backed",   "SGD", 9.1e7,   None, 0.2,   1.1,  3.0),
-    ("USDX", "Stables Labs USDX", "algorithmic",   "USD", 7.2e7,    -47, -1.1, -5.5, -19.0),
-    ("BUCK", "Bucket USD",        "crypto-backed", "USD", 5.5e7,      8, 0.1,   0.6,  1.4),
+    # symbol, name, mechanism, peg, mcap(USD), dev_bp, chg1, chg7, chg30, icon slug
+    ("USDT", "Tether",            "fiat-backed",   "USD", 1.585e11,   4, 0.10,  0.9,  3.1,  "tether"),
+    ("USDC", "USD Coin",          "fiat-backed",   "USD", 7.42e10,   -2, 0.22,  1.6,  6.4,  "usd-coin"),
+    ("USDe", "Ethena USDe",       "crypto-backed", "USD", 1.11e10,  -31, -0.9, -4.2, -14.8, "ethena-usde"),
+    ("USDS", "Sky Dollar",        "crypto-backed", "USD", 8.9e9,      1, 0.05,  0.4,  2.2,  "sky-dollar"),
+    ("PYUSD", "PayPal USD",       "fiat-backed",   "USD", 3.1e9,     -3, 0.31,  2.8,  9.7,  "paypal-usd"),
+    ("DAI",  "Dai",               "crypto-backed", "USD", 2.84e9,     6, -0.02, -0.5, -1.9, "dai"),
+    ("FDUSD", "First Digital USD","fiat-backed",   "USD", 1.42e9,   -18, -0.4, -2.1, -8.3, "first-digital-usd"),
+    ("RLUSD", "Ripple USD",       "fiat-backed",   "USD", 1.05e9,     2, 0.9,   5.1, 18.2,  "ripple-usd"),
+    ("USD1", "World Liberty USD", "fiat-backed",   "USD", 9.4e8,     -5, 0.1,   0.8,  4.0,  "world-liberty-financial-usd"),
+    ("TUSD", "TrueUSD",           "fiat-backed",   "USD", 4.9e8,   -142, -1.8, -7.4, -27.6, "true-usd"),
+    ("USDD", "USDD",              "crypto-backed", "USD", 3.6e8,    -22, -0.3, -1.2, -6.1,  "usdd"),
+    ("EURC", "Euro Coin",         "fiat-backed",   "EUR", 2.9e8,   None, 0.4,   2.2,  7.8,  "euro-coin"),
+    ("USDG", "Global Dollar",     "fiat-backed",   "USD", 2.4e8,      1, 0.6,   3.9, 12.4,  "global-dollar"),
+    ("FRAX", "Frax",              "algorithmic",   "USD", 1.9e8,    -14, -0.2, -1.0, -3.3,  "frax"),
+    ("EURS", "STASIS EURO",       "fiat-backed",   "EUR", 1.4e8,   None, 0.0,   0.1,  0.5,  "stasis-euro"),
+    ("XSGD", "XSGD",              "fiat-backed",   "SGD", 9.1e7,   None, 0.2,   1.1,  3.0,  "xsgd"),
+    ("USDX", "Stables Labs USDX", "algorithmic",   "USD", 7.2e7,    -47, -1.1, -5.5, -19.0, "stables-labs-usdx"),
+    ("BUCK", "Bucket USD",        "crypto-backed", "USD", 5.5e7,      8, 0.1,   0.6,  1.4,  "bucket-usd"),
 ]
 
 CHAINS = [
@@ -52,8 +57,10 @@ def main():
     out = Path(__file__).resolve().parent.parent / "site" / "data"
     out.mkdir(exist_ok=True)
 
+    issuers = load_issuers()
+
     rows = []
-    for sym, name, mech, cur, mcap, dev, c1, c7, c30 in SPEC:
+    for sym, name, mech, cur, mcap, dev, c1, c7, c30, slug in SPEC:
         peg_g = grade_peg(dev)
         red_g = grade_redemption(c30)
         overall = max(peg_g, red_g, key=lambda g: WORST[g])
@@ -61,6 +68,8 @@ def main():
         picks = random.sample([c for c, _ in CHAINS], 6)
         rows.append({
             "id": str(len(rows) + 1), "name": name, "symbol": sym,
+            "icon_url": icon_url(slug), "icon_slug_basis": "sample",
+            **issuer_fields(sym, issuers),
             "peg_currency": cur, "mechanism": mech,
             "mechanism_ko": MECHANISM_KO.get(mech, mech),
             "circulating": round(mcap, 2), "mcap_usd": round(mcap, 2),
@@ -108,6 +117,11 @@ def main():
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source": "샘플", "source_url": "https://defillama.com/stablecoins",
             "is_sample": True, "thresholds": THRESHOLDS, "asset_count": len(rows),
+            "price_basis": "DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님)",
+            "issuer_source": "etl/issuers.json (수기 관리)",
+            "issuer_unknown_label": UNKNOWN_ISSUER,
+            "icon_note": "샘플의 아이콘 슬러그는 make_sample.py 의 SPEC 에 손으로 적은 값이다. "
+                         "실제 수집은 응답 필드에서만 슬러그를 가져온다.",
         },
         "totals": {
             "circulating_usd": round(total, 2),
@@ -126,16 +140,37 @@ def main():
 
     # 시계열 — 완만한 성장에 변동을 얹은 가짜 곡선
     now = int(datetime.now(timezone.utc).timestamp())
-    pts, v = [], total * 0.62
-    for i in range(365):
-        v *= 1 + 0.0013 + math.sin(i / 29) * 0.0016 + random.gauss(0, 0.0011)
-        pts.append({"t": now - (364 - i) * 86400, "v": round(v, 2)})
-    flow = [{"t": p["t"], "v": round((p["v"] - pts[i - 30]["v"]) / pts[i - 30]["v"] * 100, 3)}
-            for i, p in enumerate(pts) if i >= 30]
+
+    def fake_series(end_value, drift, wave, noise, period):
+        """끝값이 end_value가 되도록 역산해 365일치 곡선을 만든다."""
+        steps = [1 + drift + math.sin(i / period) * wave + random.gauss(0, noise)
+                 for i in range(365)]
+        v, back = end_value, []
+        for s in reversed(steps):
+            back.append(v)
+            v /= s
+        back.reverse()
+        return [{"t": now - (364 - i) * 86400, "v": round(max(x, 1.0), 2)}
+                for i, x in enumerate(back)]
+
+    pts = fake_series(total, 0.0013, 0.0016, 0.0011, 29)
+    flow = net_30d_series(pts)
+
+    # 종목별 시계열 — 화면 드롭다운이 실제 데이터 없이도 동작하도록 상위 종목만 만든다.
+    series = []
+    for r in rows[:SERIES_ASSET_COUNT]:
+        drift = (r["chg_30d"] / 100) / 30  # 30일 변화율을 일간 드리프트로 환산
+        series.append({
+            "id": r["id"], "symbol": r["symbol"], "name": r["name"],
+            "total_circulating": (sp := fake_series(r["mcap_usd"], drift, 0.0022,
+                                                    0.0026, random.randint(17, 41))),
+            "net_30d_pct": net_30d_series(sp),
+        })
 
     (out / "snapshot.json").write_text(json.dumps(snap, ensure_ascii=False,
                                                   separators=(",", ":")), encoding="utf-8")
-    (out / "history.json").write_text(json.dumps({"total_circulating": pts, "net_30d_pct": flow},
+    (out / "history.json").write_text(json.dumps({"total_circulating": pts, "net_30d_pct": flow,
+                                                  "series": series},
                                                  ensure_ascii=False, separators=(",", ":")),
                                       encoding="utf-8")
 
@@ -180,7 +215,10 @@ def main():
         "events": ev[:200],
     }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
+    unknown = sum(1 for r in rows_or_assets if r["issuer"] == UNKNOWN_ISSUER)
     print(f"샘플 생성 완료 — {len(rows_or_assets)}종목 / 총 ${total/1e9:,.1f}B / 동결 {len(ev)}건")
+    print(f"           발행사 대조 {len(rows_or_assets) - unknown}종 확인 / "
+          f"{unknown}종 '{UNKNOWN_ISSUER}' · 종목별 시계열 {len(series)}종")
 
     # ── 김치프리미엄 샘플 ──────────────────────────────────
     PREM_ASSETS = [("BTC", 2.8, 0.3, (1.3e8, 1.7e8)), ("ETH", 1.9, -0.1, (4.5e6, 6.5e6)),
