@@ -31,6 +31,13 @@ jobs:
         run: python etl/fetch.py --probe-watchlist
         continue-on-error: true
 
+      # 실제 원본으로 스냅숏을 임시 폴더에 만들어 보고 요약(시스템 등급·위험점수·
+      # 경보 종목·시장 영향 종목)만 로그로 남긴다. 저장소에는 아무것도 쓰지 않는다.
+      # 산출 방식 변경이 실데이터에서 어떤 결과를 내는지 PR 단계에서 확인하려는 것.
+      - name: 스냅숏 시험 생성 (읽기 전용, 결과는 임시 폴더)
+        run: python etl/fetch.py --out "$RUNNER_TEMP/scw-dryrun"
+        continue-on-error: true
+
       # 국내 원화마켓 USDT·USDC 일별 거래대금(업비트·빗썸·코인원·디지털엑스·고팍스) 응답 확인(쓰기 없음).
       - name: 국내 원화마켓 스테이블코인 거래대금 확인 (읽기 전용)
         run: python etl/fetch_krw_volume.py --probe

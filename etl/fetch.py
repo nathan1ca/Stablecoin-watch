@@ -258,9 +258,15 @@ def yield_bearing_reason(asset: dict, table: dict) -> str | None:
     if mech in YIELD_BEARING_MECHANISMS:
         return "field:pegMechanism"
 
-    if str(asset.get("symbol") or "").strip().upper() in table:
-        return "symbol"
-    return None
+    entry = table.get(str(asset.get("symbol") or "").strip().upper())
+    if entry is None:
+        return None
+    # 심볼은 종목끼리 겹친다(USDA 만 해도 여러 종목). 항목에 defillama_id 가
+    # 있으면 그 ID 의 종목만 제외해, 같은 심볼의 다른 종목의 실제 이탈을 숨기지 않는다.
+    pinned = str((entry or {}).get("defillama_id") or "").strip()
+    if pinned:
+        return "id" if str(asset.get("id", "")).strip() == pinned else None
+    return "symbol"
 
 
 def usd_value_per_unit(price: float | None, cur: str, fx_rates: dict | None) -> tuple[float, str]:
@@ -532,6 +538,8 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
     external_prices = external_prices or {}
     fx_rates = fx_rates or {}
     rows = []
+    # 시장 영향 종목 판정용 규모(액면 기준, 현재·30일 전 중 큰 값). 아래 설명 참고.
+    face_base: dict[str, float] = {}
     for a in assets:
         circ_box = a.get("circulating")
         circ = peg_amount(circ_box)
@@ -584,6 +592,18 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         dev_bp = None
         if peg_price is not None and cur == "USD" and not is_yb:
             dev_bp = round((peg_price - 1.0) * 10_000, 2)
+
+        # 시장 영향 종목 판정은 '시장가 × 현재 수량'이 아니라 '액면가 × max(현재,
+        # 30일 전 수량)'으로 한다. 시장가로 재면 붕괴 중인 종목은 가격·수량이 함께
+        # 줄어 비중 기준 아래로 떨어지고, 정작 가장 위험한 순간에 시스템 판단에서
+        # 빠진다(2022-05 UST 는 며칠 새 $0.3 아래로 떨어졌다).
+        if cur == "USD":
+            face_unit = 1.0
+        elif fx_rates.get(cur):
+            face_unit = 1.0 / fx_rates[cur]
+        else:
+            face_unit = usd_per_unit
+        face_base[str(a.get("id", ""))] = max(circ, prev_m or 0.0) * face_unit
 
         chg_30d = pct_change(circ, prev_m)
         peg_g = grade_peg(dev_bp)
@@ -720,11 +740,22 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
     alerts = [r for r in visible if r["grade"] in ("watch", "breach")]
     alerts.sort(key=lambda r: (-WORST[r["grade"]], -r["mcap_usd"]))
 
-    # 합성 위험점수 입력값
-    peg_devs = [abs(r["dev_bp"]) for r in visible if r["dev_bp"] is not None and not r["yield_bearing"]]
-    max_abs_dev = max(peg_devs) if peg_devs else None
-    reds = [r["chg_30d"] for r in visible if r["chg_30d"] is not None]
-    worst_red = min(reds) if reds else None  # 가장 깊은 순소각
+    # 시장 영향 종목(전체 발행잔액 대비 비중 ≥ systemic_share_pct). 합성점수의
+    # 페그·상환 요소와 시스템 '경보'는 이 종목들만으로 판단한다. 비중이 작은 종목
+    # 하나의 이탈이 시스템 전체를 '경보'로 고정하던 문제(2026-10-07 AP USDA
+    # $70M·비중 0.02% 가 페그 요소를 100으로 고정)를 막는다. 작은 종목의 경보는
+    # 종목 경보(alerts·breach_count)로 그대로 남고 시스템 등급은 '주의'까지 올린다.
+    sys_share = float(THRESHOLDS.get("systemic_share_pct", 1.0))
+    systemic = [r for r in visible
+                if face_base.get(str(r["id"]), r["mcap_usd"]) / total * 100 >= sys_share]
+
+    # 합성 위험점수 입력값 — 어느 종목이 값을 정했는지도 함께 남긴다(화면 설명용).
+    peg_cands = [r for r in systemic if r["dev_bp"] is not None and not r["yield_bearing"]]
+    peg_driver = max(peg_cands, key=lambda r: abs(r["dev_bp"])) if peg_cands else None
+    max_abs_dev = abs(peg_driver["dev_bp"]) if peg_driver else None
+    red_cands = [r for r in systemic if r["chg_30d"] is not None]
+    red_driver = min(red_cands, key=lambda r: r["chg_30d"]) if red_cands else None
+    worst_red = red_driver["chg_30d"] if red_driver else None  # 가장 깊은 순소각
     priced = [r for r in visible if r.get("price_sources", 0) >= 1 and not r["yield_bearing"]]
     degraded_n = sum(1 for r in priced if r.get("price_quality") == "degraded")
     degraded_share = (degraded_n / len(priced)) if priced else 0.0
@@ -738,9 +769,20 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         thr=THRESHOLDS,
     )
 
-    # 시스템 등급 = 개별 경보 + 구조 지표 + 합성 위험점수를 함께 본다
+    risk["systemic_share_pct"] = sys_share
+    risk["systemic_count"] = len(systemic)
+    risk["systemic_coverage_pct"] = round(sum(r["share"] for r in systemic), 2)
+    risk["systemic_basis"] = "액면가 × max(현재, 30일 전 발행량) ÷ 총 발행잔액"
+    risk["drivers"] = {
+        "peg": ({"symbol": peg_driver["symbol"], "dev_bp": peg_driver["dev_bp"]} if peg_driver else None),
+        "redemption": ({"symbol": red_driver["symbol"], "chg_30d": red_driver["chg_30d"]} if red_driver else None),
+    }
+
+    # 시스템 등급 = 시장 영향 종목의 경보 + 구조 지표 + 합성 위험점수를 함께 본다.
+    # 비중이 작은 종목의 경보는 '주의'로만 반영한다(종목 경보 자체는 그대로 표시).
+    systemic_breach = [r for r in systemic if r["grade"] == "breach"]
     system = "sound"
-    if any(r["grade"] == "breach" for r in visible) or risk["grade"] == "breach":
+    if systemic_breach or risk["grade"] == "breach":
         system = "breach"
     elif (alerts or conc["hhi_issuer"] >= THRESHOLDS["hhi_concentrated"]
           or algo_share >= THRESHOLDS["algo_share_watch"] or risk["grade"] == "watch"):
@@ -763,19 +805,21 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "price_crosscheck": "CoinGecko simple/price (상위 스테이블코인)",
             "issuer_source": "etl/issuers.json (수기 관리)",
             "issuer_unknown_label": UNKNOWN_ISSUER,
-            "yield_bearing_source": "etl/yield_bearing.json (수기 관리 — 응답에 구분 필드 없음)",
+            "yield_bearing_source": "DefiLlama 응답의 yieldBearing 필드 우선, 필드로 안 잡히는 종목은 etl/yield_bearing.json (수기 관리)",
             "yield_bearing_note": "이자부 토큰화 상품은 $1 고정이 목표가 아니므로 페그 편차 계산에서 제외한다.",
             "icon_source": ICON_CDN,
             "icon_slug_fields": list(ICON_SLUG_FIELDS),
             "icon_note": "아이콘 슬러그는 응답 필드에서만 가져온다. 필드가 없으면 icon_url 은 "
                          "빈 값이고 화면은 심볼 텍스트만 표시한다(이름을 소문자+하이픈으로 추측하지 않는다).",
             "icon_coverage": f"{sum(1 for r in rows if r['icon_url'])}/{len(rows)}",
-            "risk_methodology": "합성점수 = 페그·상환·집중도·알고리즘비중·가격품질 가중평균 (etl/thresholds.json)",
+            "risk_methodology": "합성점수 = 페그·상환·집중도·알고리즘비중·가격품질 가중평균 (etl/thresholds.json). "
+                                f"페그·상환 요소와 시스템 '경보'는 시장 비중 {sys_share:g}% 이상 종목만으로 판단",
         },
         "totals": {
             "circulating_usd": round(total, 2),
             "net_1d_usd": round(total_1d, 2),
             "breach_count": sum(1 for r in visible if r["grade"] == "breach"),
+            "systemic_breach_count": len(systemic_breach),
             "watch_count": sum(1 for r in visible if r["grade"] == "watch"),
             "system_grade": system,
             "risk_score": risk["score"],
@@ -1179,6 +1223,15 @@ def main():
     print(f"       위험점수 {t.get('risk_score', '—')} ({t.get('risk_grade', '—')}) "
           f"/ 가격품질 저하 {t.get('price_degraded_count', 0)}종")
     print(f"       HHI(발행사) {snap['concentration']['hhi_issuer']:,.0f}")
+    rk = snap["risk"]
+    drv = rk.get("drivers") or {}
+    print(f"       시장 영향 종목(비중 ≥ {rk.get('systemic_share_pct')}%): {rk.get('systemic_count')}종 "
+          f"(합계 비중 {rk.get('systemic_coverage_pct')}%), 그중 경보 {t.get('systemic_breach_count', 0)}건 "
+          f"/ 페그 요소 기준 {(drv.get('peg') or {}).get('symbol', '—')} "
+          f"/ 상환 요소 기준 {(drv.get('redemption') or {}).get('symbol', '—')}")
+    print("       경보·주의 상위: " + ", ".join(
+        f"{a['symbol']}({a['grade']}, {a.get('dev_bp')}bp, 30일 {a.get('chg_30d')}%)"
+        for a in snap["alerts"][:6]))
     unknown = sum(1 for r in snap["assets"] if r["issuer"] == UNKNOWN_ISSUER)
     print(f"       발행사 대조: {len(snap['assets']) - unknown}/{len(snap['assets'])}종 확인, "
           f"{unknown}종 '{UNKNOWN_ISSUER}' (etl/issuers.json 에 채우면 줄어든다)")
