@@ -162,7 +162,11 @@ def collect(cfg: dict, now: datetime | None = None, fetch=fetch_bytes) -> dict:
             feeds_status.append(st)
             print(f"  {f['id']}: 실패 — {st['error']}", file=sys.stderr)
             continue
-        for it in raw_items:
+        kept = 0
+        cap = int(f.get("max", 10**6))
+        for it in sorted(raw_items, key=lambda x: x["published"] or since, reverse=True):
+            if kept >= cap:
+                break
             pub = it["published"]
             if pub is None or pub < since or pub > now + timedelta(hours=1):
                 continue
@@ -184,6 +188,7 @@ def collect(cfg: dict, now: datetime | None = None, fetch=fetch_bytes) -> dict:
                 "published": pub.astimezone(timezone.utc).isoformat(timespec="seconds"),
             })
             st["count"] += 1
+            kept += 1
         feeds_status.append(st)
 
     items.sort(key=lambda x: x["published"], reverse=True)

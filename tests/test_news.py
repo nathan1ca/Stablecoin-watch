@@ -121,6 +121,11 @@ class TestCollect(unittest.TestCase):
         for i in self.d["items"]:
             self.assertEqual(set(i), {"title", "link", "source", "feed", "category", "published"})
 
+    def test_per_feed_cap_keeps_newest(self):
+        cfg = dict(CFG, feeds=[{"id": "fed", "category": "reg_global", "url": "f", "filter": False, "max": 1}])
+        d = fn.collect(cfg, now=NOW, fetch=fake_fetch)
+        self.assertEqual([i["title"] for i in d["items"]], ["Federal Reserve Board announces interest rates"])
+
     def test_repo_config_loads(self):
         cfg = fn.load_cfg()
         self.assertTrue(cfg["feeds"])

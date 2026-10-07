@@ -85,6 +85,7 @@
       <button type="button" class="tab-btn" role="tab" id="tab-premium" aria-controls="panel-premium" aria-selected="false" tabindex="-1">김치프리미엄</button>
       <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">원화 거래대금</button>
       <button type="button" class="tab-btn" role="tab" id="tab-attest" aria-controls="panel-attest" aria-selected="false" tabindex="-1">어테스테이션</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-news" aria-controls="panel-news" aria-selected="false" tabindex="-1">뉴스 24시간</button>
       <button type="button" class="tab-btn" role="tab" id="tab-method" aria-controls="panel-method" aria-selected="false" tabindex="-1">방법론</button>
     </div>
   </div>
@@ -542,6 +543,32 @@
 
 </div>
 
+<div class="tabpanel" id="panel-news" role="tabpanel" aria-labelledby="tab-news" tabindex="0" hidden>
+
+<section class="wrap block" id="news-sec" aria-labelledby="h-news" hidden>
+  <div class="block-head">
+    <h2 id="h-news">최근 24시간 뉴스·당국 발표</h2>
+    <p class="lead-stat" id="lead-news" hidden></p>
+    <p>공개 RSS(새 글 목록 피드)에서 스테이블코인 관련 항목의 제목·출처·시각만 모아 원문 링크로 연결합니다. 기사 본문이나 요약은 가져오지 않으며, 제목 선별은 검색어·키워드 기준이라 관련 없는 기사가 섞이거나 빠질 수 있습니다. 해석이 붙은 요약은 매일 보고서에 따로 정리합니다.</p>
+  </div>
+  <div class="tbl-tools">
+    <div class="chips" role="group" aria-label="뉴스 분류" id="news-chips"></div>
+    <span class="tbl-count" id="news-count" aria-live="polite"></span>
+  </div>
+  <ol class="news-list" id="news-list"></ol>
+  <p class="foot" id="news-basis"></p>
+</section>
+
+<div class="wrap empty-state" id="news-empty">
+  <div class="empty-box">
+    <h3>아직 표시할 데이터가 없습니다</h3>
+    <p>이 데이터는 시크릿 없이 자동으로 생성됩니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “최근 24시간 뉴스 헤드라인 수집” 단계 로그</p>
+  </div>
+</div>
+
+</div>
+
 <div class="tabpanel" id="panel-method" role="tabpanel" aria-labelledby="tab-method" tabindex="0" hidden>
 
 <section class="wrap block method" aria-labelledby="h-method">
@@ -562,6 +589,7 @@
         <li>브릿지된 잔액이 원본과 이중 계상될 여지가 있어 소형 체인 수치는 보수적으로 보아야 합니다.</li>
         <li>집중도 지수는 발행잔액 기준이며, 결제량이나 실사용자 수 기준과는 다른 그림을 줄 수 있습니다.</li>
         <li><strong>감시목록</strong>(<code>etl/watchlist.json</code>): 원화·엔화 스테이블코인처럼 규모는 작아도 국내 논의에 직접 걸리는 종목은 발행잔액 하한과 무관하게 따로 표시합니다. 표시 규칙일 뿐이라 총 발행잔액·HHI(발행사 쏠림 지수)는 원래대로 전 종목 기준이고, 하한 미만 종목은 경보 건수·합성 위험점수에 넣지 않습니다.</li>
+        <li><strong>뉴스 24시간</strong>: Google 뉴스 검색(스테이블코인·원화 스테이블코인·stablecoin)과 한국은행·Fed·ECB·BIS·FSB·SEC·ESMA·CoinDesk·The Block 의 공개 RSS 에서 최근 24시간 항목의 제목·출처·시각·링크만 모읍니다(<code>etl/news_feeds.json</code>). 당국·매체 전체 피드는 키워드로 거르며, 금융위원회 RSS 는 수집 서버(해외)에서 응답하지 않아 빠져 있습니다.</li>
         <li><strong>국경 간 코너 자금흐름(이더리움·XRP) 중단</strong>: 국내·해외 거래소의 공개 이름표 지갑 사이 이체를 세던 지표는 내렸습니다. 이더리움은 이름표 지갑이 실제 입출금 지갑이 아니어서 0건만 잡혔고(2026-10-07), XRP는 거래소 지갑 거래가 너무 많아 조회 한도 안에서 몇 시간치만 잡혔으며 스테이블코인이 아닌 XRP 이체였습니다(2026-10-08). 국내외 자금 이동 압력은 원화 거래대금과 김치프리미엄 탭으로 봅니다.</li>
         <li><strong>시장 영향 종목</strong>: 시스템 등급의 ‘경보’와 합성 위험점수의 페그·상환 요소는 전체 발행잔액의 1% 이상인 종목만으로 판단합니다(<code>etl/thresholds.json</code> 의 <code>systemic</code>). 규모는 시장가가 아니라 액면가로, 지금과 30일 전 발행량 중 큰 값으로 잽니다 — 붕괴 중인 큰 종목이 가격·발행량이 줄었다는 이유로 판단 대상에서 빠지지 않게 하려는 것입니다. 발행잔액이 수천만 달러인 종목 하나의 이탈이 시장 전체를 ‘경보’로 만들지 않게 하려는 것입니다. 작은 종목의 경보는 종목 경보로 그대로 보이고 시스템 등급은 ‘주의’로 올라갑니다. 1%는 EU MiCA의 ‘중요 토큰’ 규모 기준(50억 유로)이나 미국 GENIUS Act의 주(州) 감독 선택 상한(발행잔액 $100억 미만)보다 훨씬 낮게 잡은 값이며, 2022년 UST·2023년 USDC 같은 과거 시스템 사건은 모두 이 기준을 크게 넘습니다.</li>
         <li><strong>이자부 상품 제외</strong>: 이자가 토큰 가격에 쌓이도록 설계된 상품(USYC·USDY·reUSD 등)은 $1에서 멀어지는 것이 정상이라 페그 편차를 재지 않습니다. DefiLlama 응답의 이자부 표시를 먼저 쓰고, 표시가 없는 종목은 발행사 문서로 확인해 <code>etl/yield_bearing.json</code> 에 종목 ID와 함께 적습니다(같은 심볼의 다른 종목은 그대로 잽니다).</li>

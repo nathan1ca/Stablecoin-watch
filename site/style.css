@@ -1192,3 +1192,13 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
 .kv-facts li{line-height:1.6;margin-bottom:.55rem;font-size:.85rem}
 .kv-facts b{color:var(--ink)}
 @media (max-width:760px){ .kv-cols{grid-template-columns:1fr} }
+
+/* ── 최근 24시간 뉴스 ─────────────────────────────── */
+.news-list{list-style:none;margin:.6rem 0 0;padding:0;border-top:1px solid var(--rule)}
+.news-i{display:flex;flex-direction:column;gap:.3rem;padding:.8rem .1rem;border-bottom:1px solid var(--rule-soft)}
+.news-t{color:var(--ink);text-decoration:none;font-size:.95rem;line-height:1.5;overflow-wrap:anywhere}
+.news-t:hover{text-decoration:underline}
+.news-t:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+.news-m{display:flex;flex-wrap:wrap;gap:.25rem .8rem;font-size:.78rem;color:var(--mid)}
+.news-cat{font-weight:600;color:var(--ink)}
+.news-none{padding:1rem .1rem;color:var(--mid);font-size:.88rem}
