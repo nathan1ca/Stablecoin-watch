@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "etl"))
 import fetch_listings as fl  # noqa: E402
 
 CFG = {
-    "exchanges": [{"id": "upbit", "name": "업비트"}, {"id": "bithumb", "name": "빗썸"}, {"id": "korbit", "name": "코빗"}],
+    "exchanges": [{"id": "upbit", "name": "업비트"}, {"id": "bithumb", "name": "빗썸"}, {"id": "digitalx", "name": "디지털엑스"}],
     "deny": {"U"},
     "aliases": {"USDTX": "USDT"},
 }
@@ -48,17 +48,17 @@ class TestParsers(unittest.TestCase):
         with mock.patch.object(fl, "get_json", return_value=r):
             self.assertEqual(fl.fetch_coinone(), [("USDT", "KRW", {})])
 
-    def test_korbit_v2_then_v1(self):
+    def test_digitalx_v2_then_v1(self):
         with mock.patch.object(fl, "get_json", return_value={"data": [{"symbol": "usdc_krw", "status": "launched"},
                                                                      {"symbol": "usdt_krw", "status": "delisted"}]}):
-            self.assertEqual(fl.fetch_korbit(), [("USDC", "KRW", {})])
+            self.assertEqual(fl.fetch_digitalx(), [("USDC", "KRW", {})])
 
         def fake(url, **_):
             if "v2" in url:
                 raise RuntimeError("down")
             return {"usdt_krw": {}, "timestamp": 1}
         with mock.patch.object(fl, "get_json", side_effect=fake):
-            self.assertEqual(fl.fetch_korbit(), [("USDT", "KRW", {})])
+            self.assertEqual(fl.fetch_digitalx(), [("USDT", "KRW", {})])
 
     def test_gopax(self):
         r = [{"name": "USDT-KRW", "baseAsset": "USDT", "quoteAsset": "KRW"}, {"name": "USDC-KRW"}]
@@ -72,7 +72,7 @@ class TestBuild(unittest.TestCase):
             "upbit": [("USDT", "KRW", {"warning": True}), ("USDT", "BTC", {}), ("USDC", "KRW", {}),
                       ("BTC", "KRW", {}), ("U", "KRW", {})],
             "bithumb": [("USDTX", "KRW", {}), ("USDC", "USDT", {})],
-            "korbit": RuntimeError("timeout"),
+            "digitalx": RuntimeError("timeout"),
         }
 
     def test_baseline(self):
@@ -88,13 +88,13 @@ class TestBuild(unittest.TestCase):
         self.assertNotIn("BTC", r["assets"])                    # 대상 밖
         self.assertEqual(r["assets"]["USDC"]["krw_count"], 1)   # 빗썸은 USDT 마켓만
         st = {e["id"]: e["status"] for e in r["meta"]["exchanges"]}
-        self.assertEqual(st, {"upbit": "ok", "bithumb": "ok", "korbit": "fail"})
+        self.assertEqual(st, {"upbit": "ok", "bithumb": "ok", "digitalx": "fail"})
         self.assertEqual(r["first_seen"]["upbit:USDT:KRW"], "2026-10-07")
 
     def test_events(self):
         prev = {
             "first_seen": {"upbit:USDT:KRW": "2026-09-01", "upbit:PYUSD:KRW": "2026-09-01",
-                           "korbit:USDT:KRW": "2026-09-01"},
+                           "digitalx:USDT:KRW": "2026-09-01"},
             "events": [{"date": "2026-09-20", "exchange": "upbit", "symbol": "X", "market": "KRW", "kind": "listed"}],
         }
         r = fl.build_listings(self.raw(), CFG, TRACKED, prev, today="2026-10-08")
@@ -102,14 +102,14 @@ class TestBuild(unittest.TestCase):
         ev = {(e["exchange"], e["symbol"], e["market"], e["kind"]) for e in r["events"] if e["date"] == "2026-10-08"}
         self.assertIn(("upbit", "USDC", "KRW", "listed"), ev)
         self.assertIn(("upbit", "PYUSD", "KRW", "delisted"), ev)
-        # 코빗은 수집 실패 — 종료로 보지 않고 직전 상태를 잇는다
-        self.assertNotIn(("korbit", "USDT", "KRW", "delisted"), ev)
-        self.assertEqual(r["first_seen"]["korbit:USDT:KRW"], "2026-09-01")
-        self.assertNotIn("korbit", r["assets"]["USDT"]["exchanges"])   # 직전 assets 없으면 비움
+        # 디지털엑스는 수집 실패 — 종료로 보지 않고 직전 상태를 잇는다
+        self.assertNotIn(("digitalx", "USDT", "KRW", "delisted"), ev)
+        self.assertEqual(r["first_seen"]["digitalx:USDT:KRW"], "2026-09-01")
+        self.assertNotIn("digitalx", r["assets"]["USDT"]["exchanges"])   # 직전 assets 없으면 비움
 
-        prev["assets"] = {"USDT": {"exchanges": {"korbit": {"markets": ["KRW"], "warning": False}}}}
+        prev["assets"] = {"USDT": {"exchanges": {"digitalx": {"markets": ["KRW"], "warning": False}}}}
         r = fl.build_listings(self.raw(), CFG, TRACKED, prev, today="2026-10-08")
-        self.assertTrue(r["assets"]["USDT"]["exchanges"]["korbit"]["stale"])
+        self.assertTrue(r["assets"]["USDT"]["exchanges"]["digitalx"]["stale"])
         self.assertEqual(r["assets"]["USDT"]["count"], 3)
         self.assertEqual(r["first_seen"]["upbit:USDT:KRW"], "2026-09-01")  # 처음 본 날짜 유지
         self.assertEqual(r["events"][-1]["date"], "2026-09-20")             # 과거 이벤트 보존, 최신순

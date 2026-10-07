@@ -46,12 +46,21 @@
       ]
     },
     {
-      "id": "korbit",
-      "name": "코빗",
-      "operator": "코빗",
-      "url": "https://www.korbit.co.kr",
-      "short": "K",
-      "color": "#1E3A8A"
+      "id": "digitalx",
+      "name": "디지털엑스",
+      "operator": "디지털엑스(옛 코빗, 미래에셋그룹)",
+      "url": "https://digitalx.miraeasset.com",
+      "short": "D",
+      "color": "#043B72",
+      "appstore_term": "디지털엑스",
+      "appstore_seller": [
+        "digital x",
+        "digitalx",
+        "디지털엑스",
+        "korbit",
+        "코빗"
+      ],
+      "note": "2026-08-11 법인명 코빗→디지털엑스, 이후 서비스명·도메인 전환. 마켓 API 는 2026-10-07 기준 api.korbit.co.kr 이 응답."
     },
     {
       "id": "gopax",

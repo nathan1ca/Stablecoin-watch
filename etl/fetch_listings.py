@@ -2,7 +2,7 @@
 """
 스테이블코인 감시 - 국내 거래소 거래지원 현황
 
-국내 원화마켓 거래소 5곳(업비트·빗썸·코인원·코빗·고팍스)의 공개 마켓 목록을
+국내 원화마켓 거래소 5곳(업비트·빗썸·코인원·디지털엑스·고팍스)의 공개 마켓 목록을
 받아, 대시보드에 나오는 스테이블코인이 어느 거래소의 어느 마켓(KRW·BTC·USDT)
 에서 거래되는지 정리한다. API 키가 필요 없다.
 
@@ -16,7 +16,8 @@
   업비트  https://api.upbit.com/v1/market/all
   빗썸    https://api.bithumb.com/v1/market/all (실패 시 public/ticker/ALL_{KRW,BTC,USDT})
   코인원  https://api.coinone.co.kr/public/v2/markets/{KRW}
-  코빗    https://api.korbit.co.kr/v2/currencyPairs (실패 시 v1/ticker/detailed/all)
+  디지털엑스(옛 코빗) https://api.korbit.co.kr/v2/currencyPairs (실패 시 v1/ticker/detailed/all)
+            — 2026-08 사명 변경 후에도 2026-10-07 기준 옛 API 도메인이 응답한다.
   고팍스  https://api.gopax.co.kr/trading-pairs
 """
 
@@ -98,7 +99,7 @@ def fetch_coinone() -> list[tuple[str, str, dict]]:
     return out
 
 
-def fetch_korbit() -> list[tuple[str, str, dict]]:
+def fetch_digitalx() -> list[tuple[str, str, dict]]:
     out = []
     try:
         r = get_json("https://api.korbit.co.kr/v2/currencyPairs", timeout=20)
@@ -110,7 +111,7 @@ def fetch_korbit() -> list[tuple[str, str, dict]]:
                 base, quote = sym.split("_", 1)
                 out.append((base.upper(), quote.upper(), {}))
     except RuntimeError as e:
-        print(f"  코빗 v2 실패({e}) — v1 으로 대체", file=sys.stderr)
+        print(f"  디지털엑스 v2 실패({e}) — v1 으로 대체", file=sys.stderr)
     if out:
         return out
     r = get_json("https://api.korbit.co.kr/v1/ticker/detailed/all", timeout=20)
@@ -120,7 +121,7 @@ def fetch_korbit() -> list[tuple[str, str, dict]]:
                 base, quote = sym.split("_", 1)
                 out.append((base.upper(), quote.upper(), {}))
     if not out:
-        raise RuntimeError("코빗 마켓 목록이 비어 있음")
+        raise RuntimeError("디지털엑스 마켓 목록이 비어 있음")
     return out
 
 
@@ -143,7 +144,7 @@ FETCHERS = {
     "upbit": fetch_upbit,
     "bithumb": fetch_bithumb,
     "coinone": fetch_coinone,
-    "korbit": fetch_korbit,
+    "digitalx": fetch_digitalx,
     "gopax": fetch_gopax,
 }
 
@@ -248,7 +249,7 @@ def build_listings(raw: dict[str, list | Exception], cfg: dict, tracked: set[str
             "exchanges": ex_meta,
             "tracked_count": len(tracked),
             "baseline": baseline,
-            "source": "업비트·빗썸·코인원·코빗·고팍스 공개 마켓 API",
+            "source": "업비트·빗썸·코인원·디지털엑스·고팍스 공개 마켓 API",
             "note": "거래소 티커와 DefiLlama 심볼이 같으면 같은 종목으로 본다(동명 티커 위험이 큰 심볼은 제외). "
                     "거래지원 시작·종료는 이 수집이 처음 본 날짜 기준이며, 거래소 공지일과 다를 수 있다.",
         },
@@ -345,8 +346,8 @@ def icon_candidates(ex: dict, log: list | None = None) -> list[str]:
     base = str(ex.get("url") or "").rstrip("/") + "/"
     cands = list(ex.get("icon_urls") or [])
     if ex.get("icon_source") == "appstore":
-        cands += appstore_icon_urls(ex, log)
-    elif ex.get("url"):
+        return list(dict.fromkeys(cands + appstore_icon_urls(ex, log)))
+    if ex.get("url"):
         try:
             html = fetch_bytes(base, limit=1_500_000).decode("utf-8", "replace")
             cands += find_icon_links(html, base)
@@ -354,6 +355,9 @@ def icon_candidates(ex: dict, log: list | None = None) -> list[str]:
             if log is not None:
                 log.append(f"홈페이지 읽기 실패({e})")
         cands += [urljoin(base, "apple-touch-icon.png"), urljoin(base, "favicon.ico")]
+    # 홈페이지 후보가 모두 실패할 때를 위해 앱스토어 공식 앱 아이콘을 맨 뒤에 둔다(설정이 있을 때만).
+    if ex.get("appstore_term"):
+        cands += appstore_icon_urls(ex, log)
     seen, out = set(), []
     for u in cands:
         if u not in seen:
