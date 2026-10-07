@@ -2,6 +2,12 @@
 
 매일 자동 점검이 처리한 항목과 남은 백로그. 최신이 위.
 
+## 2026-10-07 (5) 데스크톱 글꼴 Pretendard (auto/2026-10-07-5)
+
+- 768px 이상에서만 Pretendard(한글·숫자, 숫자는 고정폭 tnum). 휴대폰은 기존 IBM Plex Sans KR + IBM Plex Mono 유지(네이선 선택 C안).
+- 원인: IBM Plex Mono 에 한글이 없어 탭·라벨의 한글이 OS 기본 글꼴(윈도우 맑은 고딕)로 대체되며 자간이 벌어져 보였다.
+- 글꼴은 jsDelivr CDN 의 Pretendard v1.3.9 동적 서브셋(media 조건으로 휴대폰은 내려받지 않음). CDN 실패 시 기존 글꼴로 대체.
+
 ## 2026-10-07 (4) 참고 사례 기반 UI 개편 (auto/2026-10-07-4)
 
 참고: Visa Onchain Analytics·rwa.xyz·DefiLlama(스테이블코인 분석 화면), 영란은행 금융안정보고서(서술형 차트 제목·요약 상자), 영국 정부 통계 차트·대시보드 지침, Datawrapper 텍스트 지침.
