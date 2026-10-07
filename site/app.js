@@ -1852,6 +1852,30 @@
     })));
   }
 
+  // ── 오늘의 뉴스 요약(사람 검토 후 게시) ─────────────────────
+  // site/digest/news_digest.json — 매일 점검이 쓰고 PR 검토를 거쳐 들어온다.
+  function renderDigest(g) {
+    if (!g || !Array.isArray(g.sections)) return;
+    $("#digest-sec").hidden = false;
+    $("#news-empty").hidden = true;
+    const ageH = (Date.now() - new Date(g.written_at).getTime()) / 3600000;
+    $("#digest-headline").textContent = g.headline || "";
+    $("#digest-meta").innerHTML = `${esc(fmtTime(g.written_at))} 작성 · 대상 ${esc(fmtTime(g.window.from))} ~ ${esc(fmtTime(g.window.to))} · ${esc(g.author || "")}`
+      + (ageH > 36 ? ` <span class="stamp-age is-stale">${Math.floor(ageH / 24)}일 전 요약 — 새 요약 검토 대기</span>` : "");
+    const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "#");
+    $("#digest-body").innerHTML = g.sections.map((sct) => `<div class="dg-sec">
+      <h3>${esc(sct.label || sct.category)}</h3>
+      ${(sct.items || []).length ? `<ul class="dg-list">${sct.items.map((it) => `<li class="dg-i">
+        <p class="dg-t">${esc(it.title)}${it.confidence ? ` <span class="dg-conf${/미확인/.test(it.confidence) ? " is-weak" : ""}">${esc(it.confidence)}</span>` : ""}</p>
+        <p class="dg-s">${esc(it.summary)}</p>
+        ${it.why ? `<p class="dg-w"><b>감독 관점</b> ${esc(it.why)}</p>` : ""}
+        <p class="dg-src">${(it.sources || []).map((x) => `<a href="${esc(safeUrl(x.url))}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join(" · ")}</p>
+      </li>`).join("")}</ul>` : `<p class="dg-none">${esc(sct.empty_note || "해당 항목 없음")}</p>`}
+    </div>`).join("")
+      + (g.dashboard_link ? `<p class="dg-link"><b>대시보드 지표와의 연결</b> ${esc(g.dashboard_link)}</p>` : "");
+    $("#digest-caveat").textContent = g.caveats || "";
+  }
+
   // ── 최근 24시간 뉴스 ─────────────────────────────────────
   // 제목·출처·시각·링크만 보여 준다(본문·요약은 수집하지 않는다).
   function renderNews(n) {
@@ -2224,6 +2248,14 @@
       if (r.ok) renderListings(await r.json(), snap);
     } catch (e) {
       console.info("listings.json 없음 — 국내 거래지원 표시 생략");
+    }
+
+    // 오늘의 뉴스 요약(사람 검토 후 게시)
+    try {
+      const r = await fetch("digest/news_digest.json", { cache: "no-cache" });
+      if (r.ok) renderDigest(await r.json());
+    } catch (e) {
+      console.info("news_digest.json 없음 — 뉴스 요약 생략");
     }
 
     // 최근 24시간 뉴스 헤드라인(RSS, 키 불필요)

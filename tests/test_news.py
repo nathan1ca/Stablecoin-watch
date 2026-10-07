@@ -134,5 +134,34 @@ class TestCollect(unittest.TestCase):
             self.assertTrue(f["url"].startswith("https://"))
 
 
+class TestDigestFile(unittest.TestCase):
+    """site/digest/news_digest.json — 매일 점검이 쓰고 PR 검토로 들어오는 요약 파일 형식."""
+
+    def setUp(self):
+        import json
+        p = Path(__file__).resolve().parents[1] / "site" / "digest" / "news_digest.json"
+        self.d = json.loads(p.read_text(encoding="utf-8"))
+
+    def test_required_fields(self):
+        for k in ("written_at", "window", "headline", "sections", "caveats"):
+            self.assertIn(k, self.d)
+        self.assertIsNotNone(fn.parse_date(self.d["written_at"]))
+        self.assertLess(fn.parse_date(self.d["window"]["from"]), fn.parse_date(self.d["window"]["to"]))
+
+    def test_items_have_https_sources_and_confidence(self):
+        for sct in self.d["sections"]:
+            self.assertIn("label", sct)
+            if not sct["items"]:
+                self.assertTrue(sct.get("empty_note"))
+            for it in sct["items"]:
+                for k in ("title", "summary", "confidence", "sources"):
+                    self.assertTrue(it.get(k), k)
+                for src in it["sources"]:
+                    self.assertTrue(src["url"].startswith("https://"))
+
+    def test_disclaimer_kept(self):
+        self.assertIn("공식 견해", self.d["caveats"])
+
+
 if __name__ == "__main__":
     unittest.main()
