@@ -18,4 +18,4 @@
 5. 원화·엔화 직접 호가(거래소 KRW·JPY 마켓)로 환율 시차 없는 페그 측정.
 6. 어테스테이션 수동 데이터 기준일 점검(etl/attestations.json).
 
-**보고서**: (드라이브 링크는 PR 본문 참조)
+**보고서**: [2026-10-07 스테이블코인 대시보드 보완 보고서](https://docs.google.com/document/d/1lHRpCheiCToA-JnMKC_Gkh3oe1TSkf-jxO1tLIQpLGo/edit) · PR #10
