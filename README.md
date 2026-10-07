@@ -39,6 +39,8 @@ etl/fetch_freeze.py     발행사 동결·소각 조치 (Etherscan, 선택)
 etl/fetch_premium.py    김치프리미엄 (키 불필요)
 etl/fetch_flow.py       국경 간 온체인 코너 자금흐름 · 이더리움 (Etherscan, 선택)
 etl/fetch_flow_xrp.py   국경 간 온체인 코너 자금흐름 · XRP Ledger (키 불필요)
+etl/watchlist.json     감시목록 — 시총 하한과 무관하게 항상 표시할 원화·엔화 스테이블코인 (손으로 갱신)
+etl/lib/fx.py           Frankfurter 환율 · 비달러 페그의 자기 통화 기준 편차
 etl/attestations.json   어테스테이션 원본 데이터 (손으로 갱신)
 etl/fetch_attestation.py 어테스테이션 시차 계산
 etl/live_loop.py        상시 실행 루프 (실시간 갱신용, 선택)

@@ -495,6 +495,33 @@ tbody tr:hover{background:#fff}
   .empty-box{padding:1.6rem 1.1rem}
 }
 
+/* ── 감시목록 (원화·엔화 스테이블코인) ─────────────────────
+   위 계기판과 같은 행 구조(.grow)를 쓰고, 다른 점만 여기 둔다:
+   허용 띠가 환율 시차만큼 넓고(.gband-fx), 저유동 종목 표식은 속이 빈 마름모. */
+.watch-sub{margin-top:2rem;padding-top:1.4rem;border-top:1px dashed var(--rule)}
+.watch-h{font-size:.8rem;font-family:var(--mono);letter-spacing:.08em;color:var(--mid);
+  margin:0 0 .5rem;font-weight:500}
+.watch-tag{display:inline-block;margin-left:.4rem;padding:.05rem .45rem;font-size:.62rem;
+  letter-spacing:.04em;border:1px solid var(--rule);color:var(--dim);vertical-align:.1em}
+.gcur{font-family:var(--mono);font-size:.62rem;color:var(--dim);margin-left:.15rem}
+.gband.gband-fx{background:#12405810;outline:1px dashed #12405830;outline-offset:-1px}
+.gmark.hollow{background:transparent;border:1.5px solid currentColor}
+.watch-notes{margin:.6rem 0 0;padding-left:1.1rem;display:grid;gap:.3rem}
+.watch-notes[hidden]{display:none}
+tbody.tgroup-body[hidden]{display:none}
+tr.tgroup th{
+  font-family:var(--mono);font-size:.66rem;font-weight:500;letter-spacing:.05em;color:var(--mid);
+  text-transform:none;background:var(--paper);border-top:1px solid var(--rule);
+  white-space:normal;position:static;
+}
+.bar-tag{display:inline-block;margin-left:.35rem;padding:0 .3rem;font-family:var(--mono);
+  font-size:.58rem;letter-spacing:.04em;color:var(--petrol);border:1px solid currentColor;vertical-align:.12em}
+html[data-theme="dark"] .gband.gband-fx{background:#7aa7c418;outline-color:#7aa7c440}
+html[data-theme="dark"] .bar-tag{color:#7aa7c4}
+@media (max-width:620px){
+  .gcur{display:none}
+}
+
 /* ── print (A4 배포용) ────────────────────────────────── */
 @media print{
   @page{size:A4;margin:14mm}

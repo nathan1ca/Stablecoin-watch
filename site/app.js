@@ -15,6 +15,34 @@
     if (a >= 1e6) return (n / 1e6).toFixed(0) + "M";
     return n.toFixed(0);
   };
+  // 감시목록·소형 통화용. 백만 달러 아래도 읽히게 K 단위를 쓴다.
+  const usdC = (n) => {
+    if (n == null || !isFinite(n)) return "—";
+    if (Math.abs(n) >= 1e6) return usd(n);
+    if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1) + "K";
+    return n.toFixed(0);
+  };
+  // 점유율. 0.1% 미만은 유효숫자 두 자리로, 0.001% 미만은 부등호로.
+  const shareTxt = (v, amount) => {
+    if (v == null || !isFinite(v)) return "—";
+    if (v === 0) return amount > 0 ? "<0.001%" : "0%";
+    if (v < 0.001) return "<0.001%";
+    if (v < 0.1) return Number(v.toPrecision(2)) + "%";
+    return v.toFixed(1) + "%";
+  };
+  // 자기 통화 금액. 원·엔은 만·억 단위로 읽는 편이 직관적이다.
+  const CUR_SIGN = { KRW: "₩", JPY: "¥" };
+  const localAmt = (n, cur) => {
+    if (n == null || !isFinite(n)) return "—";
+    const sign = CUR_SIGN[cur] || "";
+    const tail = sign ? "" : " " + cur;
+    const a = Math.abs(n);
+    let body;
+    if (a >= 1e8) body = (n / 1e8).toFixed(a >= 1e10 ? 0 : 1) + "억";
+    else if (a >= 1e4) body = Math.round(n / 1e4).toLocaleString("ko-KR") + "만";
+    else body = Math.round(n).toLocaleString("ko-KR");
+    return sign + body + tail;
+  };
   const signed = (n, d = 2, suf = "") =>
     n == null || !isFinite(n) ? "—" : (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(d) + suf;
   const pct = (n, d = 2) => (n == null ? "—" : n.toFixed(d) + "%");
@@ -216,6 +244,110 @@
     }
   }
 
+  // ── 감시목록 (원화·엔화 스테이블코인) ──────────────────
+  // ETL(etl/watchlist.json)이 시총 하한과 무관하게 골라 준 종목. 편차는 자기
+  // 통화 기준(dev_bp_local)이고 등급 허용폭은 meta 의 peg_watch_bp/peg_breach_bp.
+  let WATCH_ROWS = [];
+
+  const chainMix = (a) => {
+    const ch = a.chains || [];
+    const tot = ch.reduce((s, c) => s + (c.amount || 0), 0);
+    if (!tot) return "";
+    const top = ch.slice(0, 4).map((c) => `${c.chain} ${Math.round(c.amount / tot * 100)}%`);
+    const rest = (a.chain_count || ch.length) - top.length;
+    return top.join(" · ") + (rest > 0 ? ` 외 ${rest}` : "");
+  };
+
+  function renderWatchlist(d) {
+    const w = d.watchlist;
+    const wrap = $("#watch-wrap");
+    const tb = $("#tbl-watch");
+    if (!w || !w.rows || !w.rows.length) {
+      if (wrap) wrap.hidden = true;
+      if (tb) tb.hidden = true;
+      WATCH_ROWS = [];
+      return;
+    }
+    const m = w.meta || {};
+    const rows = w.rows;
+    WATCH_ROWS = rows;
+    const pos = (bp) => 50 + (clamp(bp, -SCALE_BP, SCALE_BP) / SCALE_BP) * 50;
+    const icons = hasIcons(rows);
+    const list = $("#watch-gauge");
+    list.classList.toggle("has-icons", icons);
+    const wb = m.peg_watch_bp ?? 75;
+    const band = `<i class="gband gband-fx" style="left:${pos(-wb)}%;width:${pos(wb) - pos(-wb)}%"></i>`;
+
+    list.innerHTML = rows.map((a, i) => {
+      const ok = a.status === "ok";
+      const dev = ok ? a.dev_bp_local : null;
+      const has = dev != null;
+      const thin = a.price_reliability === "low";
+      const g = ok ? (a.grade_peg_local || "unknown") : "unknown";
+      const p = has ? pos(dev) : 50;
+      const barL = Math.min(50, p), barW = Math.abs(p - 50);
+      const ticks = [-100, -50, 50, 100].map((b) => `<i class="gtick" style="left:${pos(b)}%"></i>`).join("");
+      const label = has
+        ? `${a.symbol} 자기 통화 기준 페그 편차 ${signed(dev, 1)}bp${thin ? " (저유동 — 등급 미부여)" : ""}`
+        : `${a.symbol} ${ok ? "편차 측정 불가" : "원 데이터에 없음"}`;
+      return `<li class="grow grow-asset grow-watch">
+        <span class="gsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="gsym sym-btn"
+          data-i="${i}" aria-expanded="false"
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="gcur">${esc(a.peg_currency)}</span></span>
+        <span class="gstrip" role="img" aria-label="${esc(label)}">
+          ${band}${ticks}<i class="gdatum"></i>
+          ${has ? `<i class="gbar is-${g}" style="left:${barL}%;width:${barW}%"></i>
+          <i class="gmark is-${g}${thin ? " hollow" : ""}" style="left:${p}%"></i>` : ""}
+        </span>
+        <span class="gval t-${g}${has ? "" : " na"}"${thin ? ' title="유통액이 작아 가격 신뢰도가 낮습니다 — 등급 미부여"' : ""}>${
+          has ? signed(dev, 1) + (thin ? "*" : "") : ok ? "—" : "미수집"}</span>
+      </li>`;
+    }).join("");
+
+    const fx = m.fx_rates || {};
+    const fxTxt = Object.keys(fx).filter((c) => rows.some((r) => r.peg_currency === c))
+      .map((c) => `USD/${c} ${Number(fx[c]).toLocaleString("en-US", { maximumFractionDigits: 2 })}`).join(" · ");
+    $("#watch-basis").textContent =
+      `가격: DefiLlama · 환율: Frankfurter 기준환율${m.fx_date ? " (" + m.fx_date + ")" : ""}${fxTxt ? " " + fxTxt : ""}`
+      + ` · 주의 ±${wb}bp · 경보 ±${m.peg_breach_bp ?? 150}bp`;
+
+    const notes = [];
+    rows.forEach((a) => {
+      if (a.status !== "ok") notes.push(`<li><strong>${esc(a.symbol)}</strong> — 원 데이터(DefiLlama)에서 찾지 못했습니다. ${esc(a.status_note || "")}</li>`);
+      if (a.data_caveat) notes.push(`<li><strong>${esc(a.symbol)}</strong> — ${esc(a.data_caveat)}</li>`);
+      else if (a.status_note && a.status === "ok") notes.push(`<li><strong>${esc(a.symbol)}</strong> — ${esc(a.status_note)}</li>`);
+    });
+    if (rows.some((a) => a.price_reliability === "low"))
+      notes.push(`<li>* 유통액 $${usdC(m.min_reliable_mcap_usd ?? 1e6)} 미만 — 가격이 시장에서 매겨진 값인지 믿기 어려워 등급을 매기지 않습니다.</li>`);
+    const nEl = $("#watch-notes");
+    nEl.innerHTML = notes.join("");
+    nEl.hidden = !notes.length;
+    wrap.hidden = false;
+
+    // 종목별 현황 표 맨 아래 묶음
+    tb.innerHTML = `<tr class="tgroup"><th colspan="9" scope="rowgroup">감시목록 — 발행잔액 하한 미만이어도 항상 표시 · 편차는 자기 통화 기준</th></tr>`
+      + rows.map((a, i) => {
+        const ok = a.status === "ok";
+        const g = ok ? (a.grade_peg_local || "unknown") : "unknown";
+        const thin = a.price_reliability === "low";
+        return `<tr>
+        <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
+            data-i="${i}" aria-expanded="false"
+            aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || a.label || "")}</span></span></td>
+        <td>${ok ? esc(a.mechanism_ko) : "—"}</td>
+        <td>${esc(a.peg_currency)}</td>
+        <td class="num" title="${ok ? esc(localAmt(a.circulating, a.peg_currency)) : ""}">${ok ? "$" + usdC(a.mcap_usd) : "—"}</td>
+        <td class="num">${ok ? shareTxt(a.share, a.mcap_usd) : "—"}</td>
+        <td class="num t-${g}"${thin ? ' title="유통액이 작아 가격 신뢰도가 낮습니다 — 등급 미부여"' : ""}>${
+          ok && a.dev_bp_local != null ? signed(a.dev_bp_local, 1) + (thin ? "*" : "") : "—"}</td>
+        <td class="num">${ok ? signed(a.chg_7d, 1, "%") : "—"}</td>
+        <td class="num t-${ok ? a.grade_redemption : "unknown"}">${ok ? signed(a.chg_30d, 1, "%") : "—"}</td>
+        <td><span class="pill is-${a.grade} t-${a.grade}">${ok ? GRADE_KO[a.grade] : "미수집"}</span></td>
+      </tr>`;
+      }).join("");
+    tb.hidden = false;
+  }
+
   // ── 종목 개요 패널 (호버 / 탭 / 키보드) ───────────────────
   // 계기판 행과 "종목별 현황" 표 행이 같은 패널·같은 규칙을 쓴다. 여는 조건과
   // 위치 보정은 전부 여기 한 곳에만 있고, 붙는 자리마다 bindAssetPop 으로
@@ -265,9 +397,26 @@
     $("#ap-country").textContent = a.issuer_country || "확인 필요";
     $("#ap-mcap").textContent = "$" + usd(a.mcap_usd);
     $("#ap-share").textContent = a.share != null ? a.share.toFixed(2) + "%" : "—";
+    // 감시목록 행에만 있는 값: 자기 통화 가격·편차와 체인별 분포
+    const isW = a.watch_key != null;
+    const setOpt = (id, text) => {
+      const show = isW && text;
+      $("#" + id).textContent = text || "—";
+      $("#" + id).hidden = !show;
+      $("#" + id + "-k").hidden = !show;
+    };
+    if (isW) {
+      $("#ap-mcap").textContent = "$" + usdC(a.mcap_usd) + " (" + localAmt(a.circulating, a.peg_currency) + ")";
+      $("#ap-share").textContent = shareTxt(a.share, a.mcap_usd);
+    }
+    setOpt("ap-peg", isW && a.price_local != null
+      ? `${(CUR_SIGN[a.peg_currency] || "")}${a.price_local.toFixed(4)} (${signed(a.dev_bp_local, 1)}bp)`
+      : "");
+    setOpt("ap-chain", isW ? chainMix(a) : "");
+    const noteTxt = [a.issuer_note, isW ? a.data_caveat : ""].filter(Boolean).join(" ");
     const note = $("#ap-note");
-    note.textContent = a.issuer_note || "";
-    note.hidden = !a.issuer_note;
+    note.textContent = noteTxt;
+    note.hidden = !noteTxt;
 
     pop.hidden = false;
     trig.setAttribute("aria-expanded", "true");
@@ -348,6 +497,8 @@
 
     bindAssetPop($("#gauge-list"), (t) => GAUGE_ROWS[Number(t.dataset.i)], (t) => t.closest("li"));
     bindAssetPop($("#tbl tbody"), (t) => TABLE_ROWS[Number(t.dataset.i)], null);
+    bindAssetPop($("#watch-gauge"), (t) => WATCH_ROWS[Number(t.dataset.i)], (t) => t.closest("li"));
+    bindAssetPop($("#tbl-watch"), (t) => WATCH_ROWS[Number(t.dataset.i)], null);
   }
 
   // ── SVG 라인차트 ────────────────────────────────────────
@@ -750,9 +901,9 @@
   // ── 막대 ────────────────────────────────────────────────
   function bars(el, items, max) {
     const m = max || Math.max(...items.map((i) => i.share), 1);
-    el.innerHTML = items.map((i) => `<div class="bar-r${i.algo ? " algo" : ""}">
-      <span class="bar-l">${i.label}</span>
-      <span class="bar-n">${i.share.toFixed(1)}%<span style="color:var(--dim)"> · $${usd(i.amount)}</span></span>
+    el.innerHTML = items.map((i) => `<div class="bar-r${i.algo ? " algo" : ""}${i.pinned ? " pinned" : ""}">
+      <span class="bar-l">${esc(i.label)}${i.pinned ? '<span class="bar-tag">감시</span>' : ""}</span>
+      <span class="bar-n">${shareTxt(i.share, i.amount)}<span style="color:var(--dim)"> · $${usdC(i.amount)}</span></span>
       <span class="bar-t"><span class="bar-f" style="width:${(i.share / m * 100).toFixed(1)}%"></span></span>
     </div>`).join("");
   }
@@ -780,9 +931,11 @@
     </tr>`).join("");
   }
 
-  function renderThresholds(t) {
+  function renderThresholds(t, wm) {
     const items = [
       ["페그 편차", `주의 ±${t.peg_watch_bp}bp · 경보 ±${t.peg_breach_bp}bp`],
+      ...(wm ? [["감시목록 페그 편차(엔·원 기준)",
+        `주의 ±${wm.peg_watch_bp}bp · 경보 ±${wm.peg_breach_bp}bp (환율 시차 허용 ${wm.fx_lag_tolerance_bp}bp 포함) · 유통액 $${usdC(wm.min_reliable_mcap_usd)} 미만은 등급 미부여`]] : []),
       ["30일 순증감률", `주의 ${t.redemption_watch}% · 경보 ${t.redemption_breach}%`],
       ["발행사 집중도", `HHI ${t.hhi_concentrated.toLocaleString()} 초과 시 고집중`],
       ["알고리즘형 비중", `${t.algo_share_watch}% 초과 시 주의`],
@@ -1118,17 +1271,33 @@
     renderStatus(snap);
     renderGauge(snap);
     renderTable(snap);
+    renderWatchlist(snap);
     initAssetPop(); // 계기판·표를 다 그린 뒤 한 번만 건다
 
-    renderThresholds(snap.meta.thresholds);
+    renderThresholds(snap.meta.thresholds, snap.watchlist && snap.watchlist.meta);
     initTrend(hist);
 
     bars($("#mech-bars"), snap.by_mechanism.map((m) => ({
       label: m.label, share: m.share, amount: m.amount, algo: m.mechanism === "algorithmic",
     })));
-    bars($("#cur-bars"), snap.by_peg_currency.slice(0, 6).map((c) => ({
+    // 상위 6개 통화 + 감시 통화(KRW·JPY)는 규모와 관계없이 항상 보인다.
+    const pinned = (snap.watchlist && snap.watchlist.meta && snap.watchlist.meta.pinned_currencies) || [];
+    const curTop = snap.by_peg_currency.slice(0, 6);
+    pinned.forEach((cur) => {
+      if (curTop.some((c) => c.currency === cur)) return;
+      const hit = snap.by_peg_currency.find((c) => c.currency === cur);
+      curTop.push(hit ? { ...hit, pinned: true } : { currency: cur, share: 0, amount: 0, pinned: true });
+    });
+    bars($("#cur-bars"), curTop.map((c) => ({
       label: c.currency, share: c.share, amount: c.amount,
+      pinned: c.pinned || pinned.includes(c.currency),
     })));
+    const uv = snap.unvalued, uvEl = $("#cur-unvalued");
+    if (uvEl && uv && uv.count) {
+      const tops = (uv.top || []).slice(0, 3).map((u) => `${u.symbol}(${u.peg_currency} ${localAmt(u.circulating, u.peg_currency).replace(" " + u.peg_currency, "")})`);
+      uvEl.textContent = `가격·환율이 없어 USD 환산과 위 비중에서 뺀 종목 ${uv.count}종: ${tops.join(", ")}${uv.count > 3 ? " 등" : ""}.`;
+      uvEl.hidden = false;
+    }
     bars($("#chain-bars"), snap.by_chain.slice(0, 8).map((c) => ({
       label: c.chain, share: c.share, amount: c.amount,
     })));

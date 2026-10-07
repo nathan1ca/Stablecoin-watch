@@ -1,0 +1,32 @@
+name: 검증 (PR·작업 브랜치)
+
+# main 이 아닌 브랜치에 push 하면 돈다. main 은 매시 데이터 봇이 커밋하므로
+# 여기서 제외한다(배포는 etl.yml 담당). 이 워크플로는 읽기 전용이다:
+# 데이터를 커밋하지도, 사이트를 배포하지도 않는다.
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 표준 라이브러리만 쓰므로 설치할 것이 없다.
+      - name: 단위 테스트
+        run: python -m unittest discover -s tests -v
+
+      # 감시목록(원화·엔화 스테이블코인) 종목이 원본 API 에 어떤 id·pegType 으로
+      # 들어 있는지 로그로 남긴다. 외부 API 장애로 PR 이 빨개지지 않도록 실패를 허용한다.
+      - name: 감시목록 원본 확인 (읽기 전용)
+        run: python etl/fetch.py --probe-watchlist
+        continue-on-error: true
