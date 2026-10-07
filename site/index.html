@@ -61,10 +61,14 @@
   </div>
   <div class="figs">
     <div class="fig"><p class="fig-k"><span class="fig-tag">TOTAL</span>총 발행잔액</p><p class="fig-v" id="f-total">—</p><p class="fig-s" id="f-total-s">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k"><span class="fig-tag">PEG</span>페그 이탈</p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag">PEG</span><abbr title="1달러(또는 1원·1엔) 약속에서 가격이 벗어난 정도. 경보 ±100bp(1%), 주의 ±25bp">페그 이탈</abbr></p><p class="fig-v" id="f-peg">—</p><p class="fig-s">경보 / 주의 종목수</p></div>
     <div class="fig"><p class="fig-k"><span class="fig-tag">RISK</span>합성 위험점수</p><p class="fig-v" id="f-risk">—</p><p class="fig-s" id="f-risk-s">0–100 · 페그·상환·집중·알고·가격품질</p></div>
-    <div class="fig"><p class="fig-k"><span class="fig-tag"><abbr title="허핀달-허시만 지수">HHI</abbr></span>발행사 집중도</p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k"><span class="fig-tag"><abbr title="허핀달-허시만 지수: 점유율(%)을 제곱해 더한 쏠림 지수. 0(완전 분산)~10,000(독점), 2,500 초과는 고집중">HHI</abbr></span>발행사 집중도</p><p class="fig-v" id="f-hhi">—</p><p class="fig-s" id="f-hhi-s">&nbsp;</p></div>
     <div class="fig"><p class="fig-k"><span class="fig-tag">ALGO</span>알고리즘형 비중</p><p class="fig-v" id="f-algo">—</p><p class="fig-s">담보 없는 발행 잔액 비율</p></div>
+  </div>
+  <div class="signals" id="signals-row" hidden>
+    <h3 class="signals-h">오늘의 주요 신호</h3>
+    <ul class="signals-list" id="signals"></ul>
   </div>
   </div>
 </section>
@@ -88,6 +92,7 @@
 <section class="wrap block" id="gauge" aria-labelledby="h-gauge">
   <div class="block-head">
     <h2 id="h-gauge">페그 편차 계기판</h2>
+    <p class="lead-stat" id="lead-gauge" hidden></p>
     <p>스테이블코인의 유일한 약속은 1.0000입니다. 가운데 세로선이 그 약속이고, 표식이 얼마나 벗어나 있는지를 베이시스포인트로 잽니다. 옅은 띠는 ±25bp 허용 구간입니다.</p>
   </div>
   <p class="gcap" id="gauge-basis">가격 출처: DefiLlama 가격 오라클(다중 소스 집계, 단일 거래소 체결가 아님) · 기준시각: —</p>
@@ -123,6 +128,7 @@
 <section class="wrap block" aria-labelledby="h-trend">
   <div class="block-head">
     <h2 id="h-trend">발행잔액과 상환 압력</h2>
+    <p class="lead-stat" id="lead-trend" hidden></p>
     <p>총 발행잔액은 시장에 들어온 돈의 크기이고, 30일 순증감률은 그 방향입니다. 마이너스가 깊어지면 상환이 발행을 앞지르고 있다는 뜻입니다.</p>
   </div>
   <!-- 이 카드 안쪽만 DefiLlama 풍으로 다시 그렸다. 계기판·표·다른 탭은 그대로다. -->
@@ -159,6 +165,13 @@
         <option value="__all__">전체 시장</option>
       </select>
       <span class="ct-hint" id="series-hint"></span>
+      <div class="range" role="group" aria-label="표시 기간">
+        <button type="button" class="range-btn" data-days="30" aria-pressed="false">1M</button>
+        <button type="button" class="range-btn" data-days="90" aria-pressed="false">3M</button>
+        <button type="button" class="range-btn" data-days="180" aria-pressed="false">6M</button>
+        <button type="button" class="range-btn" data-days="365" aria-pressed="true">1Y</button>
+        <button type="button" class="range-btn" data-days="0" aria-pressed="false">전체</button>
+      </div>
     </div>
 
     <div class="charts">
@@ -181,6 +194,7 @@
 <section class="wrap block" aria-labelledby="h-struct">
   <div class="block-head">
     <h2 id="h-struct">발행 구조</h2>
+    <p class="lead-stat" id="lead-struct" hidden></p>
     <p>무엇으로 뒷받침되는가, 그리고 얼마나 한쪽에 쏠려 있는가. 담보 유형과 집중도는 개별 종목이 아니라 시스템 차원의 취약성을 가리킵니다.</p>
   </div>
   <div class="cols">
@@ -204,7 +218,20 @@
 <section class="wrap block" aria-labelledby="h-table">
   <div class="block-head">
     <h2 id="h-table">종목별 현황</h2>
-    <p>발행잔액 순입니다. 등급은 페그 편차와 30일 순증감률 중 나쁜 쪽을 따릅니다.</p>
+    <p class="lead-stat" id="lead-table" hidden></p>
+    <p>머리글을 누르면 그 열로 정렬합니다. 등급은 페그 편차와 30일 순증감률 중 나쁜 쪽을 따릅니다.</p>
+  </div>
+  <div class="tbl-tools" role="search">
+    <label class="sr" for="tbl-q">종목 검색</label>
+    <input type="search" id="tbl-q" class="tbl-q" placeholder="종목·이름 검색" autocomplete="off" spellcheck="false">
+    <div class="chips" role="group" aria-label="표 거르기">
+      <button type="button" class="chip" data-f="all" aria-pressed="true">전체</button>
+      <button type="button" class="chip" data-f="alert" aria-pressed="false">경보·주의</button>
+      <button type="button" class="chip" data-f="fiat-backed" aria-pressed="false">법정화폐 담보</button>
+      <button type="button" class="chip" data-f="crypto-backed" aria-pressed="false">가상자산 담보</button>
+      <button type="button" class="chip" data-f="algorithmic" aria-pressed="false">알고리즘형</button>
+    </div>
+    <span class="tbl-count" id="tbl-count" aria-live="polite"></span>
   </div>
   <div class="tablewrap">
     <table id="tbl">
@@ -220,6 +247,7 @@
       <tbody id="tbl-watch" class="tgroup-body" hidden></tbody>
     </table>
   </div>
+  <div class="tbl-more" id="tbl-more-wrap" hidden><button type="button" class="pill-btn" id="tbl-more"></button></div>
   <p class="foot"><span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 계기판과 같은 발행사 개요가 열립니다.</span>
     맨 아래 감시목록 행의 편차는 자기 통화(엔·원) 기준입니다.</p>
 </section>
@@ -231,6 +259,7 @@
 <section class="wrap block" id="freeze-sec" aria-labelledby="h-freeze" hidden>
   <div class="block-head">
     <h2 id="h-freeze">발행사 동결 조치</h2>
+    <p class="lead-stat" id="lead-freeze" hidden></p>
     <p>페그 편차가 시장이 발행사를 어떻게 보는지의 지표라면, 동결 건수는 발행사가 실제로 통제권을 얼마나 행사하는지의 지표입니다. 블랙리스트 등재와 잔액 소각은 전부 이벤트 로그로 남습니다.</p>
   </div>
   <div class="fz-figs">
@@ -289,6 +318,7 @@
     <h2 id="h-premium">국경 간 순유출 — 김치프리미엄
       <span class="live-badge" id="pm-live-badge"><i class="live-dot" id="pm-live-dot"></i>LIVE</span>
     </h2>
+    <p class="lead-stat" id="lead-premium" hidden></p>
     <p>프리미엄은 재정거래 유인의 크기입니다. 라벨링된 지갑 없이도 가격만으로 잡히기 때문에, 실제 자금이 움직이기 전에 먼저 나타나는 경우가 많습니다.</p>
     <p id="pm-updated">&nbsp;</p>
   </div>
@@ -330,6 +360,7 @@
 <section class="wrap block" id="flow-sec" aria-labelledby="h-flow" hidden>
   <div class="block-head">
     <h2 id="h-flow">온체인 코너 자금흐름 (이더리움 USDT·USDC, 좁은 대리지표)</h2>
+    <p class="lead-stat" id="lead-flow" hidden></p>
     <p>업비트·빗썸의 태그된 지갑과 Binance·OKX·Bybit 각각의 최대 핫월렛 사이를 직접 오간 USDT·USDC만 집계합니다. 트론·XRP 통로와 코인원·코빗·고팍스, 그리고 각 거래소의 다른 지갑들은 빠져 있어 실제 순유출의 극히 일부만 보여줍니다 — 하한선으로만 읽으십시오.</p>
   </div>
   <div class="figs">
@@ -387,6 +418,7 @@
 <section class="wrap block" id="flowxrp-sec" aria-labelledby="h-flowxrp" hidden>
   <div class="block-head">
     <h2 id="h-flowxrp">온체인 코너 자금흐름 (XRP Ledger)</h2>
+    <p class="lead-stat" id="lead-flowxrp" hidden></p>
     <p>업비트·빗썸의 xrpscan 라벨 계정과 Binance·OKX·Bybit 사이의 네이티브 XRP 결제만 집계합니다. XRPL은 거래소당 지갑이 보통 하나뿐이라 이더리움 코너보다 커버리지가 넓지만, 여전히 하한선입니다.</p>
   </div>
   <div class="figs">
@@ -434,6 +466,7 @@
 <section class="wrap block" id="attest-sec" aria-labelledby="h-attest" hidden>
   <div class="block-head">
     <h2 id="h-attest">어테스테이션 시차</h2>
+    <p class="lead-stat" id="lead-attest" hidden></p>
     <p>발행사가 공표한 준비금 보고서의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다.</p>
   </div>
   <div class="tablewrap">
@@ -486,7 +519,25 @@
       <h3>데이터</h3>
       <p class="plain-p">DefiLlama 공개 엔드포인트를 매시 정각에 수집합니다(GitHub Actions 예약 실행이라 혼잡 시 늦어지거나 건너뛸 수 있습니다). 원본 API는 무인증이며, 수집 코드와 산출 결과 JSON은 모두 저장소에 공개되어 있습니다.</p>
       <p class="plain-p">이 사이트는 개인이 공개 데이터만으로 만든 참고 자료이며, 어떠한 기관의 공식 견해도 아닙니다. 투자 판단의 근거로 쓰기에 적합하지 않습니다.</p>
+      <p class="plain-p">화면·산출 방식이 바뀐 내역은 <a href="https://github.com/nathan1ca/Stablecoin-watch/blob/main/docs/IMPROVEMENT_LOG.md" rel="noopener">업데이트 기록</a>에 날짜별로 남깁니다.</p>
     </div>
+  </div>
+  <div class="panel glossary" id="glossary">
+    <h3>용어 풀이</h3>
+    <dl class="gloss">
+      <div><dt>페그</dt><dd>“토큰 1개 = 1달러(또는 1원·1엔)”라는 약속. 시장 가격이 이 약속에서 벗어난 정도를 <b>페그 편차</b>라고 합니다.</dd></div>
+      <div><dt>bp(베이시스포인트)</dt><dd>0.01%p. 100bp = 1%, 25bp = 0.25%. 1달러짜리 코인이 0.99달러면 −100bp입니다.</dd></div>
+      <div><dt>발행잔액</dt><dd>지금 시장에 풀려 있는 토큰의 총량을 달러로 환산한 값. 늘면 새로 들어온 돈, 줄면 발행사에 돌려준(상환) 돈입니다.</dd></div>
+      <div><dt>상환 압력</dt><dd>보유자들이 토큰을 발행사에 돌려주고 돈으로 바꾸려는 힘. 30일 순증감률이 크게 마이너스면 커진 것입니다.</dd></div>
+      <div><dt>HHI(집중도)</dt><dd>각 종목 점유율(%)을 제곱해 더한 값. 0이면 고르게 나뉨, 10,000이면 한 종목 독점. 2,500을 넘으면 ‘고집중’으로 봅니다.</dd></div>
+      <div><dt>알고리즘형</dt><dd>현금·국채 같은 담보 없이 공급량 조절 규칙만으로 가격을 지키는 방식. 2022년 붕괴한 UST가 이 유형입니다.</dd></div>
+      <div><dt>이자부 상품</dt><dd>이자가 가격에 쌓여 1달러보다 점점 비싸지는 토큰(USYC·USDY 등). 가격 상승은 페그 이탈이 아니어서 편차 계산에서 뺍니다.</dd></div>
+      <div><dt>동결·소각</dt><dd>발행사가 특정 지갑의 토큰을 못 움직이게 막는 것(동결)과, 그 잔액을 아예 없애는 것(소각).</dd></div>
+      <div><dt>김치프리미엄</dt><dd>국내 거래소 가격이 해외보다 비싼 비율. 클수록 해외에서 사서 국내로 들여올 유인(재정거래)이 큽니다.</dd></div>
+      <div><dt>코너 흐름</dt><dd>국내 거래소와 해외 거래소 지갑 사이를 직접 오간 자금. 국경 간 자금 이동의 대리지표입니다.</dd></div>
+      <div><dt>어테스테이션</dt><dd>회계법인이 “이 시점에 준비금이 이만큼 있다”고 확인해 주는 보고서. 기준일이 오래될수록 지금 상태와 멀어집니다.</dd></div>
+      <div><dt>감시목록</dt><dd>규모가 작아도 국내 논의에 중요해 항상 따로 보여 주는 종목(원화·엔화 스테이블코인 등).</dd></div>
+    </dl>
   </div>
 </section>
 
@@ -496,7 +547,10 @@
 
 <footer class="masthead foot-bar">
   <div class="wrap">
-    <p>데이터 <a href="https://defillama.com/stablecoins" rel="noopener">DefiLlama</a> · 공개 블록체인 원장 기반 · 갱신 <span id="foot-time">—</span></p>
+    <p>데이터 <a href="https://defillama.com/stablecoins" rel="noopener">DefiLlama</a> · 공개 블록체인 원장 기반 · 갱신 <span id="foot-time">—</span>
+      · <a href="https://github.com/nathan1ca/Stablecoin-watch/blob/main/docs/IMPROVEMENT_LOG.md" rel="noopener">업데이트 기록</a>
+      · <a href="https://github.com/nathan1ca/Stablecoin-watch" rel="noopener">소스 코드</a></p>
+    <p class="foot-disc">개인이 공개 데이터로 만든 참고 자료이며 어떠한 기관의 공식 견해도 아닙니다.</p>
   </div>
 </footer>
 
