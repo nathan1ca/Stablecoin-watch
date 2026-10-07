@@ -14,6 +14,10 @@
   업비트  https://api.upbit.com/v1/candles/days?market=KRW-USDT&count=200
   빗썸    https://api.bithumb.com/v1/candles/days?market=KRW-USDT&count=200
   코인원  https://api.coinone.co.kr/public/v2/chart/KRW/USDT?interval=1d&size=200
+  디지털엑스(옛 코빗) https://api.korbit.co.kr/v2/candles?symbol=usdt_krw&interval=1D&limit=200
+  고팍스(스트리미)    https://api.gopax.co.kr/trading-pairs/USDT-KRW/candles?interval=1440
+  ※ 디지털엑스·고팍스 일봉에는 원화 거래대금이 없어 수량 × 종가로 어림한다. 고팍스 일봉은
+    UTC 0시(한국시간 오전 9시) 기준이라 다른 거래소와 하루 경계가 9시간 어긋난다.
 """
 
 from __future__ import annotations
@@ -45,7 +49,9 @@ def _kst_date(ms) -> str:
 
 
 def parse_digitalx(resp) -> dict[str, dict]:
-    """디지털엑스(옛 코빗) v2 일봉. 원화 거래대금 필드가 없으면 수량 × 종가로 어림한다(estimated)."""
+    """디지털엑스(옛 코빗) v2 일봉. volume 은 코인 수량이다(2026-10-07 확인: 24시간 시세의
+    volume 51,163,739 USDT · quoteVolume ₩69,311,143,400 → 비율 1,354 = USDT 가격).
+    일봉에는 원화 거래대금 필드가 없어 수량 × 종가로 어림한다(estimated)."""
     rows = resp.get("data") if isinstance(resp, dict) else resp
     out = {}
     for r in rows or []:
@@ -173,7 +179,7 @@ def build(raw: dict[tuple[str, str], dict | Exception], today: str | None = None
             "exchanges": EXCHANGES,
             "assets": list(ASSETS),
             "status": status,
-            "source": "업비트·빗썸·코인원 공개 일봉 API(한국시간 기준 일자)",
+            "source": "업비트·빗썸·코인원·디지털엑스·고팍스 공개 일봉 API",
             "note": "원화마켓 USDT·USDC 거래대금(매수+매도 합계). 원화와 달러 스테이블코인 사이 전환 규모의 지표이며, "
                     "순유출입(국내→해외 송금액)이 아니다. 오늘 값은 진행 중인 하루.",
         },
@@ -215,13 +221,6 @@ def main() -> None:
     if args.probe:
         for k, v in RAW_SAMPLE.items():
             print(f"  [원문 {k}] {v}")
-        # 디지털엑스 일봉 volume 이 수량인지 원화인지 판별: 24시간 시세의 거래량·거래대금 비율을 본다.
-        for sym in ("usdt_krw", "usdc_krw"):
-            try:
-                t = get_json(f"https://api.korbit.co.kr/v2/tickers?symbol={sym}", timeout=20)
-                print(f"  [원문 digitalx ticker {sym}] {json.dumps(t, ensure_ascii=False)[:500]}")
-            except Exception as e:  # 확인용이라 실패해도 그만
-                print(f"  [원문 digitalx ticker {sym}] 실패 {e}")
         print("KRWVOL_JSON " + json.dumps(res, ensure_ascii=False, separators=(",", ":")))
         return
     if not res["daily"]:

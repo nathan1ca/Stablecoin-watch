@@ -1476,7 +1476,8 @@
 
   // ── 원화마켓 스테이블코인 거래대금 ─────────────────────────
   // 조 단위는 "1.6조", 억 단위는 "1,634억" — 국내 독자가 읽는 단위로.
-  const krwK = (v) => v == null ? "—" : v >= 1e12 ? (v / 1e12).toFixed(2) + "조" : Math.round(v / 1e8).toLocaleString("ko-KR") + "억";
+  const krwK = (v) => v == null ? "—" : v >= 1e12 ? (v / 1e12).toFixed(2) + "조"
+    : v > 0 && v < 1e8 ? "<1억" : Math.round(v / 1e8).toLocaleString("ko-KR") + "억";
   function renderKrwVolume(k, fxKrw) {
     if (!k || !k.daily || !k.daily.length) return;
     const sec = $("#krv-sec");
@@ -1490,7 +1491,7 @@
     $("#kv-avg").textContent = "₩" + krwK(s.avg30_krw);
     $("#kv-avg-s").textContent = s.chg30_pct != null ? `직전 30일 대비 ${signed(s.chg30_pct, 1, "%")}` : "직전 30일 비교 불가";
     const sh = Object.entries(s.share30_pct || {}).sort((a, b) => b[1] - a[1]);
-    $("#kv-share").textContent = sh.map(([id, v]) => `${exName[id] || id} ${v.toFixed(0)}%`).join(" · ") || "—";
+    $("#kv-share").textContent = sh.map(([id, v]) => `${exName[id] || id} ${v >= 1 ? v.toFixed(0) : "<1"}%`).join(" · ") || "—";
     const us = (s.asset_share30_pct || {}).USDT;
     $("#kv-usdt").textContent = us != null ? us.toFixed(1) + "%" : "—";
 
@@ -1518,7 +1519,7 @@
       Object.entries(st).filter(([, v]) => v !== "ok").map(([a]) => `${exName[ex] || ex} ${a}`));
     $("#kv-foot").textContent = `출처: ${k.meta.source} · 갱신 ${fmtTime(k.meta.generated_at)}`
       + (fails.length ? ` · 이번 수집 실패: ${fails.join(", ")}(해당 거래소가 빠진 날은 표시하지 않음)` : "")
-      + ". 디지털엑스(옛 코빗)·고팍스는 거래대금이 작아 뺐습니다. 진행 중인 오늘은 그래프에서 제외합니다.";
+      + ". 디지털엑스(옛 코빗)·고팍스는 일봉에 원화 거래대금이 없어 거래량 × 종가로 어림했고, 고팍스 일봉은 한국시간 오전 9시 기준입니다. 진행 중인 오늘은 그래프에서 제외합니다.";
 
     if (s.avg30_krw) {
       const usdAmt = s.avg30_krw / (fxKrw || 1350); // 문장용 어림(기준환율) — 정확한 값은 위 수치
