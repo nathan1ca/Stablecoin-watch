@@ -1089,3 +1089,17 @@ html[data-theme="dark"] .range-btn[aria-pressed="true"]{background:var(--rule)}
 .foot-bar .foot-disc{margin-top:.35rem;font-family:var(--sans)}
 .gloss div{align-content:start}
 .sig-go{display:inline-block;padding-block:.3rem}
+
+/* ── 데스크톱 글꼴 (2026-10-07, 네이선 선택 C안) ─────────────────
+   휴대폰은 지금 글꼴(IBM Plex Sans KR + IBM Plex Mono)을 그대로 둔다.
+   데스크톱에서는 IBM Plex Mono 에 한글 글자가 없어, 탭·라벨의 한글이 운영체제
+   기본 글꼴(윈도우는 맑은 고딕)로 대체되며 자간이 벌어져 보였다. 768px 이상은
+   한글·숫자 모두 Pretendard 로 통일하고, 숫자는 고정폭(tnum)으로 열을 맞춘다.
+   Pretendard 를 못 받으면 기존 글꼴로 자연스럽게 돌아간다. */
+@media (min-width:768px){
+  :root{
+    --sans:"Pretendard Variable",Pretendard,"IBM Plex Sans KR",system-ui,-apple-system,sans-serif;
+    --mono:"Pretendard Variable",Pretendard,"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+  }
+  body{font-feature-settings:"tnum" 1}
+}

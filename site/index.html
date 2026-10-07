@@ -9,6 +9,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- 데스크톱(768px 이상)만 Pretendard. media 조건이 맞지 않는 휴대폰에서는 글꼴 파일을
+     내려받지 않는다(동적 서브셋이라 쓰이는 글자 조각만 받는다). -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" media="(min-width: 768px)" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="style.css">
 <script>
   // 테마: 저장된 선호 > 시스템 선호. body 클래스 전에 적용해 FOUC 방지.
