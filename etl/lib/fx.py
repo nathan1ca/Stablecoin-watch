@@ -19,6 +19,30 @@ from .http import get_json
 
 FRANKFURTER_LATEST = "https://api.frankfurter.dev/v1/latest"
 
+# Frankfurter(ECB 기준환율)가 고시하는 통화. 목록에 없는 코드를 한 번에 섞어
+# 요청하면 요청 전체가 실패할 수 있으므로, 이 집합 안의 통화만 묻는다.
+# RUB 는 ECB 가 2022-03 고시를 중단해 없다 → 루블 페그(A7A5 등)는 환산 불가로 남는다.
+FRANKFURTER_CODES = frozenset(
+    "AUD BGN BRL CAD CHF CNY CZK DKK EUR GBP HKD HUF IDR ILS INR ISK JPY KRW MXN "
+    "MYR NOK NZD PHP PLN RON SEK SGD THB TRY ZAR".split()
+)
+
+# DefiLlama pegType 이 ISO 코드와 다른 경우 (pegType 'peggedREAL' → BRL)
+PEG_TO_ISO = {"REAL": "BRL"}
+
+
+def iso_currency(peg_cur: str) -> str:
+    c = str(peg_cur or "").strip().upper()
+    return PEG_TO_ISO.get(c, c)
+
+
+def supported_currencies(peg_currencies) -> list[str]:
+    """환율을 구할 수 있는 페그 통화(DefiLlama 표기 그대로)만 고른다."""
+    return sorted({
+        str(c).strip().upper() for c in peg_currencies
+        if c and iso_currency(c) in FRANKFURTER_CODES
+    })
+
 
 def usd_fx_rates(currencies: list[str]) -> tuple[dict[str, float], str | None]:
     """USD 1달러가 각 통화 몇 단위인지({'JPY': 147.3, ...})와 고시일.
@@ -26,10 +50,12 @@ def usd_fx_rates(currencies: list[str]) -> tuple[dict[str, float], str | None]:
     실패하면 ({}, None). 환율이 없으면 비달러 편차를 '미측정'으로 두면 되므로
     수집 전체를 멈출 이유가 없다.
     """
-    wanted = sorted({c.strip().upper() for c in currencies if c and c.strip().upper() != "USD"})
+    # 키는 DefiLlama 표기(REAL 등)로 돌려주고, 요청은 ISO 코드로 한다.
+    wanted = {c: iso_currency(c) for c in supported_currencies(currencies) if c != "USD"}
     if not wanted:
         return {}, None
-    url = FRANKFURTER_LATEST + "?" + urlencode({"base": "USD", "symbols": ",".join(wanted)})
+    isos = sorted(set(wanted.values()))
+    url = FRANKFURTER_LATEST + "?" + urlencode({"base": "USD", "symbols": ",".join(isos)})
     try:
         r = get_json(url, timeout=20)
     except RuntimeError as e:
@@ -38,10 +64,11 @@ def usd_fx_rates(currencies: list[str]) -> tuple[dict[str, float], str | None]:
     rates = r.get("rates") if isinstance(r, dict) else None
     if not isinstance(rates, dict):
         return {}, None
-    out = {
+    by_iso = {
         k.upper(): float(v) for k, v in rates.items()
         if isinstance(v, (int, float)) and v > 0
     }
+    out = {peg: by_iso[iso] for peg, iso in wanted.items() if iso in by_iso}
     return out, (r.get("date") if isinstance(r.get("date"), str) else None)
 
 

@@ -209,3 +209,51 @@ class TestWatchlistFile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReliabilityAndFx(unittest.TestCase):
+    def test_thin_market_not_graded(self):
+        # 유통액 $400 짜리 원화 토큰이 −648bp: 숫자는 남기고 등급은 매기지 않는다.
+        assets = market(krwq_price=0.935 / USDKRW)
+        cfg = watch_cfg(min_reliable_mcap_usd=1_000_000)
+        s = snap(assets, cfg, FX)
+        k = next(r for r in s["watchlist"]["rows"] if r["symbol"] == "KRWQ")
+        self.assertAlmostEqual(k["dev_bp_local"], -650.0, delta=1)
+        self.assertEqual(k["price_reliability"], "low")
+        self.assertEqual(k["grade_peg_local"], "unknown")
+        j = next(r for r in s["watchlist"]["rows"] if r["symbol"] == "JPYC")
+        self.assertEqual(j["price_reliability"], "ok")  # 약 $200만 → 하한 이상
+
+    def test_krw_precision(self):
+        # 원화 가격(≈$0.0007)은 소수 6자리 반올림만으로도 수 bp 가 틀어진다. 원가격을 써야 한다.
+        s = snap(market(), watch_cfg(), FX)
+        k = next(r for r in s["watchlist"]["rows"] if r["symbol"] == "KRWQ")
+        self.assertAlmostEqual(k["dev_bp_local"], 0.0, places=1)
+
+    def test_fx_currency_selection(self):
+        from lib.fx import iso_currency, supported_currencies
+        self.assertEqual(iso_currency("REAL"), "BRL")
+        self.assertEqual(supported_currencies(["EUR", "RUB", "REAL", "JPY", "VAR"]),
+                         ["EUR", "JPY", "REAL"])
+        assets = market() + [asset(30, "A7A5", "RUB", 5.5e8, None), asset(31, "EURC", "EUR", 1e8, 1.17)]
+        self.assertEqual(fetch.fx_currencies(assets, watch_cfg()), ["EUR", "JPY", "KRW"])
+
+    def test_unvalued_listed_not_summed(self):
+        # 루블 페그는 가격·환율이 없다 → 총계에서 빼고 '환산 불가' 목록에 남긴다.
+        assets = market() + [asset(30, "A7A5", "RUB", 5.5e8, None)]
+        s = snap(assets, watch_cfg(), FX)
+        self.assertEqual(s["unvalued"]["count"], 1)
+        self.assertEqual(s["unvalued"]["top"][0]["symbol"], "A7A5")
+        self.assertNotIn("RUB", [c["currency"] for c in s["by_peg_currency"] if c["amount"] > 0])
+        base = snap(market(), watch_cfg(), FX)
+        self.assertEqual(s["totals"]["circulating_usd"], base["totals"]["circulating_usd"])
+
+
+class TestMechanismNormalize(unittest.TestCase):
+    def test_typo_merged(self):
+        self.assertEqual(fetch.normalize_mechanism("crytpo-backed"), "crypto-backed")
+        self.assertEqual(fetch.normalize_mechanism(None), "unknown")
+        a = asset(40, "XUSD", "USD", 2e6, 1.0)
+        a["pegMechanism"] = "crytpo-backed"
+        s = snap(market() + [a], None, FX)
+        self.assertNotIn("crytpo-backed", [m["mechanism"] for m in s["by_mechanism"]])

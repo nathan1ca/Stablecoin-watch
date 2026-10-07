@@ -28,7 +28,7 @@ from urllib.request import Request, urlopen
 # 공유 라이브러리 (표준 라이브러리만)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.config import load_thresholds, thresholds_for_meta  # noqa: E402
-from lib.fx import local_peg_dev_bp, usd_fx_rates  # noqa: E402
+from lib.fx import local_peg_dev_bp, supported_currencies, usd_fx_rates  # noqa: E402
 from lib.http import UA  # noqa: E402
 from lib.metrics import (  # noqa: E402
     composite_risk_score,
@@ -85,6 +85,9 @@ YIELD_BEARING_MECHANISMS = ("yield-bearing", "interest-bearing", "rwa-yield")
 # 시총 하한과 무관하게 항상 보여 줄 감시목록(원화·엔화 스테이블코인 등).
 WATCHLIST_PATH = Path(__file__).resolve().parent / "watchlist.json"
 FX_LAG_TOLERANCE_BP_DEFAULT = 50
+# 이보다 작은 유통량의 가격은 시장이 매긴 값으로 보기 어렵다(호가가 얇거나 가격이
+# 갱신되지 않는다). 편차는 보여 주되 등급은 매기지 않는다. watchlist.json 에서 조정.
+MIN_RELIABLE_MCAP_USD_DEFAULT = 1_000_000
 
 # 종목별 시계열을 따로 받아올 개수 (발행잔액 상위). 화면 드롭다운 항목 수와 같다.
 SERIES_ASSET_COUNT = 12
@@ -285,7 +288,7 @@ def load_watchlist(path: Path | str | None = None) -> dict:
     """
     p = Path(path) if path else WATCHLIST_PATH
     empty = {"entries": {}, "fx_lag_tolerance_bp": FX_LAG_TOLERANCE_BP_DEFAULT,
-             "pinned_currencies": []}
+             "pinned_currencies": [], "min_reliable_mcap_usd": MIN_RELIABLE_MCAP_USD_DEFAULT}
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -313,7 +316,9 @@ def load_watchlist(path: Path | str | None = None) -> dict:
             "match_symbols": [str(s).strip().upper() for s in syms if str(s).strip()] or [sym],
             "exclude_ids": [str(i) for i in (v.get("exclude_ids") or [])],
             "note": str(v.get("note") or ""),
+            "caveat": str(v.get("data_caveat") or ""),
         }
+    floor = raw.get("min_reliable_mcap_usd")
     tol = raw.get("fx_lag_tolerance_bp")
     pinned = raw.get("pinned_currencies") if isinstance(raw.get("pinned_currencies"), list) else []
     return {
@@ -321,6 +326,8 @@ def load_watchlist(path: Path | str | None = None) -> dict:
         "fx_lag_tolerance_bp": float(tol) if isinstance(tol, (int, float)) and tol >= 0
         else FX_LAG_TOLERANCE_BP_DEFAULT,
         "pinned_currencies": [str(c).strip().upper() for c in pinned if str(c).strip()],
+        "min_reliable_mcap_usd": float(floor) if isinstance(floor, (int, float)) and floor >= 0
+        else MIN_RELIABLE_MCAP_USD_DEFAULT,
     }
 
 
@@ -331,6 +338,17 @@ def watchlist_currencies(watch: dict | None) -> list[str]:
     curs = {e["peg_currency"] for e in watch.get("entries", {}).values()}
     curs.update(watch.get("pinned_currencies") or [])
     return sorted(c for c in curs if c and c != "USD")
+
+
+def fx_currencies(assets: list[dict], watch: dict | None) -> list[str]:
+    """환율을 받아 올 통화 = 응답에 나온 비USD 페그 통화 + 감시목록 통화 중 고시되는 것.
+
+    가격이 빠진 비USD 종목도 환율로 USD 가치를 매길 수 있게 전 통화를 받는다.
+    """
+    curs = {peg_currency(a.get("circulating")) for a in assets}
+    curs.update(watchlist_currencies(watch))
+    curs.discard("USD")
+    return supported_currencies(curs)
 
 
 def grade_peg_local(dev_bp: float | None, thr: dict, tolerance_bp: float) -> str:
@@ -352,6 +370,7 @@ def build_watchlist(rows: list[dict], watch: dict | None, fx_rates: dict | None,
     watch = watch or {}
     entries = watch.get("entries") or {}
     tol = float(watch.get("fx_lag_tolerance_bp", FX_LAG_TOLERANCE_BP_DEFAULT))
+    floor = float(watch.get("min_reliable_mcap_usd", MIN_RELIABLE_MCAP_USD_DEFAULT))
     fx_rates = fx_rates or {}
     out_rows: list[dict] = []
 
@@ -374,6 +393,7 @@ def build_watchlist(rows: list[dict], watch: dict | None, fx_rates: dict | None,
                 "status_note": f"DefiLlama 응답에서 symbol∈{e['match_symbols']}, "
                                f"pegType=pegged{cur} 인 항목을 찾지 못함",
                 "watch_note": e["note"],
+                "data_caveat": e.get("caveat", ""),
                 "grade": "unknown",
             })
             continue
@@ -383,7 +403,10 @@ def build_watchlist(rows: list[dict], watch: dict | None, fx_rates: dict | None,
             # 반올림 전 원가격을 쓴다. price_median 은 소수 6자리로 반올림돼 있어
             # 원화(≈$0.0007)에서는 그 반올림만으로 수 bp 오차가 생긴다.
             dev = local_peg_dev_bp(r.get("price") or r.get("price_median"), rate)
-            g_peg = grade_peg_local(dev, thr, tol)
+            # 유통량이 아주 작으면 가격이 시장에서 매겨진 값인지 믿기 어렵다.
+            # 편차 숫자는 그대로 보여 주고 등급만 '미측정'으로 둔다(오경보 방지).
+            thin = (r.get("mcap_usd") or 0) < floor
+            g_peg = "unknown" if thin else grade_peg_local(dev, thr, tol)
             g_red = r.get("grade_redemption") or "unknown"
             out_rows.append({
                 **{k: r.get(k) for k in (
@@ -398,6 +421,8 @@ def build_watchlist(rows: list[dict], watch: dict | None, fx_rates: dict | None,
                 "status_note": "" if len(hits) == 1 else
                                f"같은 심볼 {len(hits)}개 — exclude_ids 로 정리 필요 여부 확인",
                 "watch_note": e["note"],
+                "data_caveat": e.get("caveat", ""),
+                "price_reliability": "low" if thin else "ok",
                 "fx_rate": rate,
                 "price_local": round(r["price"] * rate, 6) if r.get("price") and rate else None,
                 "dev_bp_local": dev,
@@ -413,11 +438,13 @@ def build_watchlist(rows: list[dict], watch: dict | None, fx_rates: dict | None,
             "fx_date": fx_date,
             "fx_rates": {c: fx_rates[c] for c in sorted(fx_rates)},
             "fx_lag_tolerance_bp": tol,
+            "min_reliable_mcap_usd": floor,
             "peg_watch_bp": thr["peg_watch_bp"] + tol,
             "peg_breach_bp": thr["peg_breach_bp"] + tol,
             "pinned_currencies": watch.get("pinned_currencies") or [],
             "note": "자기 통화 기준 편차 = 가격(USD) × 환율(통화/USD) − 1. 등급 임계값은 USD 페그 "
-                    "임계값 + 환율 시차 허용폭. 감시목록은 표시 규칙이며 총계·HHI·경보 건수·"
+                    "임계값 + 환율 시차 허용폭. 유통액이 min_reliable_mcap_usd 미만이면 가격 신뢰도가 "
+                    "낮아 등급을 매기지 않는다. 감시목록은 표시 규칙이며 총계·HHI·경보 건수·"
                     "합성 위험점수에는 영향을 주지 않는다.",
         },
         "rows": out_rows,
@@ -473,6 +500,18 @@ MECHANISM_KO = {
     "crypto-backed": "가상자산 담보",
     "algorithmic": "알고리즘형",
 }
+
+
+# 원본 응답의 오타·표기 흔들림. 그대로 두면 '담보 유형별' 막대에 같은 유형이
+# 두 줄로 갈라져 나온다(2026-10-07 'crytpo-backed' 1종, 약 $160만 관측).
+MECHANISM_ALIASES = {"crytpo-backed": "crypto-backed"}
+
+
+def normalize_mechanism(raw) -> str:
+    m = str(raw or "").strip().lower()
+    if not m:
+        return "unknown"
+    return MECHANISM_ALIASES.get(m, m)
 
 
 def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None = None,
@@ -555,7 +594,7 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
                 chain_circ[ch] = v
         top_chains = sorted(chain_circ.items(), key=lambda x: -x[1])[:6]
 
-        mech = a.get("pegMechanism") or "unknown"
+        mech = normalize_mechanism(a.get("pegMechanism"))
         slug, slug_field = icon_slug(a)
         rows.append({
             "id": str(a.get("id", "")),
@@ -595,6 +634,13 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
 
     rows.sort(key=lambda r: -r["mcap_usd"])
     total = sum(r["mcap_usd"] for r in rows) or 1.0
+
+    # 가격도 환율도 없어 USD 가치를 매기지 못한 종목. 총계에서는 빠지지만
+    # (예전에는 수량이 그대로 달러로 잡혔다) 존재 자체는 화면에 남긴다.
+    unvalued = sorted(
+        ({"symbol": r["symbol"], "name": r["name"], "peg_currency": r["peg_currency"],
+          "circulating": r["circulating"]} for r in rows if r["mcap_basis"] == "unpriced"),
+        key=lambda x: -x["circulating"])
 
     for r in rows:
         r["share"] = round(r["mcap_usd"] / total * 100, 3)
@@ -743,6 +789,9 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         ],
         "assets": visible[:60],
         "watchlist": watch_out,
+        "unvalued": {"count": len(unvalued), "top": unvalued[:8],
+                     "fx_date": fx_date,
+                     "note": "가격과 환율이 모두 없어 USD 환산·총계에서 제외한 비USD 페그 종목"},
     }
 
 
@@ -1003,9 +1052,9 @@ def probe_watchlist():
     curs = watchlist_currencies(watch)
     print("== 감시목록 확인 ==")
     print("설정: " + ", ".join(f"{k}({e['peg_currency']})" for k, e in watch["entries"].items()))
-    fx_rates, fx_date = usd_fx_rates(curs)
-    print(f"환율(Frankfurter {fx_date}): {fx_rates}")
     assets = fetch_assets()
+    fx_rates, fx_date = usd_fx_rates(fx_currencies(assets, watch))
+    print(f"환율(Frankfurter {fx_date}): {fx_rates}")
     print(f"DefiLlama 항목 수: {len(assets)}")
 
     wanted_syms = {s for e in watch["entries"].values() for s in e["match_symbols"]}
@@ -1032,6 +1081,9 @@ def probe_watchlist():
     print("\n== 페그 통화별 (해당 통화) ==")
     print([c for c in snap["by_peg_currency"] if c["currency"] in curs])
     print(f"총 발행잔액 ${snap['totals']['circulating_usd']/1e9:,.2f}B · HHI {snap['concentration']['hhi_issuer']}")
+    print(f"환산 불가(가격·환율 없음): {snap['unvalued']['count']}종 — "
+          + ", ".join(f"{u['symbol']}({u['peg_currency']} {u['circulating']:,.0f})" for u in snap['unvalued']['top']))
+    print("상위 25종: " + ", ".join(f"{a['symbol']} ${a['mcap_usd']/1e6:,.0f}M" for a in snap['assets'][:25]))
 
     # 가격 없는 비USD 페그 — 예전 계산식(가격 없으면 수량을 그대로 USD로 봄)이
     # 총계를 얼마나 부풀렸는지 확인한다.
@@ -1089,7 +1141,7 @@ def main():
     issuers = load_issuers()
     yb = load_yield_bearing()
     watch = load_watchlist()
-    fx_rates, fx_date = usd_fx_rates(watchlist_currencies(watch))
+    fx_rates, fx_date = usd_fx_rates(fx_currencies(assets, watch))
     if fx_rates:
         print(f"    환율(Frankfurter {fx_date}): "
               + ", ".join(f"USD/{c} {v:,.2f}" for c, v in sorted(fx_rates.items())))
