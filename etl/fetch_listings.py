@@ -24,12 +24,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
+from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.http import get_json  # noqa: E402
+from lib.http import UA, get_json  # noqa: E402
 
 CONFIG_PATH = Path(__file__).resolve().parent / "kr_exchanges.json"
 MAX_EVENTS = 80
@@ -254,6 +258,122 @@ def build_listings(raw: dict[str, list | Exception], cfg: dict, tracked: set[str
     }
 
 
+# ── 거래소 아이콘 ─────────────────────────────────────────────────────────
+# 각 거래소 웹사이트가 공식으로 내놓는 아이콘(파비콘)을 한 번 받아 site/data/ex-icons/ 에
+# 저장한다. 화면은 이 사본만 쓰므로 방문자 브라우저가 거래소 서버에 접속하지 않는다.
+# 받지 못하면 화면이 거래소 머리글자 배지로 대신한다. SVG 는 받지 않는다(같은 출처에서
+# 직접 열면 스크립트가 돌 수 있어서).
+ICON_DIRNAME = "ex-icons"
+ICON_MAX_BYTES = 200_000
+_LINK_RE = re.compile(r"<link\b[^>]*>", re.I)
+_ATTR_RE = re.compile(r"""([a-zA-Z-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
+
+
+def sniff_image(data: bytes) -> str | None:
+    """바이트 머리로 형식을 판정해 확장자를 돌려준다(SVG·알 수 없는 형식은 None)."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if data[:4] == b"\x00\x00\x01\x00":
+        return ".ico"
+    if data[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    return None
+
+
+def find_icon_links(html: str, base: str) -> list[str]:
+    """홈페이지 HTML 의 <link rel=icon|apple-touch-icon> 주소를 큰 것부터 돌려준다."""
+    found = []
+    for tag in _LINK_RE.findall(html or ""):
+        attrs = {k.lower(): v.strip("\"'") for k, v in _ATTR_RE.findall(tag)}
+        rel = attrs.get("rel", "").lower()
+        href = attrs.get("href")
+        if not href or "icon" not in rel or "mask-icon" in rel or href.lower().endswith(".svg"):
+            continue
+        sizes = [int(n) for n in re.findall(r"(\d+)x\d+", attrs.get("sizes", ""))]
+        score = (1 if "apple-touch-icon" in rel else 0, max(sizes) if sizes else 0)
+        found.append((score, urljoin(base, href)))
+    found.sort(key=lambda x: x[0], reverse=True)
+    out = []
+    for _, u in found:
+        if u not in out:
+            out.append(u)
+    return out
+
+
+def fetch_bytes(url: str, timeout: int = 15, limit: int = ICON_MAX_BYTES) -> bytes:
+    req = Request(url, headers={"User-Agent": UA, "Accept": "image/*,text/html;q=0.9,*/*;q=0.5"})
+    with urlopen(req, timeout=timeout) as r:
+        data = r.read(limit + 1)
+    if len(data) > limit:
+        raise RuntimeError(f"{len(data)}바이트 초과")
+    return data
+
+
+def icon_candidates(ex: dict, log: list | None = None) -> list[str]:
+    base = str(ex.get("url") or "").rstrip("/") + "/"
+    cands = list(ex.get("icon_urls") or [])
+    if ex.get("url"):
+        try:
+            html = fetch_bytes(base, limit=1_500_000).decode("utf-8", "replace")
+            cands += find_icon_links(html, base)
+        except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as e:
+            if log is not None:
+                log.append(f"홈페이지 읽기 실패({e})")
+        cands += [urljoin(base, "apple-touch-icon.png"), urljoin(base, "favicon.ico")]
+    seen, out = set(), []
+    for u in cands:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def download_icon(ex: dict, log: list | None = None) -> tuple[bytes, str, str] | None:
+    """(바이트, 확장자, 원본 주소) 또는 None."""
+    for url in icon_candidates(ex, log):
+        try:
+            data = fetch_bytes(url)
+        except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as e:
+            if log is not None:
+                log.append(f"{url} 실패({e})")
+            continue
+        ext = sniff_image(data)
+        if ext and len(data) >= 100:
+            if log is not None:
+                log.append(f"{url} → {ext} {len(data)}바이트")
+            return data, ext, url
+        if log is not None:
+            log.append(f"{url} 이미지 아님({len(data)}바이트)")
+    return None
+
+
+def ensure_icons(cfg: dict, out: Path, refresh: bool = False) -> dict[str, str]:
+    """거래소별 아이콘 사본 경로(site 기준 상대 경로). 이미 있으면 다시 받지 않는다."""
+    d = out / ICON_DIRNAME
+    paths = {}
+    for ex in cfg["exchanges"]:
+        have = sorted(d.glob(f"{ex['id']}.*")) if d.exists() else []
+        if have and not refresh:
+            paths[ex["id"]] = f"data/{ICON_DIRNAME}/{have[0].name}"
+            continue
+        got = download_icon(ex)
+        if not got:
+            print(f"  {ex.get('name', ex['id'])}: 아이콘 없음 — 머리글자 배지로 표시", file=sys.stderr)
+            continue
+        data, ext, src = got
+        d.mkdir(parents=True, exist_ok=True)
+        for old in have:
+            old.unlink()
+        (d / f"{ex['id']}{ext}").write_bytes(data)
+        paths[ex["id"]] = f"data/{ICON_DIRNAME}/{ex['id']}{ext}"
+        print(f"  {ex.get('name', ex['id'])}: 아이콘 저장 ({src})")
+    return paths
+
+
 def read_json(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -281,6 +401,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="site/data")
     ap.add_argument("--probe", action="store_true", help="쓰지 않고 결과만 출력")
+    ap.add_argument("--refresh-icons", action="store_true", help="거래소 아이콘을 다시 받음")
     args = ap.parse_args()
     out = Path(args.out)
 
@@ -306,9 +427,24 @@ def main() -> None:
         for sym, a in res["assets"].items():
             cells = "  ".join(f"{k}={'/'.join(v['markets'])}{'!' if v.get('warning') else ''}" for k, v in a["exchanges"].items())
             print(f"  {sym:<8} {a['count']}곳  {cells}")
+        print("  -- 아이콘 후보 --")
+        for ex in cfg["exchanges"]:
+            log: list[str] = []
+            got = download_icon(ex, log)
+            print(f"  {ex.get('name')}: {'성공' if got else '실패'}")
+            for line in log:
+                print(f"     {line}")
         return
 
     out.mkdir(parents=True, exist_ok=True)
+    try:
+        icons = ensure_icons(cfg, out, refresh=args.refresh_icons)
+    except Exception as e:  # 아이콘은 꾸밈 — 실패해도 거래지원 데이터는 쓴다
+        print(f"  아이콘 단계 실패({e})", file=sys.stderr)
+        icons = {}
+    for e in res["meta"]["exchanges"]:
+        if e["id"] in icons:
+            e["icon"] = icons[e["id"]]
     (out / "listings.json").write_text(json.dumps(res, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     ok = sum(1 for e in res["meta"]["exchanges"] if e["status"] == "ok")
     print(f"완료 — 거래소 {ok}/{len(res['meta']['exchanges'])}곳 수집, 국내 거래 스테이블코인 {len(res['assets'])}종, "

@@ -120,6 +120,39 @@ class TestBuild(unittest.TestCase):
         self.assertEqual(fl.tracked_symbols(None), set())
 
 
+class TestIcons(unittest.TestCase):
+    def test_find_icon_links(self):
+        html = """<head><link rel="icon" href="/f16.png" sizes="16x16">
+        <link href='https://cdn.x.com/touch.png' rel='apple-touch-icon' sizes='180x180'>
+        <link rel="mask-icon" href="/m.svg"><link rel="icon" href="/logo.svg">
+        <link rel="stylesheet" href="/a.css"><link rel="shortcut icon" href="favicon.ico"></head>"""
+        self.assertEqual(fl.find_icon_links(html, "https://ex.co.kr/"), [
+            "https://cdn.x.com/touch.png", "https://ex.co.kr/f16.png", "https://ex.co.kr/favicon.ico"])
+
+    def test_sniff(self):
+        self.assertEqual(fl.sniff_image(b"\x89PNG\r\n\x1a\n" + b"0" * 10), ".png")
+        self.assertEqual(fl.sniff_image(b"\x00\x00\x01\x00" + b"0" * 10), ".ico")
+        self.assertIsNone(fl.sniff_image(b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"))   # SVG 거부
+        self.assertIsNone(fl.sniff_image(b"<!doctype html><html>"))
+
+    def test_ensure_icons_keeps_existing_and_falls_back(self):
+        import tempfile
+        cfg = {"exchanges": [{"id": "upbit", "url": "https://upbit.com"}, {"id": "gopax", "url": "https://gopax.co.kr"}]}
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d)
+            (out / "ex-icons").mkdir()
+            (out / "ex-icons" / "upbit.png").write_bytes(b"x")
+            with mock.patch.object(fl, "download_icon", return_value=None) as dl:
+                paths = fl.ensure_icons(cfg, out)
+            self.assertEqual(paths, {"upbit": "data/ex-icons/upbit.png"})   # 있는 것은 다시 받지 않음
+            self.assertEqual(dl.call_count, 1)                                # 고팍스만 시도, 실패 → 배지
+            png = b"\x89PNG\r\n\x1a\n" + b"0" * 200
+            with mock.patch.object(fl, "download_icon", return_value=(png, ".png", "u")):
+                paths = fl.ensure_icons(cfg, out, refresh=True)
+            self.assertEqual(paths["gopax"], "data/ex-icons/gopax.png")
+            self.assertEqual((out / "ex-icons" / "gopax.png").read_bytes(), png)
+
+
 class TestConfig(unittest.TestCase):
     def test_repo_config(self):
         cfg = fl.load_config()

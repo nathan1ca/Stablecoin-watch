@@ -5,38 +5,49 @@
     "matching": "거래소 티커(대문자)와 DefiLlama 심볼(대문자)이 같으면 같은 종목으로 본다. 티커가 같아도 다른 토큰일 수 있으므로 한 글자 티커 등 혼동 위험이 큰 심볼은 deny_symbols 로 뺀다. 거래소 티커가 다르면 aliases 로 잇는다(거래소 티커 → DefiLlama 심볼).",
     "events": "거래지원 시작·종료는 직전 수집분과 비교해 기록한다. 거래소 API 가 실패한 회차에는 종료로 판정하지 않는다(일시 장애를 상장폐지로 오인하지 않기 위해).",
     "updated": "2026-10-07",
-    "verified": "2026-10-07 CI 확인: 업비트 JPYC 한글명 '제이피와이코인'(엔화 스테이블코인 JPYC 와 일치)."
+    "verified": "2026-10-07 CI 확인: 업비트 JPYC 한글명 '제이피와이코인'(엔화 스테이블코인 JPYC 와 일치).",
+    "icons": "화면의 거래소 아이콘은 각 거래소 홈페이지가 내놓는 공식 아이콘(파비콘)을 수집기가 한 번 받아 site/data/ex-icons/ 에 둔 사본이다(방문자 브라우저는 거래소 서버에 접속하지 않음). 받지 못하면 short(머리글자)·color 배지로 표시한다. icon_urls 로 주소를 직접 지정할 수 있다."
   },
   "exchanges": [
     {
       "id": "upbit",
       "name": "업비트",
       "operator": "두나무",
-      "url": "https://upbit.com"
+      "url": "https://upbit.com",
+      "short": "U",
+      "color": "#0A3A8C"
     },
     {
       "id": "bithumb",
       "name": "빗썸",
       "operator": "빗썸코리아",
-      "url": "https://www.bithumb.com"
+      "url": "https://www.bithumb.com",
+      "short": "B",
+      "color": "#C2410C"
     },
     {
       "id": "coinone",
       "name": "코인원",
       "operator": "코인원",
-      "url": "https://coinone.co.kr"
+      "url": "https://coinone.co.kr",
+      "short": "C",
+      "color": "#1D4ED8"
     },
     {
       "id": "korbit",
       "name": "코빗",
       "operator": "코빗",
-      "url": "https://www.korbit.co.kr"
+      "url": "https://www.korbit.co.kr",
+      "short": "K",
+      "color": "#1E3A8A"
     },
     {
       "id": "gopax",
       "name": "고팍스",
       "operator": "스트리미",
-      "url": "https://www.gopax.co.kr"
+      "url": "https://www.gopax.co.kr",
+      "short": "G",
+      "color": "#334155"
     }
   ],
   "deny_symbols": [
