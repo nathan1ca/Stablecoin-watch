@@ -221,6 +221,8 @@ class TestReliabilityAndFx(unittest.TestCase):
         self.assertAlmostEqual(k["dev_bp_local"], -650.0, delta=1)
         self.assertEqual(k["price_reliability"], "low")
         self.assertEqual(k["grade_peg_local"], "unknown")
+        self.assertEqual(k["grade"], "unknown")   # '정상' 배지를 붙이지 않는다
+        self.assertGreater(k["share"], 0)          # 반올림으로 0 이 되지 않는다
         j = next(r for r in s["watchlist"]["rows"] if r["symbol"] == "JPYC")
         self.assertEqual(j["price_reliability"], "ok")  # 약 $200만 → 하한 이상
 

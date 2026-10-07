@@ -360,7 +360,8 @@ def grade_peg_local(dev_bp: float | None, thr: dict, tolerance_bp: float) -> str
 
 
 def build_watchlist(rows: list[dict], watch: dict | None, fx_rates: dict | None,
-                    fx_date: str | None, thr: dict, visible_ids: set[str]) -> dict:
+                    fx_date: str | None, thr: dict, visible_ids: set[str],
+                    total_usd: float | None = None) -> dict:
     """감시목록 종목을 rows(전 종목, 하한 적용 전)에서 골라 자기 통화 기준으로 다시 잰다.
 
     rows 는 build_snapshot 이 만든 행이다. 여기서는 새로 계산하는 값(현지 통화
@@ -427,8 +428,14 @@ def build_watchlist(rows: list[dict], watch: dict | None, fx_rates: dict | None,
                 "price_local": round(r["price"] * rate, 6) if r.get("price") and rate else None,
                 "dev_bp_local": dev,
                 "grade_peg_local": g_peg,
-                "grade": worse_grade(g_peg, g_red),
+                # 페그를 잴 수 없는데 상환 쪽만 '정상'이면 행 전체를 '정상'으로 보이지
+                # 않게 한다(−648bp 옆에 '정상' 배지가 붙는 혼란 방지). 상환 경보는 그대로 올린다.
+                "grade": "unknown" if g_peg == "unknown" and g_red in ("sound", "unknown")
+                else worse_grade(g_peg, g_red),
                 "in_main_list": str(r.get("id")) in visible_ids,
+                # 행 점유율은 소수 3자리 반올림이라 소형 종목은 0 이 된다. 여기서는 유효숫자로 다시 낸다.
+                "share": float(f"{(r.get('mcap_usd') or 0) / total_usd * 100:.3g}") if total_usd
+                else r.get("share"),
             })
 
     return {
@@ -695,7 +702,7 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
 
     # 감시목록 — 하한 미만이어도 따로 보여 준다. visible·alerts·risk 는 건드리지 않는다.
     watch_out = build_watchlist(rows, watchlist, fx_rates, fx_date, THRESHOLDS,
-                                {str(r["id"]) for r in visible[:60]})
+                                {str(r["id"]) for r in visible[:60]}, total)
 
     # 계기판에서 빠진 이자부 상품 — 화면에 "왜 안 보이는지"를 적어 주기 위한 목록
     yb_rows = [

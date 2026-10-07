@@ -105,6 +105,19 @@
     <span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 발행사 개요가 열립니다.</span></p>
   <p class="foot" id="gauge-nonusd" hidden></p>
   <p class="foot" id="gauge-yield" hidden></p>
+
+  <!-- 감시목록: 발행잔액 하한($50M)과 무관하게 항상 보여 주는 원화·엔화 스테이블코인.
+       편차는 자기 통화 기준(가격USD × 환율)이고, 등급 허용폭은 환율 시차만큼 넓다. -->
+  <div class="watch-sub" id="watch-wrap" hidden>
+    <h3 class="watch-h">감시목록 · 원화·엔화 스테이블코인 <span class="watch-tag">자기 통화 기준</span></h3>
+    <p class="gcap" id="watch-basis"></p>
+    <ol class="gauge watch-gauge" id="watch-gauge"></ol>
+    <p class="foot">발행 규모가 작아 위 계기판(발행잔액 $50M 이상)에는 잡히지 않지만 국내 감독 논의와 직접 맞닿아 있어 따로 봅니다.
+      편차는 “토큰 1개가 자기 통화로 얼마인가”(가격 USD × 환율)가 1엔·1원에서 얼마나 벗어났는지입니다.
+      환율이 하루 한 번 고시되는 기준환율이라 장중 환율 변동만큼 오차가 생기므로, 옅은 띠(허용 구간)를 ±75bp로 넓혀 봅니다.
+      유통액이 아주 작은 종목은 가격 자체를 믿기 어려워 숫자만 회색으로 보이고 등급은 매기지 않습니다.</p>
+    <ul class="foot watch-notes" id="watch-notes"></ul>
+  </div>
 </section>
 
 <section class="wrap block" aria-labelledby="h-trend">
@@ -178,7 +191,8 @@
     <div class="panel">
       <h3>페그 통화별</h3>
       <div id="cur-bars" class="bars"></div>
-      <p class="foot">비달러 페그 비중은 원화 스테이블코인 도입 논의에서 참고 기준이 됩니다.</p>
+      <p class="foot">비달러 페그 비중은 원화 스테이블코인 도입 논의에서 참고 기준이 됩니다. 원화(KRW)·엔화(JPY)는 규모와 관계없이 항상 표시합니다.</p>
+      <p class="foot" id="cur-unvalued" hidden></p>
     </div>
     <div class="panel">
       <h3>발행 체인별</h3>
@@ -203,9 +217,11 @@
         </tr>
       </thead>
       <tbody></tbody>
+      <tbody id="tbl-watch" class="tgroup-body" hidden></tbody>
     </table>
   </div>
-  <p class="foot"><span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 계기판과 같은 발행사 개요가 열립니다.</span></p>
+  <p class="foot"><span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 계기판과 같은 발행사 개요가 열립니다.</span>
+    맨 아래 감시목록 행의 편차는 자기 통화(엔·원) 기준입니다.</p>
 </section>
 
 </div>
@@ -462,11 +478,13 @@
         <li>가격은 DefiLlama 가격 오라클이 여러 출처를 집계한 값이며 특정 거래소의 체결가가 아닙니다. 유동성이 얕은 종목은 편차가 과장되어 나타날 수 있습니다.</li>
         <li>브릿지된 잔액이 원본과 이중 계상될 여지가 있어 소형 체인 수치는 보수적으로 보아야 합니다.</li>
         <li>집중도 지수는 발행잔액 기준이며, 결제량이나 실사용자 수 기준과는 다른 그림을 줄 수 있습니다.</li>
+        <li><strong>감시목록</strong>(<code>etl/watchlist.json</code>): 원화·엔화 스테이블코인처럼 규모는 작아도 국내 논의에 직접 걸리는 종목은 발행잔액 하한과 무관하게 따로 표시합니다. 표시 규칙일 뿐이라 총 발행잔액·HHI(발행사 쏠림 지수)는 원래대로 전 종목 기준이고, 하한 미만 종목은 경보 건수·합성 위험점수에 넣지 않습니다.</li>
+        <li>비달러 페그 종목은 가격(USD)에 환율(Frankfurter, 중앙은행 기준환율)을 곱해 자기 통화 기준으로 편차를 잽니다. $1 기준으로 재면 1엔짜리 토큰이 −9,900bp 이탈처럼 보이는 오류가 생기기 때문입니다. 가격도 환율도 없는 종목(예: 루블 페그)은 USD 환산과 총계에서 빼고 이름만 따로 밝힙니다.</li>
       </ul>
     </div>
     <div class="panel">
       <h3>데이터</h3>
-      <p class="plain-p">DefiLlama 공개 엔드포인트를 하루 네 차례 수집합니다. 원본 API는 무인증이며, 수집 코드와 산출 결과 JSON은 모두 저장소에 공개되어 있습니다.</p>
+      <p class="plain-p">DefiLlama 공개 엔드포인트를 매시 정각에 수집합니다(GitHub Actions 예약 실행이라 혼잡 시 늦어지거나 건너뛸 수 있습니다). 원본 API는 무인증이며, 수집 코드와 산출 결과 JSON은 모두 저장소에 공개되어 있습니다.</p>
       <p class="plain-p">이 사이트는 개인이 공개 데이터만으로 만든 참고 자료이며, 어떠한 기관의 공식 견해도 아닙니다. 투자 판단의 근거로 쓰기에 적합하지 않습니다.</p>
     </div>
   </div>
@@ -491,6 +509,8 @@
     <dt>발행국가</dt><dd id="ap-country">—</dd>
     <dt>발행잔액</dt><dd id="ap-mcap">—</dd>
     <dt>점유율</dt><dd id="ap-share">—</dd>
+    <dt id="ap-peg-k" hidden>자기 통화 가격</dt><dd id="ap-peg" hidden>—</dd>
+    <dt id="ap-chain-k" hidden>체인별 분포</dt><dd id="ap-chain" hidden>—</dd>
   </dl>
   <p class="ap-note" id="ap-note" hidden></p>
 </div>
