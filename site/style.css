@@ -2,8 +2,8 @@
   --paper:#E5E8EB;
   --card:#F9FAFB;
   --ink:#0D1117;
-  --mid:#565E6B;
-  --dim:#8A929E;
+  --mid:#474F5B;
+  --dim:#5F6773;
   --rule:#C9D0D8;
   --rule-soft:#DCE1E7;
   --petrol:#123F58;
@@ -13,7 +13,7 @@
      (#2B6CB0 은 5.42:1) 로 WCAG AA 를 넘기므로 알약 토글의 활성 배지에 그대로 쓴다. */
   --accent:#2C6595;
   --sound:#2C6650;
-  --watch:#9C6612;
+  --watch:#8A5A0E;
   --breach:#9E2A25;
   --band:#F2E4C9;
   --sans:"IBM Plex Sans KR",system-ui,-apple-system,sans-serif;
@@ -38,7 +38,7 @@ body{
 }
 .wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.skip{position:absolute;left:-999px;top:0;background:var(--ink);color:#fff;padding:.6rem 1rem;z-index:9}
+.skip{position:absolute;left:-999px;top:0;background:var(--ink);color:var(--paper);padding:.6rem 1rem;z-index:9}
 .skip:focus{left:0}
 a{color:var(--petrol)}
 :focus-visible{outline:2px solid var(--petrol);outline-offset:3px}
@@ -62,7 +62,7 @@ a{color:var(--petrol)}
   display:grid;grid-template-columns:auto auto;gap:.15rem 1.1rem;margin:0;
   font-family:var(--mono);font-size:.72rem;align-content:end;
 }
-.stamp dt{color:#6D7784;letter-spacing:.05em}
+.stamp dt{color:#8A939E;letter-spacing:.05em}
 .stamp dd{margin:0;color:#C6CDD5;text-align:right}
 
 .band{background:var(--band);border-bottom:1px solid #D3BE93;font-size:.85rem}
@@ -553,8 +553,8 @@ html[data-theme="dark"]{
   --paper:#0D1117;
   --card:#161B22;
   --ink:#E6EDF3;
-  --mid:#9BA3AE;
-  --dim:#6E7681;
+  --mid:#B1BAC4;
+  --dim:#8B949E;
   --rule:#30363D;
   --rule-soft:#21262D;
   --petrol:#58A6FF;
@@ -566,9 +566,9 @@ html[data-theme="dark"]{
 }
 html[data-theme="dark"] body{background:var(--paper);color:var(--ink)}
 html[data-theme="dark"] .masthead{background:#010409;color:#E6EDF3}
-html[data-theme="dark"] .eyebrow{color:#6E7681}
+html[data-theme="dark"] .eyebrow{color:#8B949E}
 html[data-theme="dark"] .lede{color:#8B949E}
-html[data-theme="dark"] .stamp dt{color:#6E7681}
+html[data-theme="dark"] .stamp dt{color:#8B949E}
 html[data-theme="dark"] .stamp dd{color:#C9D1D9}
 html[data-theme="dark"] .band{background:#3D2E00;border-bottom-color:#6E4F00;color:#E6EDF3}
 html[data-theme="dark"] .status,
@@ -826,7 +826,7 @@ html[data-theme="dark"] .ch-tip-d{color:#8B949E}
 html[data-theme="dark"] .empty-box code,
 html[data-theme="dark"] .band code{background:color-mix(in srgb, #fff 8%, transparent)}
 html[data-theme="dark"] .foot-bar{background:#010409;border-color:var(--rule)}
-html[data-theme="dark"] .foot-bar p{color:#6E7681}
+html[data-theme="dark"] .foot-bar p{color:#8B949E}
 html[data-theme="dark"] .foot-bar a{color:#8B949E}
 html[data-theme="dark"] .prem-figs,
 html[data-theme="dark"] .prem-figs-2,
@@ -844,4 +844,138 @@ html[data-theme="dark"] .fz-figs{background:var(--card);border-color:var(--rule)
 @media print{
   .theme-btn,.risk-meter{display:none}
   .tabbar{position:static;backdrop-filter:none;background:#fff}
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UI 정비 (2026-10-07)
+   - 보조 글자 대비: :root 의 --mid/--dim/--watch 를 WCAG AA(4.5:1) 이상으로
+     조정했다(라이트: --card·--paper 양쪽, 다크: 동일). 위계는 색 대신 크기·굵기로.
+   - 가장 작은 글자를 10.5px(.7rem) 아래로 내리지 않는다.
+   - 패널·수치 블록을 같은 카드 언어(1px 테두리 + 12px 라운드 + 안쪽 여백)로 통일.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── 최소 글자 크기 ───────────────────────────────────── */
+.fig-tag{font-size:.7rem}
+.statuswrap .fig-k{font-size:.7rem}
+.live-badge,.watch-tag,.bar-tag,.gcur{font-size:.7rem}
+.ghead{font-size:.7rem}
+@media (max-width:620px){ .ghead{font-size:.66rem} }
+
+/* ── 상단 KPI ─────────────────────────────────────────── */
+/* "3 / 12" 같은 값이 칸이 좁을 때 두 줄로 쪼개지지 않게 */
+.statuswrap .fig-v{white-space:nowrap}
+/* 2열 배치에서 마지막 카드가 홀로 남으면 한 줄을 다 쓴다(빈 칸 방지) */
+@media (max-width:560px){
+  .statuswrap .figs .fig:last-child:nth-child(odd){grid-column:1/-1}
+}
+
+/* ── 머리말: 좁은 화면에서 테마 버튼이 가운데 떠 있던 문제 ─────── */
+@media (max-width:620px){
+  .masthead-right{
+    width:100%;flex-direction:row-reverse;justify-content:space-between;align-items:flex-end;
+  }
+  .theme-btn{align-self:flex-start}
+}
+
+/* ── 탭바: 가로로 더 있다는 신호(가장자리 페이드) ─────────────── */
+.tabbar-scroll{scroll-padding-inline:1rem}
+.tabbar-scroll.fade-r{
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);
+          mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);
+}
+.tabbar-scroll.fade-l{
+  -webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);
+          mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);
+}
+.tabbar-scroll.fade-l.fade-r{
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent);
+          mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent);
+}
+@media (max-width:620px){ .tab-btn{min-height:44px} }
+
+/* ── 패널 카드 통일 ───────────────────────────────────── */
+/* 예전에는 흰 배경에 안쪽 여백이 0 이라 글자가 카드 가장자리에 붙어 있었다. */
+.cols{column-gap:1rem;row-gap:1rem;border-top:0;padding-top:0}
+.panel{
+  background:var(--card);border:1px solid var(--rule);border-radius:12px;
+  padding:1.15rem 1.3rem 1.3rem;
+}
+.panel+.panel{border-left:1px solid var(--rule);padding-left:1.3rem}
+.panel h3{margin-bottom:1rem}
+.panel .foot:last-child{margin-bottom:0}
+@media (max-width:960px){
+  .panel+.panel{border-top:1px solid var(--rule);padding-top:1.15rem;margin-top:0}
+}
+/* 표를 품은 패널은 표가 카드 끝까지 닿게 한다 */
+.panel.fz-recent{padding:1.15rem 0 0;overflow:hidden}
+.panel.fz-recent h3{padding-inline:1.3rem}
+.panel .tw-inner{border-top:1px solid var(--rule)}
+
+/* 수치 블록(동결·코너흐름 탭)도 프리미엄 탭과 같은 카드로 */
+.block > .figs,.fz-figs{
+  background:var(--card);border:1px solid var(--rule);border-radius:12px;overflow:hidden;
+}
+.fz-figs{border-top:1px solid var(--rule)}
+.block > .figs{margin-bottom:1.25rem}
+.block > .figs .fig{border-left:1px solid var(--rule-soft)}
+.block > .figs .fig:first-child{border-left:0}
+@media (max-width:960px){
+  .block > .figs .fig:nth-child(3){border-left:0}
+}
+html[data-theme="dark"] .block > .figs{background:var(--card);border-color:var(--rule)}
+
+/* ── 표 ───────────────────────────────────────────────── */
+td{vertical-align:middle}
+.tsym-cell{vertical-align:middle}
+/* 정렬 가능한 머리글 */
+.th-sort{
+  appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;
+  letter-spacing:inherit;text-transform:inherit;cursor:pointer;display:inline-flex;
+  align-items:center;gap:.3rem;white-space:nowrap;
+}
+th.num .th-sort{flex-direction:row-reverse}
+.th-sort::after{
+  content:"";width:0;height:0;border-inline:4px solid transparent;
+  border-top:5px solid currentColor;opacity:.25;transition:opacity .15s ease,transform .15s ease;
+}
+.th-sort:hover{color:var(--ink)}
+.th-sort:hover::after{opacity:.6}
+th[aria-sort="descending"] .th-sort,th[aria-sort="ascending"] .th-sort{color:var(--ink)}
+th[aria-sort="descending"] .th-sort::after{opacity:1}
+th[aria-sort="ascending"] .th-sort::after{opacity:1;transform:rotate(180deg)}
+.th-sort:focus-visible{outline:2px solid var(--petrol);outline-offset:3px}
+/* 좁은 화면: 가로 스크롤 중에도 종목 칸이 남아 있게 */
+@media (max-width:760px){
+  #tbl td:first-child,#tbl th:first-child{
+    position:sticky;left:0;z-index:1;background:var(--card);
+    box-shadow:1px 0 0 var(--rule-soft);
+  }
+  #tbl thead th:first-child{z-index:2}
+  #tbl tbody tr:hover td:first-child{background:color-mix(in srgb, var(--paper) 65%, var(--card))}
+  #tbl .tname{display:none}
+}
+/* 빈 표·빈 차트 안내 */
+.empty-row td{
+  text-align:center;color:var(--mid);font-size:.82rem;padding:1.6rem 1rem;white-space:normal;
+}
+.chart-empty{
+  display:grid;place-items:center;min-height:150px;margin:0;padding:1rem;
+  color:var(--mid);font-size:.84rem;text-align:center;
+  border:1px dashed var(--rule);border-radius:8px;
+}
+.bars-empty{margin:0;color:var(--mid);font-size:.82rem}
+/* 다크: 건너뛰기 링크는 일반 링크 색 규칙보다 우선 */
+html[data-theme="dark"] .skip{color:var(--paper)}
+/* 다크: 켜진 토글의 흰 글자 대비 4.5:1 이상 */
+html[data-theme="dark"] .seg-btn[aria-pressed="true"]{background:#2A6FAE}
+/* 정렬 머리글 누름 영역(높이 24px 이상) */
+.th-sort{padding-block:.35rem;margin-block:-.35rem}
+/* 두 번째 넓은 차트 카드가 '.chart+.chart'(2단 차트용 규칙)에 걸려 왼쪽 여백을
+   잃던 문제. 카드끼리는 같은 안쪽 여백·테두리를 갖는다. */
+.chart.chart-wide+.chart.chart-wide{
+  padding:1rem 1.1rem .8rem;border:1px solid var(--rule);margin-top:1.25rem;
+}
+/* 2열 수치 블록에서 마지막 칸이 홀로 남으면 한 줄을 다 쓴다 */
+@media (max-width:960px){
+  .block .figs .fig:last-child:nth-child(odd){grid-column:1/-1;border-left:0}
 }
