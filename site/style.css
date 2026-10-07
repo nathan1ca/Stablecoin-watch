@@ -1184,3 +1184,6 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
   .ex-sum-i:nth-child(-n+2){border-top:0}
   .ex-sum-i:nth-child(even){border-left:1px solid var(--rule-soft)}
 }
+
+/* 김치프리미엄 카드: 발행 현황 카드(.tcard)와 같은 구성 */
+.pm-card{margin-top:1.4rem}
