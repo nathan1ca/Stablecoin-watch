@@ -1,0 +1,36 @@
+{
+  "_meta": {
+    "purpose": "발행잔액 하한(thresholds.json display.min_mcap_usd)과 무관하게 항상 따로 보여 줄 감시목록. 원화·엔화처럼 규모는 작아도 국내 감독 논의에 직접 걸리는 종목을 등록한다.",
+    "criterion": "① 원화(KRW) 또는 국내 감독 논의와 직접 맞닿은 인접국 통화(JPY 등) 페그, ② 발행 주체가 공개되어 있고 온체인에서 유통 중, ③ 네이선 요청 또는 근거(규제 문서·발행사 공시)가 있는 종목. 시총은 기준이 아니다.",
+    "aggregation": "감시목록은 '표시' 규칙일 뿐이다. 총 발행잔액·HHI·점유율은 원래부터 DefiLlama 전 종목으로 계산하므로 등록 여부와 무관하게 변하지 않는다. 경보 건수·합성 위험점수에는 하한 미만 감시목록 종목을 넣지 않는다(소형 종목 한 개가 시스템 등급을 흔들지 않게).",
+    "matching": "DefiLlama /stablecoins 응답에서 symbol(대문자)이 match_symbols 에 있고, pegType 이 peg_currency 와 같은 항목을 모두 잡는다. 같은 심볼이 둘 이상이면(구버전 토큰 등) 전부 보여 주고, 확인 후 exclude_ids 로 뺀다. 하나도 없으면 '미수집' 행으로 남겨 빠졌다는 사실 자체를 보이게 한다.",
+    "peg": "편차는 자기 통화 기준이다: 가격(USD) × USD/통화 환율(Frankfurter) − 1. 환율이 하루 한 번 고시되는 기준환율이라 장중 환율 변동이 편차에 섞인다. 그래서 등급은 USD 페그 임계값(thresholds.json peg)에 fx_lag_tolerance_bp 를 더해 매긴다.",
+    "fx_lag_tolerance_rationale": "50bp ≈ USD/JPY·USD/KRW 의 하루 변동 1표준편차. 연 변동성 8% 가정 시 8%/√252 ≈ 0.50%. 즉 '기준환율 고시 후 하루 동안 환율이 보통 움직이는 폭'만큼은 페그 이탈로 보지 않는다. 엄밀한 측정이 필요하면 원화·엔화 직접 호가(거래소 KRW·JPY 마켓)를 써야 하며 이는 백로그로 둔다.",
+    "updated": "2026-10-07",
+    "schema": {
+      "peg_currency": "페그 통화 코드 (DefiLlama pegType 의 'pegged' 뒤 부분, 예: JPY, KRW)",
+      "label": "화면 표시용 분류",
+      "match_symbols": "DefiLlama symbol 후보(대문자)",
+      "exclude_ids": "같은 심볼 중 제외할 DefiLlama id 목록 (확인 후 기입)",
+      "note": "편입 이유와 확인 상태"
+    }
+  },
+  "fx_lag_tolerance_bp": 50,
+  "pinned_currencies": ["KRW", "JPY"],
+  "watchlist": {
+    "JPYC": {
+      "peg_currency": "JPY",
+      "label": "엔화 스테이블코인",
+      "match_symbols": ["JPYC"],
+      "exclude_ids": [],
+      "note": "일본 자금결제법상 전자결제수단으로 발행되는 엔화 스테이블코인. 일본은 한국보다 먼저 법정 스테이블코인 제도를 시행해 원화 스테이블코인 설계의 비교 대상이다. 2026-10-07 네이선 요청으로 편입."
+    },
+    "KRWQ": {
+      "peg_currency": "KRW",
+      "label": "원화 스테이블코인",
+      "match_symbols": ["KRWQ"],
+      "exclude_ids": [],
+      "note": "해외에서 국내 법제 밖으로 발행된 원화 페그 토큰. 국내 발행 근거법이 없는 상태에서 원화 표시 토큰이 어떻게 유통되는지 보는 관측점이다. 2026-10-07 네이선 요청으로 편입."
+    }
+  }
+}
