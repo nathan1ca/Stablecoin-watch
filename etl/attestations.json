@@ -34,7 +34,7 @@
       "source_url": "https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/EURC%20Attestations/2026%20EURC_Examination%20Report%20August%2026.pdf",
       "verified": true,
       "verify": "원문 PDF 표 'EURC in Circulation' 2026-08-31 열",
-      "note": "준비금은 유로 표시. 현재 발행량(DefiLlama)이 보고서보다 23% 많은데, 5주 사이 실제 증가인지 집계 범위(체인) 차이인지는 미확인.",
+      "note": "준비금은 유로 표시. Circle 공시 현재 유통량은 4.224억 유로(2026-10-07 확인)로, 대시보드가 쓰는 DefiLlama 값(약 4.81억)보다 약 14% 적다 — 드리프트가 그만큼 크게 잡힌다. Circle 기준 보고 이후 증가는 약 +8.2%.",
       "attestor_note": "Circle 공시상 빅4"
     },
     {
@@ -135,30 +135,50 @@
       "cadence_days": 30,
       "attestor": "Grant Thornton",
       "report_type": "AICPA 검토",
-      "reported_circulating": null,
+      "reported_circulating": 238379206,
       "reserves_total": 239090456,
       "reserves_currency": "USD",
       "source_url": "https://docs.agora.finance/developer/transparency",
-      "verified": false,
-      "verify": "보고서 존재·기준일 확인. 유통량 표가 기계 판독되지 않아(판독값 불일치) 비워 둠 — 원문 확인 후 채울 것",
+      "verified": true,
+      "verify": "원문 PDF 2026-08-31 열: 유통량 238,379,206 · 준비금 $239,090,456 (자동 판독값을 네이선이 원문에서 확인, 2026-10-07)",
       "note": ""
+    },
+    {
+      "issuer": "Paxos (PayPal)",
+      "symbol": "PYUSD",
+      "as_of_date": "2026-08-31",
+      "cadence": "월간",
+      "cadence_days": 30,
+      "attestor": "KPMG",
+      "report_type": "AICPA 검토",
+      "reserves_currency": "USD",
+      "published_date": null,
+      "verified": true,
+      "reported_circulating": 2886948845,
+      "reserves_total": 2893935877,
+      "source_url": "https://www.paxos.com/pyusd-transparency",
+      "verify": "2026년 8월 보고서 수치를 네이선이 원문에서 확인(2026-10-07): 발행량 2,886,948,845 · 준비금 $2,893,935,877",
+      "note": "발행사 Paxos Trust Company(NYDFS). 투명성 페이지가 자바스크립트로 보고서 링크를 불러와 자동 판독이 안 된다 — 매월 손으로 갱신."
+    },
+    {
+      "issuer": "Paxos (Global Dollar)",
+      "symbol": "USDG",
+      "as_of_date": "2026-08-31",
+      "cadence": "월간",
+      "cadence_days": 30,
+      "attestor": "KPMG",
+      "report_type": "AICPA 검토",
+      "reserves_currency": "USD",
+      "published_date": null,
+      "verified": true,
+      "reported_circulating": 3340650602,
+      "reserves_total": 3350462467,
+      "source_url": "https://www.paxos.com/usdg-transparency#usdg-attestations",
+      "verify": "2026년 8월 보고서 수치를 네이선이 원문에서 확인(2026-10-07): 발행량 3,340,650,602 · 준비금 $3,350,462,467",
+      "note": "Paxos 싱가포르 법인 발행(MAS 규제). 2026-02-27 이후 보고서는 KPMG. 매월 손으로 갱신."
     }
   ],
   "not_covered": [
-    {
-      "symbol": "PYUSD",
-      "issuer": "Paxos (PayPal)",
-      "kind": "pending",
-      "reason": "월간 KPMG 보고서가 있으나 투명성 페이지가 자바스크립트로 링크를 불러와 자동 확인하지 못함 — 손으로 입력 필요",
-      "source_url": "https://www.paxos.com/pyusd-transparency"
-    },
-    {
-      "symbol": "USDG",
-      "issuer": "Paxos (Global Dollar)",
-      "kind": "pending",
-      "reason": "월간 KPMG 보고서가 있으나 위와 같은 이유로 미확인",
-      "source_url": "https://www.paxos.com/usdg-transparency"
-    },
     {
       "symbol": "USDe",
       "issuer": "Ethena",
