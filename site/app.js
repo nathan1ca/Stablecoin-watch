@@ -1859,26 +1859,33 @@
     $("#flowxrp-empty").hidden = true;
 
     const t = f.totals;
+    // 수집 한도로 요청 기간을 다 못 훑었으면(meta.truncated) 실제 관측 구간을 기간으로 쓴다.
+    // 예전 파일엔 이 필드가 없어 lookback_days 를 그대로 쓴다.
+    const trunc = f.meta.truncated === true && f.meta.observed_hours != null;
+    const hrs = f.meta.observed_hours;
+    const win = trunc
+      ? (hrs < 48 ? `최근 약 ${Math.max(1, Math.round(hrs))}시간` : `최근 약 ${Math.round(hrs / 24)}일`)
+      : `최근 ${f.meta.lookback_days}일`;
     $("#fx-net").textContent = (t.net_outflow_xrp >= 0 ? "+" : "−") + usd(Math.abs(t.net_outflow_xrp)) + " XRP";
     $("#fx-net").className = "fig-v" + (t.net_outflow_xrp > 0 ? " t-watch" : "");
-    $("#fx-window").textContent = `최근 ${f.meta.lookback_days}일 · ${f.meta.chain} · 한국 계정 ${f.meta.kr_account_count}개`;
+    $("#fx-window").textContent = `${win}${trunc ? `(${f.meta.lookback_days}일 요청, 수집 한도)` : ""} · ${f.meta.chain} · 한국 계정 ${f.meta.kr_account_count}개`;
     $("#fx-in").textContent = usd(t.inflow_xrp) + " XRP";
     $("#fx-out").textContent = usd(t.outflow_xrp) + " XRP";
     $("#fx-count").textContent = t.event_count.toLocaleString();
     setLead("flowxrp", t.event_count
-      ? `최근 ${f.meta.lookback_days}일 ${t.net_outflow_xrp >= 0 ? "국내 → 해외로" : "해외 → 국내로"} XRP가 ${bold(usd(Math.abs(t.net_outflow_xrp)) + "개")} 더 ${t.net_outflow_xrp >= 0 ? "나갔습니다(순유출)" : "들어왔습니다(순유입)"} — ${t.event_count.toLocaleString()}건.`
+      ? `${win} ${t.net_outflow_xrp >= 0 ? "국내 → 해외로" : "해외 → 국내로"} XRP가 ${bold(usd(Math.abs(t.net_outflow_xrp)) + "개")} 더 ${t.net_outflow_xrp >= 0 ? "나갔습니다(순유출)" : "들어왔습니다(순유입)"} — ${t.event_count.toLocaleString()}건.`
       : "");
 
     const xpts = (f.daily || []).map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_xrp }));
     lineChart($("#chart-flowxrp"), xpts, {
       color: "var(--breach)", label: "일별 순유출입", zero: true,
-      empty: `최근 ${f.meta.lookback_days}일 동안 관측된 결제가 하루치 이하라 추이를 그릴 수 없습니다.`,
+      empty: `${win} 동안 관측된 결제가 하루치 이하라 일별 추이를 그릴 수 없습니다.`,
       fmt: (v) => (v >= 0 ? "+" : "−") + usdC(Math.abs(v)),
     });
 
     const dirKo = { outflow: "유출", inflow: "유입" };
     $("#fx-tbl tbody").innerHTML = !(f.events || []).length
-      ? `<tr class="empty-row"><td colspan="5">최근 ${f.meta.lookback_days}일 동안 관측된 결제가 없습니다.</td></tr>`
+      ? `<tr class="empty-row"><td colspan="5">${win} 동안 관측된 결제가 없습니다.</td></tr>`
       : (f.events || []).slice(0, 60).map((e) => `<tr>
       <td>${new Date(e.t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</td>
       <td class="kind-${e.direction === "outflow" ? "seize" : "freeze"}">${dirKo[e.direction]}</td>
@@ -1892,6 +1899,7 @@
       "네이티브 XRP 결제만 집계합니다. RLUSD 등 발행 통화 이체는 빠져 있습니다.",
       "해외 비교군은 Binance·OKX·Bybit로 이름표가 붙은 계정들입니다. 다른 해외 거래소는 빠져 있습니다.",
       "그래서 이 숫자도 실제 순유출의 하한선이지 전체가 아닙니다.",
+      ...(trunc ? [`거래소 지갑은 거래가 매우 많아 계정당 조회 한도(페이지 수) 안에서 ${f.meta.lookback_days}일을 다 훑지 못했습니다. 모든 계정이 공통으로 훑은 ${win}(${fmtTime(f.meta.observed_since)} 이후)만 집계합니다.`] : []),
     ].map((s) => `<li>${s}</li>`).join("");
   }
 

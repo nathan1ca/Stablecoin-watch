@@ -86,8 +86,19 @@ def amount_xrp(tx: dict) -> float | None:
         return None
 
 
-def collect_account(account: str, kr_name: str, cutoff: datetime) -> list[dict]:
+def collect_account(account: str, kr_name: str, cutoff: datetime,
+                    info: dict | None = None) -> list[dict]:
+    """한 계정의 해외 라벨 계정 상대 XRP 결제.
+
+    info 를 넘기면 실제로 훑은 구간을 채워 준다: oldest_scanned(가장 오래된 거래
+    시각), capped(페이지 한도에 걸려 cutoff 까지 못 내려갔는지). 거래소 핫월렛은
+    거래가 매우 많아 한도(MAX_PAGES_PER_ACCOUNT)로는 몇 시간치밖에 못 훑는 경우가
+    있다(2026-10-07 실측: 180일 요청에 실제 약 4시간). 이를 모르고 '최근 180일'로
+    표시하면 수치가 크게 오독된다.
+    """
     events, marker, pages = [], None, 0
+    oldest: datetime | None = None
+    reached_cutoff = False
     while pages < MAX_PAGES_PER_ACCOUNT:
         pages += 1
         try:
@@ -110,6 +121,8 @@ def collect_account(account: str, kr_name: str, cutoff: datetime) -> list[dict]:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
             except (AttributeError, ValueError):
                 continue
+            if oldest is None or dt < oldest:
+                oldest = dt
             if dt < cutoff:
                 stop = True
                 continue
@@ -139,8 +152,25 @@ def collect_account(account: str, kr_name: str, cutoff: datetime) -> list[dict]:
 
         marker = page.get("marker")
         if not marker or stop:
+            reached_cutoff = True  # 기록 끝 또는 cutoff 도달 — 요청 구간 전체를 훑었다
             break
+    if info is not None:
+        info["oldest_scanned"] = oldest
+        info["capped"] = not reached_cutoff
     return events
+
+
+def observed_window(infos: list[dict], cutoff: datetime) -> tuple[datetime, bool]:
+    """모든 계정이 공통으로 훑은 구간의 시작 시각과 '한도에 걸렸는지'.
+
+    한 계정이라도 한도에 걸렸다면 그 계정이 훑은 가장 오래된 시각 중 가장 늦은
+    값부터가 모든 계정을 같은 조건으로 볼 수 있는 구간이다. 계정마다 구간이 다르면
+    거래가 적은 계정만 길게 잡혀 합계가 왜곡되므로 이 공통 구간으로 자른다.
+    """
+    capped = [i["oldest_scanned"] for i in infos if i.get("capped") and i.get("oldest_scanned")]
+    if not capped:
+        return cutoff, False
+    return max(max(capped), cutoff), True
 
 
 def collect(days: int) -> dict:
@@ -152,10 +182,21 @@ def collect(days: int) -> dict:
     global_present = sorted({e["name"] for e in names if e.get("name") in GLOBAL_NAMES})
     print(f"  한국 계정 {len(kr_accounts)}개, 해외 라벨 확인됨: {', '.join(global_present) or '없음'}")
 
-    events = []
+    events, infos = [], []
     for account, name in kr_accounts:
         print(f"  {name} ({account[:10]}…) 거래 내역 조회…")
-        events.extend(collect_account(account, name, cutoff))
+        info: dict = {}
+        events.extend(collect_account(account, name, cutoff, info))
+        infos.append(info)
+
+    since, truncated = observed_window(infos, cutoff)
+    if truncated:
+        before = len(events)
+        events = [e for e in events if e["t"] >= int(since.timestamp())]
+        print(f"  페이지 한도로 요청 구간({days}일)을 다 못 훑음 — 공통 관측 구간 "
+              f"{since.isoformat(timespec='minutes')} 이후로 자름 ({before}→{len(events)}건)")
+    now = datetime.now(timezone.utc)
+    observed_hours = round((now - since).total_seconds() / 3600, 1)
 
     events.sort(key=lambda e: -e["t"])
 
@@ -186,6 +227,11 @@ def collect(days: int) -> dict:
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "lookback_days": days, "chain": "XRPL", "asset": "XRP", "is_sample": False,
             "kr_account_count": len(kr_accounts), "global_labels_seen": global_present,
+            # 실제로 모든 계정을 훑은 공통 구간. truncated 면 lookback_days 가 아니라 이 구간이 집계 기간이다.
+            "observed_since": since.isoformat(timespec="seconds"),
+            "observed_hours": observed_hours,
+            "truncated": truncated,
+            "truncated_accounts": sum(1 for i in infos if i.get("capped")),
             "coverage_note": "이름이 정확히 'Upbit'/'Bithumb'인 xrpscan 라벨 계정과 "
                              "'Binance'/'OKX'/'Bybit'인 계정 사이의 네이티브 XRP 결제만 집계. "
                              "발행 통화(RLUSD 등), 계열사 라벨(Bithumb Global 등)은 제외.",
@@ -240,7 +286,10 @@ def main():
 
     t = data["totals"]
     sign = "유출" if t["net_outflow_xrp"] >= 0 else "유입"
+    m = data["meta"]
     print(f"\n완료 — 순{sign} {abs(t['net_outflow_xrp']):,.0f} XRP / 이벤트 {t['event_count']}건")
+    print(f"       실제 관측 구간: {m['observed_since']} 이후 약 {m['observed_hours']}시간 "
+          f"(요청 {m['lookback_days']}일, 한도 걸린 계정 {m['truncated_accounts']}/{m['kr_account_count']}개)")
 
 
 if __name__ == "__main__":
