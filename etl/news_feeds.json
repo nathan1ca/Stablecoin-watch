@@ -1,0 +1,174 @@
+{
+  "_meta": {
+    "purpose": "최근 24시간 스테이블코인 관련 뉴스·당국 발표의 제목·출처·링크를 모으는 RSS 목록. etl/fetch_news.py 가 읽는다.",
+    "copyright": "기사 본문·요약문은 가져오지 않는다. 제목·출처·발행 시각·원문 링크만 저장·표시한다.",
+    "filter": "filter=true 인 피드(당국·매체 전체 보도자료)는 제목(+설명)에 keywords 가운데 하나가 있어야 남긴다. 검색형 피드(Google 뉴스 검색)는 이미 검색어로 걸러져 filter=false.",
+    "maintenance": "피드 주소가 바뀌면 python etl/fetch_news.py --probe 로 응답·건수를 확인한 뒤 고친다. 응답이 없는 피드는 enabled=false 로 두고 사유를 note 에 남긴다.",
+    "updated": "2026-10-08",
+    "probe_candidates": "아직 확인 안 된 후보 주소. --probe 때만 시험하고 수집에는 쓰지 않는다. 응답이 확인되면 feeds 로 옮긴다.",
+    "per_feed_max": "검색형 피드는 하루 100건까지 와서 다른 피드를 밀어내므로 feed.max 로 최신 n건만 남긴다.",
+    "probe_2026_10_08": "CI 확인: Google 뉴스 3종·한국은행·Fed·ECB·BIS·FSB·SEC·ESMA·CoinDesk·The Block 응답, 금융위 503, 금감원·IMF 후보 실패."
+  },
+  "window_hours": 24,
+  "max_items": 80,
+  "keywords": [
+    "stablecoin",
+    "stable coin",
+    "stablecoins",
+    "tether",
+    "usdt",
+    "usdc",
+    "circle internet",
+    "paxos",
+    "genius act",
+    "e-money token",
+    "tokenized deposit",
+    "tokenised deposit",
+    "payment token",
+    "스테이블코인",
+    "스테이블 코인",
+    "원화 코인",
+    "원화코인",
+    "테더",
+    "디지털자산",
+    "가상자산",
+    "토큰증권",
+    "예금토큰"
+  ],
+  "categories": {
+    "reg_kr": "국내 당국",
+    "reg_global": "해외 당국·국제기구",
+    "news_kr": "국내 보도",
+    "news_global": "해외 보도"
+  },
+  "feeds": [
+    {
+      "id": "gnews_ko",
+      "name": "Google 뉴스 검색 (스테이블코인)",
+      "category": "news_kr",
+      "url": "https://news.google.com/rss/search?q=%EC%8A%A4%ED%85%8C%EC%9D%B4%EB%B8%94%EC%BD%94%EC%9D%B8+when%3A1d&hl=ko&gl=KR&ceid=KR%3Ako",
+      "filter": false,
+      "enabled": true,
+      "max": 30
+    },
+    {
+      "id": "gnews_ko_krw",
+      "name": "Google 뉴스 검색 (원화 스테이블코인·디지털자산기본법)",
+      "category": "news_kr",
+      "url": "https://news.google.com/rss/search?q=%28%22%EC%9B%90%ED%99%94+%EC%8A%A4%ED%85%8C%EC%9D%B4%EB%B8%94%EC%BD%94%EC%9D%B8%22+OR+%22%EB%94%94%EC%A7%80%ED%84%B8%EC%9E%90%EC%82%B0%EA%B8%B0%EB%B3%B8%EB%B2%95%22%29+when%3A1d&hl=ko&gl=KR&ceid=KR%3Ako",
+      "filter": false,
+      "enabled": true,
+      "max": 15
+    },
+    {
+      "id": "gnews_en",
+      "name": "Google News search (stablecoin)",
+      "category": "news_global",
+      "url": "https://news.google.com/rss/search?q=stablecoin+when%3A1d&hl=en-US&gl=US&ceid=US%3Aen",
+      "filter": false,
+      "enabled": true,
+      "max": 30
+    },
+    {
+      "id": "fsc",
+      "name": "금융위원회 보도자료",
+      "category": "reg_kr",
+      "url": "https://www.fsc.go.kr/about/fsc_bbs_rss/?fid=0111",
+      "filter": true,
+      "enabled": false,
+      "note": "2026-10-08 CI 확인: HTTP 503(해외 서버 접속 차단 추정). 국내 당국 소식은 Google 뉴스 검색 피드로 일부 대신한다."
+    },
+    {
+      "id": "bok",
+      "name": "한국은행 보도자료",
+      "category": "reg_kr",
+      "url": "https://www.bok.or.kr/portal/bbs/B0000501/news.rss?menuNo=201264",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "fed",
+      "name": "미 연준(Federal Reserve) 보도자료",
+      "category": "reg_global",
+      "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "ecb",
+      "name": "유럽중앙은행(ECB) 보도자료",
+      "category": "reg_global",
+      "url": "https://www.ecb.europa.eu/rss/press.html",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "bis",
+      "name": "국제결제은행(BIS) 보도자료",
+      "category": "reg_global",
+      "url": "https://www.bis.org/doclist/all_pressrels.rss",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "fsb",
+      "name": "금융안정위원회(FSB) 발표",
+      "category": "reg_global",
+      "url": "https://www.fsb.org/feed/",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "sec",
+      "name": "미 증권거래위원회(SEC) 보도자료",
+      "category": "reg_global",
+      "url": "https://www.sec.gov/news/pressreleases.rss",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "esma",
+      "name": "유럽증권시장청(ESMA) 소식",
+      "category": "reg_global",
+      "url": "https://www.esma.europa.eu/rss.xml",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "coindesk",
+      "name": "CoinDesk",
+      "category": "news_global",
+      "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+      "filter": true,
+      "enabled": true
+    },
+    {
+      "id": "theblock",
+      "name": "The Block",
+      "category": "news_global",
+      "url": "https://www.theblock.co/rss.xml",
+      "filter": true,
+      "enabled": true
+    }
+  ],
+  "probe_candidates": [
+    {
+      "id": "cand_fss",
+      "url": "https://www.fss.or.kr/fss/kr/bbs/rss.jsp?bbsId=B0000188",
+      "filter": true,
+      "note": "2026-10-08: XML 아님(HTML 응답 추정)"
+    },
+    {
+      "id": "cand_fsc2",
+      "url": "https://www.fsc.go.kr/rss/rss.xml",
+      "filter": true,
+      "note": "2026-10-08: XML 형식 오류"
+    },
+    {
+      "id": "cand_imf",
+      "url": "https://www.imf.org/en/News/RSS?language=eng",
+      "filter": true,
+      "note": "2026-10-08: 404"
+    }
+  ]
+}

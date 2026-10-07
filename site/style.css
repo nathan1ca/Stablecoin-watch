@@ -1192,3 +1192,29 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
 .kv-facts li{line-height:1.6;margin-bottom:.55rem;font-size:.85rem}
 .kv-facts b{color:var(--ink)}
 @media (max-width:760px){ .kv-cols{grid-template-columns:1fr} }
+
+/* ── 최근 24시간 뉴스 ─────────────────────────────── */
+.news-list{list-style:none;margin:.6rem 0 0;padding:0;border-top:1px solid var(--rule)}
+.news-i{display:flex;flex-direction:column;gap:.3rem;padding:.8rem .1rem;border-bottom:1px solid var(--rule-soft)}
+.news-t{color:var(--ink);text-decoration:none;font-size:.95rem;line-height:1.5;overflow-wrap:anywhere}
+.news-t:hover{text-decoration:underline}
+.news-t:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+.news-m{display:flex;flex-wrap:wrap;gap:.25rem .8rem;font-size:.78rem;color:var(--mid)}
+.news-cat{font-weight:600;color:var(--ink)}
+.news-none{padding:1rem .1rem;color:var(--mid);font-size:.88rem}
+
+/* ── 오늘의 뉴스 요약 ─────────────────────────────── */
+.dg-sec{margin-top:1.2rem}
+.dg-sec h3{margin:0 0 .4rem;font-size:.9rem;font-weight:600;color:var(--ink)}
+.dg-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.dg-i{padding:.8rem .1rem;border-bottom:1px solid var(--rule-soft)}
+.dg-i p{margin:.25rem 0 0;line-height:1.6;overflow-wrap:anywhere}
+.dg-t{font-weight:600;color:var(--ink);font-size:.95rem}
+.dg-s{color:var(--ink);font-size:.9rem}
+.dg-w{color:var(--mid);font-size:.86rem}
+.dg-w b,.dg-link b{color:var(--ink);font-weight:600;margin-right:.3rem}
+.dg-src{font-size:.8rem}
+.dg-conf{display:inline-block;margin-left:.3rem;padding:0 .4rem;border:1px solid var(--rule);border-radius:999px;font-size:.72rem;font-weight:500;color:var(--mid);vertical-align:middle}
+.dg-conf.is-weak{border-color:var(--watch);color:var(--watch)}
+.dg-none{color:var(--mid);font-size:.88rem;margin:.2rem 0 0}
+.dg-link{margin-top:1rem;font-size:.88rem;color:var(--mid);line-height:1.6}
