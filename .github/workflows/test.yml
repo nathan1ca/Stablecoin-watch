@@ -43,6 +43,11 @@ jobs:
         run: python etl/fetch_krw_volume.py --probe
         continue-on-error: true
 
+      # 뉴스 RSS 피드별 응답·24시간 건수·키워드 반영 건수를 로그로 남긴다(쓰기 없음).
+      - name: 뉴스 피드 확인 (읽기 전용)
+        run: python etl/fetch_news.py --probe
+        continue-on-error: true
+
       # 국내 거래소 5곳 공개 마켓 API 응답 형식과 스테이블코인 매칭을 로그로 남긴다(쓰기 없음).
       - name: 국내 거래소 거래지원 확인 (읽기 전용)
         run: python etl/fetch_listings.py --probe
