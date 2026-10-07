@@ -73,6 +73,12 @@ jobs:
         run: python etl/fetch_krw_volume.py
         continue-on-error: true
 
+      # 키 없이 항상 실행된다. 스냅샷(data/snapshot.json)의 종목 목록을 쓰므로
+      # 데이터 수집 다음에 둔다. 거래소 하나가 실패해도 나머지는 기록된다.
+      - name: 국내 거래소 거래지원 수집
+        run: python etl/fetch_listings.py
+        continue-on-error: true
+
       - name: 갱신분 커밋
         run: |
           git config user.name  "github-actions[bot]"
