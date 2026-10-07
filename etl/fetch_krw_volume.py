@@ -30,9 +30,9 @@ from lib.http import get_json  # noqa: E402
 KST = timezone(timedelta(hours=9))
 ASSETS = ("USDT", "USDC")
 EXCHANGES = [
-    {"id": "upbit", "name": "업비트"},
-    {"id": "bithumb", "name": "빗썸"},
-    {"id": "coinone", "name": "코인원"},
+    {"id": "upbit", "name": "업비트", "core": True},
+    {"id": "bithumb", "name": "빗썸", "core": True},
+    {"id": "coinone", "name": "코인원", "core": True},
     {"id": "digitalx", "name": "디지털엑스"},   # 옛 코빗(2026-08 사명 변경) — 공개 API 는 api.korbit.co.kr
     {"id": "gopax", "name": "고팍스"},          # 운영사 스트리미
 ]
@@ -138,8 +138,10 @@ def build(raw: dict[tuple[str, str], dict | Exception], today: str | None = None
             row = days.setdefault(d, {"date": d, "total_krw": 0.0, "by": {}})
             row["by"].setdefault(ex, {})[asset] = round(v["krw"])
             row["total_krw"] += v["krw"]
-    # 모든 거래소가 다 나온 날만 합계를 믿는다(일부 거래소만 있는 앞쪽 날짜는 뺀다).
-    ok_pairs = {(ex, a) for ex, st in status.items() for a, s in st.items() if s == "ok"}
+    # 대형 거래소(core)가 다 나온 날만 합계를 믿는다(일부만 있는 앞쪽 날짜는 뺀다).
+    # 소형 거래소는 거래가 없는 날 일봉 자체가 빠지기도 해서, 있는 날만 더하고 없으면 0 으로 본다.
+    core = {e["id"] for e in EXCHANGES if e.get("core")}
+    ok_pairs = {(ex, a) for ex, st in status.items() for a, s in st.items() if s == "ok" and ex in core}
     daily = []
     for d in sorted(days):
         row = days[d]
@@ -213,6 +215,13 @@ def main() -> None:
     if args.probe:
         for k, v in RAW_SAMPLE.items():
             print(f"  [원문 {k}] {v}")
+        # 디지털엑스 일봉 volume 이 수량인지 원화인지 판별: 24시간 시세의 거래량·거래대금 비율을 본다.
+        for sym in ("usdt_krw", "usdc_krw"):
+            try:
+                t = get_json(f"https://api.korbit.co.kr/v2/tickers?symbol={sym}", timeout=20)
+                print(f"  [원문 digitalx ticker {sym}] {json.dumps(t, ensure_ascii=False)[:500]}")
+            except Exception as e:  # 확인용이라 실패해도 그만
+                print(f"  [원문 digitalx ticker {sym}] 실패 {e}")
         print("KRWVOL_JSON " + json.dumps(res, ensure_ascii=False, separators=(",", ":")))
         return
     if not res["daily"]:
