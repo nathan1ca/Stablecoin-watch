@@ -424,7 +424,7 @@
     wrap.hidden = false;
 
     // 종목별 현황 표 맨 아래 묶음
-    tb.innerHTML = `<tr class="tgroup"><th colspan="9" scope="rowgroup">감시목록 — 발행잔액 하한 미만이어도 항상 표시 · 편차는 자기 통화 기준</th></tr>`
+    tb.innerHTML = `<tr class="tgroup"><th colspan="10" scope="rowgroup">감시목록 — 발행잔액 하한 미만이어도 항상 표시 · 편차는 자기 통화 기준</th></tr>`
       + rows.map((a, i) => {
         const ok = a.status === "ok";
         const g = ok ? (a.grade_peg_local || "unknown") : "unknown";
@@ -433,6 +433,7 @@
         <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
             data-i="${i}" aria-expanded="false"
             aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || a.label || "")}</span></span></td>
+        <td class="td-ex">${krLogos(a.symbol)}</td>
         <td>${ok ? esc(a.mechanism_ko) : "—"}</td>
         <td>${esc(a.peg_currency)}</td>
         <td class="num" title="${ok ? esc(localAmt(a.circulating, a.peg_currency)) : ""}">${ok ? "$" + usdC(a.mcap_usd) : "—"}</td>
@@ -512,6 +513,11 @@
       ? `${(CUR_SIGN[a.peg_currency] || "")}${a.price_local.toFixed(4)} (${signed(a.dev_bp_local, 1)}bp)`
       : "");
     setOpt("ap-chain", isW ? chainMix(a) : "");
+    {
+      const kr = krText(a.symbol);
+      $("#ap-kr").textContent = kr || "—";
+      $("#ap-kr").hidden = $("#ap-kr-k").hidden = !kr;
+    }
     const noteTxt = [a.issuer_note, isW ? a.data_caveat : ""].filter(Boolean).join(" ");
     const note = $("#ap-note");
     note.textContent = noteTxt;
@@ -1085,6 +1091,7 @@
   // 값이 없는 칸(—)은 방향과 관계없이 항상 맨 아래로 보낸다.
   const SORT_COLS = [
     { key: "symbol", type: "text" },
+    { key: "kr", type: "kr", hint: "국내 거래지원 거래소 수 순" },
     { key: "mechanism_ko", type: "text" },
     { key: "peg_currency", type: "text" },
     { key: "mcap_usd", type: "num" },
@@ -1095,11 +1102,12 @@
     { key: "grade", type: "grade" },
   ];
   const GRADE_RANK = { breach: 3, watch: 2, sound: 1, unknown: 0 };
-  const SORT = { col: 3, dir: "descending", src: [] };
+  const SORT = { col: 4, dir: "descending", src: [] };
 
   const sortVal = (a, c) => {
     const v = a[c.key];
     if (c.type === "grade") return GRADE_RANK[v] ?? -1;
+    if (c.type === "kr") return krCount(a.symbol);
     if (c.type === "abs") return v == null ? null : Math.abs(v);
     if (c.type === "num") return v == null || !isFinite(v) ? null : v;
     return v == null ? null : String(v);
@@ -1161,7 +1169,8 @@
   const PAGE = 25;
   const matchRow = (a) => {
     if (TBL.f === "alert" && !(a.grade === "watch" || a.grade === "breach")) return false;
-    if (TBL.f !== "all" && TBL.f !== "alert" && a.mechanism !== TBL.f) return false;
+    if (TBL.f === "kr" && !(krCount(a.symbol) > 0)) return false;
+    if (TBL.f !== "all" && TBL.f !== "alert" && TBL.f !== "kr" && a.mechanism !== TBL.f) return false;
     if (TBL.q) {
       const q = TBL.q.toLowerCase();
       return String(a.symbol || "").toLowerCase().includes(q) || String(a.name || "").toLowerCase().includes(q)
@@ -1206,13 +1215,14 @@
     TABLE_ROWS = rows;
     const icons = hasIcons(rows);
     if (!rows.length) {
-      $("#tbl tbody").innerHTML = `<tr class="empty-row"><td colspan="9">조건에 맞는 종목이 없습니다.</td></tr>`;
+      $("#tbl tbody").innerHTML = `<tr class="empty-row"><td colspan="10">조건에 맞는 종목이 없습니다.</td></tr>`;
       return;
     }
     $("#tbl tbody").innerHTML = rows.map((a, i) => `<tr>
       <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
           data-i="${i}" aria-expanded="false"
           aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></span></td>
+      <td class="td-ex">${krLogos(a.symbol)}</td>
       <td>${a.mechanism_ko}</td>
       <td>${a.peg_currency}</td>
       <td class="num">$${usd(a.mcap_usd)}</td>
@@ -1641,6 +1651,119 @@
     });
   }
 
+  // ── 국내 거래소 거래지원 ───────────────────────────────
+  // data/listings.json(etl/fetch_listings.py)이 있을 때만 '국내' 열·칩·절이 채워진다.
+  // 거래소 티커와 DefiLlama 심볼을 대문자로 맞춰 대조한다.
+  let LISTINGS = null;
+  const EX_NAME = {};
+  const krOf = (sym) => (LISTINGS && LISTINGS.assets && LISTINGS.assets[String(sym || "").toUpperCase()]) || null;
+  const krCount = (sym) => (LISTINGS ? (krOf(sym) ? krOf(sym).count : 0) : null);
+  const mkTxt = (m) => m.join("·");
+  function krText(sym) {
+    const k = krOf(sym);
+    if (!k) return LISTINGS ? "없음(국내 원화마켓 5곳 기준)" : "";
+    return Object.entries(k.exchanges).map(([id, v]) =>
+      `${EX_NAME[id] || id} ${mkTxt(v.markets)}${v.warning ? "(유의)" : ""}${v.stale ? "*" : ""}`).join(" · ");
+  }
+  // 거래소 아이콘 한 칸: 공식 아이콘 사본(있으면) 위에, 없거나 못 읽으면 머리글자 배지.
+  // 오른쪽 위 작은 글자 = 마켓(원=KRW, B=BTC, T=USDT).
+  const MK_SHORT = { KRW: "원", BTC: "B", USDT: "T" };
+  const MK_KO = { KRW: "원화", BTC: "BTC", USDT: "USDT" };
+  const EX = {}; // id → 거래소 메타(이름·아이콘·머리글자·색)
+  function exBadge(e, v, cls = "") {
+    const mk = v ? v.markets.map((m) => MK_SHORT[m] || m[0]).join("") : "";
+    const tip = v ? `${e.name} · ${v.markets.map((m) => MK_KO[m] || m).join("·")} 마켓${v.warning ? " · 투자유의" : ""}${v.stale ? " · 이번 수집 실패, 직전 값" : ""}` : e.name;
+    return `<span class="ex${v && v.warning ? " ex--warn" : ""}${v && v.stale ? " ex--stale" : ""}${cls}" title="${esc(tip)}" role="listitem" aria-label="${esc(tip)}">
+      <span class="ex-mono" style="--exc:${esc(e.color || "#475569")}" aria-hidden="true">${esc(e.short || e.name[0])}</span>${
+      e.icon ? `<img class="ex-img" src="${esc(e.icon)}" alt="" width="22" height="22" loading="lazy" decoding="async">` : ""}${
+      mk ? `<i class="ex-mk" aria-hidden="true">${esc(mk)}</i>` : ""}</span>`;
+  }
+  function krLogos(sym) {
+    if (!LISTINGS) return "";
+    const k = krOf(sym);
+    if (!k) return `<span class="kr-0" aria-label="국내 거래지원 없음">—</span>`;
+    // 거래소 순서를 고정해(빈 자리 유지) 행끼리 같은 거래소가 세로로 맞도록 한다.
+    const ids = Object.keys(EX);
+    return `<span class="exl" role="list">${ids.map((id) => k.exchanges[id]
+      ? exBadge(EX[id], k.exchanges[id]) : '<span class="ex ex--empty" aria-hidden="true"></span>').join("")}</span>`;
+  }
+  // 아이콘 사본을 못 읽으면 머리글자 배지가 드러나게 이미지만 숨긴다(error 는 버블링하지 않아 캡처로 받는다).
+  document.addEventListener("error", (ev) => {
+    const t = ev.target;
+    if (t && t.classList && t.classList.contains("ex-img")) t.remove();
+  }, true);
+
+  function renderListings(L, snap) {
+    LISTINGS = L;
+    const exs = (L.meta && L.meta.exchanges) || [];
+    exs.forEach((e) => { EX_NAME[e.id] = e.name; EX[e.id] = e; });
+    const sec = $("#kr-sec");
+    const syms = Object.keys(L.assets || {});
+    // 표·감시목록·칩을 다시 그려 '국내 거래소' 열을 채운다.
+    const chip = document.querySelector('.tbl-tools .chip[data-f="kr"]');
+    if (chip) chip.hidden = false;
+    const leg = $("#ex-legend");
+    if (leg) leg.hidden = false;
+    paintTable();
+    renderWatchlist(snap);
+    if (!sec) return;
+
+    const mcapOf = {};
+    (snap.assets || []).concat((snap.watchlist && snap.watchlist.rows) || [])
+      .forEach((a) => { mcapOf[String(a.symbol).toUpperCase()] = a; });
+
+    // 거래소별 요약: 아이콘 · 이름 · 스테이블코인 종목 수(원화마켓)
+    $("#ex-sum").innerHTML = exs.map((e) => {
+      const mine = syms.filter((sym) => L.assets[sym].exchanges[e.id]);
+      const krw = mine.filter((sym) => L.assets[sym].exchanges[e.id].markets.includes("KRW")).length;
+      return `<li class="ex-sum-i${e.status !== "ok" ? " is-fail" : ""}">
+        ${exBadge(e, null, " ex--lg")}
+        <span class="ex-sum-t"><b>${esc(e.name)}</b>
+          <span class="ex-sum-n">${mine.length}종${mine.length ? ` · 원화마켓 ${krw}종` : ""}${e.status !== "ok" ? " · 이번 수집 실패(직전 값)" : ""}</span></span>
+      </li>`;
+    }).join("");
+
+    const tracked = (snap.assets || []).length;
+    const listedMain = (snap.assets || []).filter((a) => krOf(a.symbol));
+    const shareSum = listedMain.reduce((acc, a) => acc + (a.share || 0), 0);
+    const all5 = syms.filter((x) => L.assets[x].count === exs.length && exs.length > 1);
+    setLead("kr", syms.length
+      ? `상위 ${bold(tracked + "종")} 가운데 ${bold(listedMain.length + "종")}이 국내 원화마켓 거래소에서 거래되며, 발행잔액으로는 ${bold(shareSum.toFixed(1) + "%")}입니다.`
+        + (all5.length ? ` ${exs.length}곳 모두 지원하는 종목은 ${all5.map((x) => bold((mcapOf[x] || {}).symbol || x)).join("·")}입니다.` : "")
+      : "");
+
+    const okEx = exs.filter((e) => e.status === "ok");
+    const fails = exs.filter((e) => e.status !== "ok").map((e) => e.name);
+    $("#kr-basis").textContent =
+      `출처: ${exs.map((e) => e.name).join("·")} 공개 마켓 목록(${okEx.length}/${exs.length}곳 수집) · 기준 ${fmtTime(L.meta.generated_at)}`
+      + (fails.length ? ` · 수집 실패: ${fails.join("·")} — 직전 값 표시` : "")
+      + ". 거래소 티커와 심볼이 같으면 같은 종목으로 봅니다(동명 티커는 다른 토큰일 수 있음). 시작·종료일은 이 수집이 처음 확인한 날로, 거래소 공지일과 다를 수 있습니다.";
+
+    const ev = (L.events || []).slice(0, 12);
+    const evWrap = $("#kr-events-wrap");
+    if (ev.length) {
+      $("#kr-events").innerHTML = ev.map((e) => `<li class="kr-ev kr-ev--${e.kind}">
+        <span class="kr-ev-d">${esc(e.date)}</span>
+        <span class="kr-ev-k">${e.kind === "listed" ? "시작" : "종료"}</span>
+        <span>${esc(EX_NAME[e.exchange] || e.exchange)} <b class="tsym">${esc(e.symbol)}</b> ${esc(MK_KO[e.market] || e.market)} 마켓</span>
+      </li>`).join("");
+      evWrap.hidden = false;
+    } else evWrap.hidden = true;
+    sec.hidden = false;
+
+    const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const recent = (L.events || []).filter((e) => e.date >= since);
+    const nL = recent.filter((e) => e.kind === "listed").length, nD = recent.length - nL;
+    const sig = [];
+    if (nD) sig.push({ sev: "watch", tab: "issuance", target: "kr-sec", label: "국내 거래지원 종료",
+      html: `최근 7일 국내 거래지원 종료 ${bold(nD + "건")} — ${recent.filter((e) => e.kind !== "listed").slice(0, 3)
+        .map((e) => esc(`${EX_NAME[e.exchange] || e.exchange} ${e.symbol}`)).join(", ")}` });
+    if (nL) sig.push({ sev: "info", tab: "issuance", target: "kr-sec", label: "국내 거래지원 시작",
+      html: `최근 7일 국내 거래지원 시작 ${bold(nL + "건")} — ${recent.filter((e) => e.kind === "listed").slice(0, 3)
+        .map((e) => esc(`${EX_NAME[e.exchange] || e.exchange} ${e.symbol}`)).join(", ")}` });
+    putSignals("listings", sig);
+  }
+
   // ── 부팅 ────────────────────────────────────────────────
   async function boot() {
     let snap, hist;
@@ -1744,6 +1867,14 @@
       if (r.ok) renderFlowXRP(await r.json());
     } catch (e) {
       console.info("flow_xrp.json 없음 — XRP 자금흐름 섹션 생략");
+    }
+
+    // 국내 거래소 거래지원 현황
+    try {
+      const r = await fetch("data/listings.json", { cache: "no-cache" });
+      if (r.ok) renderListings(await r.json(), snap);
+    } catch (e) {
+      console.info("listings.json 없음 — 국내 거래지원 표시 생략");
     }
 
     // 어테스테이션 시차는 손으로 갱신되는 데이터다.

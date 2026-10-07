@@ -43,6 +43,8 @@ etl/watchlist.json     감시목록 — 시총 하한과 무관하게 항상 표
 etl/lib/fx.py           Frankfurter 환율 · 비달러 페그의 자기 통화 기준 편차
 etl/attestations.json   어테스테이션 원본 데이터 (손으로 갱신)
 etl/fetch_attestation.py 어테스테이션 시차 계산
+etl/fetch_listings.py   국내 거래소(업비트·빗썸·코인원·디지털엑스(옛 코빗)·고팍스) 스테이블코인 거래지원 현황 (키 불필요)
+etl/kr_exchanges.json   국내 거래소 목록·제외 티커·티커 별칭 (손으로 갱신)
 etl/live_loop.py        상시 실행 루프 (실시간 갱신용, 선택)
 etl/keccak.py           keccak-256 순수 구현 (topic0 계산)
 etl/make_sample.py      샘플 데이터 생성 (개발용)
@@ -267,3 +269,17 @@ GitHub Pages 기준입니다. 저장소 Settings → Pages → Source를 **GitHu
 5. Actions → "텔레그램 알림" → Run workflow 로 시험 메시지가 오는지 확인합니다.
 
 시크릿이 없으면 알림 단계는 조용히 건너뛰며 다른 워크플로에는 영향이 없습니다.
+
+### 국내 거래소 거래지원
+
+국내 원화마켓 거래소 5곳의 공개 마켓 목록(무인증)을 받아, 대시보드 종목이 어느 거래소·어느 마켓(KRW·BTC·USDT)에서 거래되는지 `site/data/listings.json`에 씁니다. 직전 수집분과 비교해 거래지원 시작·종료를 기록하며, 거래소 API 가 실패한 회차에는 종료로 판정하지 않습니다(직전 값을 `*`로 표시).
+
+```bash
+python etl/fetch.py                     # snapshot.json 의 종목 목록을 쓴다
+python etl/fetch_listings.py --probe    # 거래소별 응답·매칭 확인(쓰기 없음)
+python etl/fetch_listings.py
+```
+
+거래소 아이콘은 각 거래소 공식 아이콘의 사본을 처음 한 번 받아 `site/data/ex-icons/`에 둡니다(빗썸·코인원은 앱스토어 공식 앱 아이콘, 못 받으면 머리글자 배지). 다시 받으려면 `--refresh-icons`.
+
+대조는 거래소 티커 = DefiLlama 심볼(대문자)입니다. 같은 티커의 다른 토큰은 `etl/kr_exchanges.json`의 `deny_symbols`로 빼고(사유는 `deny_notes`), 티커가 다르면 `aliases`로 잇습니다.
