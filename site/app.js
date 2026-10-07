@@ -353,7 +353,7 @@
         const syms = yb.slice(0, 6).map((a) => a.symbol).join("·");
         ybEl.textContent =
           `이번 수집분에서 제외된 이자부 상품 ${yb.length}종: ${syms}`
-          + " — 이자가 토큰 가격에 누적되는 구조라 $1이 목표가가 아닙니다. 아래 종목별 현황 표에서 편차가 “—”로 표시됩니다.";
+          + " — 이자가 토큰 가격에 누적되는 구조라 $1이 목표가가 아닙니다. 위 종목별 현황 표에서 편차가 “—”로 표시됩니다.";
         ybEl.hidden = false;
       } else {
         ybEl.hidden = true;
@@ -664,7 +664,7 @@
   }
 
   // 차트 타이포·선 굵기는 여기 상수 하나로 모든 차트가 같이 간다.
-  // lineChart 를 쓰는 차트(발행잔액·순증감률·프리미엄·코너 흐름 ETH/XRP)는
+  // lineChart 를 쓰는 차트(발행잔액·순증감률·프리미엄 등)는
   // 전부 이 값을 그대로 따르므로, 통일하려면 여기만 고치면 된다.
   const AX_BASE = 520;          // 세로/가로 비율 기준 폭 (아래 REF 참고)
   const AX_SIZE = 12.5;         // 축 라벨 크기 (CSS 픽셀)
@@ -1852,49 +1852,6 @@
     })));
   }
 
-  // ── XRP 코너 자금흐름 ────────────────────────────────────
-  function renderFlowXRP(f) {
-    if (!f || !f.totals) return;
-    $("#flowxrp-sec").hidden = false;
-    $("#flowxrp-empty").hidden = true;
-
-    const t = f.totals;
-    $("#fx-net").textContent = (t.net_outflow_xrp >= 0 ? "+" : "−") + usd(Math.abs(t.net_outflow_xrp)) + " XRP";
-    $("#fx-net").className = "fig-v" + (t.net_outflow_xrp > 0 ? " t-watch" : "");
-    $("#fx-window").textContent = `최근 ${f.meta.lookback_days}일 · ${f.meta.chain} · 한국 계정 ${f.meta.kr_account_count}개`;
-    $("#fx-in").textContent = usd(t.inflow_xrp) + " XRP";
-    $("#fx-out").textContent = usd(t.outflow_xrp) + " XRP";
-    $("#fx-count").textContent = t.event_count.toLocaleString();
-    setLead("flowxrp", t.event_count
-      ? `최근 ${f.meta.lookback_days}일 ${t.net_outflow_xrp >= 0 ? "국내 → 해외로" : "해외 → 국내로"} XRP가 ${bold(usd(Math.abs(t.net_outflow_xrp)) + "개")} 더 ${t.net_outflow_xrp >= 0 ? "나갔습니다(순유출)" : "들어왔습니다(순유입)"} — ${t.event_count.toLocaleString()}건.`
-      : "");
-
-    const xpts = (f.daily || []).map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_xrp }));
-    lineChart($("#chart-flowxrp"), xpts, {
-      color: "var(--breach)", label: "일별 순유출입", zero: true,
-      empty: `최근 ${f.meta.lookback_days}일 동안 관측된 결제가 하루치 이하라 추이를 그릴 수 없습니다.`,
-      fmt: (v) => (v >= 0 ? "+" : "−") + usdC(Math.abs(v)),
-    });
-
-    const dirKo = { outflow: "유출", inflow: "유입" };
-    $("#fx-tbl tbody").innerHTML = !(f.events || []).length
-      ? `<tr class="empty-row"><td colspan="5">최근 ${f.meta.lookback_days}일 동안 관측된 결제가 없습니다.</td></tr>`
-      : (f.events || []).slice(0, 60).map((e) => `<tr>
-      <td>${new Date(e.t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</td>
-      <td class="kind-${e.direction === "outflow" ? "seize" : "freeze"}">${dirKo[e.direction]}</td>
-      <td>${e.kr_wallet}</td>
-      <td>${e.global_wallet}</td>
-      <td class="num">${usd(e.amount)}</td>
-    </tr>`).join("");
-
-    $("#fx-coverage").innerHTML = [
-      "이름이 정확히 'Upbit'/'Bithumb'인 xrpscan 라벨 계정만 봅니다. 'Bithumb Global' 같은 계열사 라벨은 빠져 있습니다.",
-      "네이티브 XRP 결제만 집계합니다. RLUSD 등 발행 통화 이체는 빠져 있습니다.",
-      "해외 비교군은 Binance·OKX·Bybit로 이름표가 붙은 계정들입니다. 다른 해외 거래소는 빠져 있습니다.",
-      "그래서 이 숫자도 실제 순유출의 하한선이지 전체가 아닙니다.",
-    ].map((s) => `<li>${s}</li>`).join("");
-  }
-
   // ── 김치프리미엄 실시간 표시 ──────────────────────────────
   // 실제 테스트 결과 Upbit·Binance는 브라우저의 직접 호출(CORS)을 막는다.
   // 그래서 "브라우저가 API를 직접 두드리는" 방식은 작동하지 않는다. 대신
@@ -2203,14 +2160,6 @@
       console.info("premium.json 없음 — 프리미엄 섹션 생략");
     }
 
-
-    // XRP 코너는 키가 필요 없다.
-    try {
-      const r = await fetch("data/flow_xrp.json", { cache: "no-cache" });
-      if (r.ok) renderFlowXRP(await r.json());
-    } catch (e) {
-      console.info("flow_xrp.json 없음 — XRP 자금흐름 섹션 생략");
-    }
 
     // 원화마켓 스테이블코인 거래대금
     try {
