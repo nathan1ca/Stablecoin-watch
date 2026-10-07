@@ -4,15 +4,50 @@
     "scope": "특정금융정보법상 신고된 원화마켓 사업자 5곳의 공개 시세 API(무인증)만 쓴다. 코인마켓 사업자는 대상에서 뺐다.",
     "matching": "거래소 티커(대문자)와 DefiLlama 심볼(대문자)이 같으면 같은 종목으로 본다. 티커가 같아도 다른 토큰일 수 있으므로 한 글자 티커 등 혼동 위험이 큰 심볼은 deny_symbols 로 뺀다. 거래소 티커가 다르면 aliases 로 잇는다(거래소 티커 → DefiLlama 심볼).",
     "events": "거래지원 시작·종료는 직전 수집분과 비교해 기록한다. 거래소 API 가 실패한 회차에는 종료로 판정하지 않는다(일시 장애를 상장폐지로 오인하지 않기 위해).",
-    "updated": "2026-10-07"
+    "updated": "2026-10-07",
+    "verified": "2026-10-07 CI 확인: 업비트 JPYC 한글명 '제이피와이코인'(엔화 스테이블코인 JPYC 와 일치)."
   },
   "exchanges": [
-    {"id": "upbit", "name": "업비트", "operator": "두나무", "url": "https://upbit.com"},
-    {"id": "bithumb", "name": "빗썸", "operator": "빗썸코리아", "url": "https://www.bithumb.com"},
-    {"id": "coinone", "name": "코인원", "operator": "코인원", "url": "https://coinone.co.kr"},
-    {"id": "korbit", "name": "코빗", "operator": "코빗", "url": "https://www.korbit.co.kr"},
-    {"id": "gopax", "name": "고팍스", "operator": "스트리미", "url": "https://www.gopax.co.kr"}
+    {
+      "id": "upbit",
+      "name": "업비트",
+      "operator": "두나무",
+      "url": "https://upbit.com"
+    },
+    {
+      "id": "bithumb",
+      "name": "빗썸",
+      "operator": "빗썸코리아",
+      "url": "https://www.bithumb.com"
+    },
+    {
+      "id": "coinone",
+      "name": "코인원",
+      "operator": "코인원",
+      "url": "https://coinone.co.kr"
+    },
+    {
+      "id": "korbit",
+      "name": "코빗",
+      "operator": "코빗",
+      "url": "https://www.korbit.co.kr"
+    },
+    {
+      "id": "gopax",
+      "name": "고팍스",
+      "operator": "스트리미",
+      "url": "https://www.gopax.co.kr"
+    }
   ],
-  "deny_symbols": ["U", "M"],
-  "aliases": {}
+  "deny_symbols": [
+    "U",
+    "M",
+    "FRAX"
+  ],
+  "aliases": {},
+  "deny_notes": {
+    "U": "한 글자 티커 — 다른 토큰과 혼동 위험",
+    "M": "한 글자 티커 — 다른 토큰과 혼동 위험",
+    "FRAX": "2025년 Frax 거버넌스 토큰(옛 FXS)이 FRAX 로 티커를 바꿔, 국내 거래소의 FRAX 는 스테이블코인이 아닌 거버넌스 토큰일 가능성이 높다(빗썸·코인원 표기 확인 필요)"
+  }
 }

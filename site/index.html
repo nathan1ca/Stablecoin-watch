@@ -234,6 +234,7 @@
       <button type="button" class="chip" data-f="fiat-backed" aria-pressed="false">법정화폐 담보</button>
       <button type="button" class="chip" data-f="crypto-backed" aria-pressed="false">가상자산 담보</button>
       <button type="button" class="chip" data-f="algorithmic" aria-pressed="false">알고리즘형</button>
+      <button type="button" class="chip" data-f="kr" aria-pressed="false" hidden>국내 거래지원</button>
     </div>
     <span class="tbl-count" id="tbl-count" aria-live="polite"></span>
   </div>
@@ -244,7 +245,7 @@
           <th scope="col">종목</th><th scope="col">담보</th><th scope="col">페그</th>
           <th scope="col" class="num">발행잔액</th><th scope="col" class="num">점유율</th>
           <th scope="col" class="num">편차 bp</th><th scope="col" class="num">7일</th>
-          <th scope="col" class="num">30일</th><th scope="col">등급</th>
+          <th scope="col" class="num">30일</th><th scope="col" class="num"><abbr title="국내 원화마켓 거래소 5곳(업비트·빗썸·코인원·코빗·고팍스) 가운데 거래지원 중인 곳 수">국내</abbr></th><th scope="col">등급</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -253,7 +254,26 @@
   </div>
   <div class="tbl-more" id="tbl-more-wrap" hidden><button type="button" class="pill-btn" id="tbl-more"></button></div>
   <p class="foot"><span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 계기판과 같은 발행사 개요가 열립니다.</span>
-    맨 아래 감시목록 행의 편차는 자기 통화(엔·원) 기준입니다.</p>
+    맨 아래 감시목록 행의 편차는 자기 통화(엔·원) 기준입니다. ‘국내’는 국내 원화마켓 거래소 5곳 가운데 거래지원 중인 곳 수입니다.</p>
+</section>
+
+<section class="wrap block" id="kr-sec" aria-labelledby="h-kr" hidden>
+  <div class="block-head">
+    <h2 id="h-kr">국내 거래소 거래지원</h2>
+    <p class="lead-stat" id="lead-kr" hidden></p>
+    <p>어떤 스테이블코인을 국내 원화마켓 거래소에서 사고팔 수 있는가. 거래소 공개 마켓 목록을 매시 받아 대조합니다. 거래지원 여부는 해당 종목에 대한 평가나 권유가 아닙니다.</p>
+  </div>
+  <div class="tablewrap">
+    <table id="kr-tbl" class="kr-tbl">
+      <thead><tr id="kr-head"></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="foot" id="kr-basis"></p>
+  <div class="panel kr-events" id="kr-events-wrap" hidden>
+    <h3>최근 거래지원 변동</h3>
+    <ul class="kr-events-list" id="kr-events"></ul>
+  </div>
 </section>
 
 </div>
@@ -540,6 +560,7 @@
       <div><dt>김치프리미엄</dt><dd>국내 거래소 가격이 해외보다 비싼 비율. 클수록 해외에서 사서 국내로 들여올 유인(재정거래)이 큽니다.</dd></div>
       <div><dt>코너 흐름</dt><dd>국내 거래소와 해외 거래소 지갑 사이를 직접 오간 자금. 국경 간 자금 이동의 대리지표입니다.</dd></div>
       <div><dt>어테스테이션</dt><dd>회계법인이 “이 시점에 준비금이 이만큼 있다”고 확인해 주는 보고서. 기준일이 오래될수록 지금 상태와 멀어집니다.</dd></div>
+      <div><dt>거래지원</dt><dd>거래소가 그 종목의 매매를 열어 둔 상태(상장). ‘KRW 마켓’은 원화로, ‘BTC·USDT 마켓’은 비트코인·테더로 사고파는 시장입니다. ‘유의’는 거래소가 투자유의종목으로 지정했다는 뜻입니다.</dd></div>
       <div><dt>감시목록</dt><dd>규모가 작아도 국내 논의에 중요해 항상 따로 보여 주는 종목(원화·엔화 스테이블코인 등).</dd></div>
     </dl>
   </div>
@@ -569,6 +590,7 @@
     <dt>점유율</dt><dd id="ap-share">—</dd>
     <dt id="ap-peg-k" hidden>자기 통화 가격</dt><dd id="ap-peg" hidden>—</dd>
     <dt id="ap-chain-k" hidden>체인별 분포</dt><dd id="ap-chain" hidden>—</dd>
+    <dt id="ap-kr-k" hidden>국내 거래지원</dt><dd id="ap-kr" hidden>—</dd>
   </dl>
   <p class="ap-note" id="ap-note" hidden></p>
 </div>

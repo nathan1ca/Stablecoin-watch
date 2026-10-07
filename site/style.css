@@ -1103,3 +1103,38 @@ html[data-theme="dark"] .range-btn[aria-pressed="true"]{background:var(--rule)}
   }
   body{font-feature-settings:"tnum" 1}
 }
+
+/* ── 국내 거래소 거래지원 ─────────────────────────────────
+   표의 '국내' 열(곳 수)과 별도 절의 종목×거래소 행렬. 색 하나에 기대지 않고
+   글자(KRW·유의)로 뜻을 전한다. */
+.kr-n{font-family:var(--mono)}
+.kr-0{color:var(--dim)}
+.kr-warn{
+  display:inline-block;margin-left:.35rem;font-family:var(--sans);font-size:.7rem;
+  color:var(--watch);border:1px solid currentColor;padding:0 .3rem;line-height:1.35;
+}
+.kr-tbl{min-width:640px}
+.kr-tbl tbody th{font-weight:400;text-align:left;border-bottom:1px solid var(--rule-soft);padding:.62rem .85rem}
+.kr-tbl tbody tr:last-child th{border-bottom:1px solid var(--rule)}
+.kr-cell{white-space:nowrap}
+.kr-none{color:var(--dim)}
+.mk{
+  display:inline-block;font-family:var(--mono);font-size:.7rem;letter-spacing:.03em;
+  padding:.08rem .38rem;margin-right:.25rem;border:1px solid var(--rule);color:var(--mid);
+}
+.mk-krw{color:var(--ink);border-color:var(--ink);font-weight:500}
+.kr-events{margin-top:1.4rem}
+.kr-events-list{list-style:none;margin:0;padding:0}
+.kr-ev{display:flex;gap:.7rem;align-items:baseline;padding:.45rem 0;border-top:1px solid var(--rule-soft);font-size:.85rem}
+.kr-ev:first-child{border-top:0}
+.kr-ev-d{font-family:var(--mono);color:var(--mid);font-size:.78rem;flex:none}
+.kr-ev-k{flex:none;font-size:.72rem;border:1px solid currentColor;padding:0 .35rem}
+.kr-ev--listed .kr-ev-k{color:var(--sound)}
+.kr-ev--delisted .kr-ev-k{color:var(--watch)}
+@media (max-width:760px){
+  #kr-tbl tbody th,#kr-tbl thead th:first-child{
+    position:sticky;left:0;z-index:1;background:var(--card);box-shadow:1px 0 0 var(--rule-soft);
+  }
+  #kr-tbl thead th:first-child{z-index:2}
+  #kr-tbl .tname{display:none}
+}

@@ -120,5 +120,16 @@ class TestBuild(unittest.TestCase):
         self.assertEqual(fl.tracked_symbols(None), set())
 
 
+class TestConfig(unittest.TestCase):
+    def test_repo_config(self):
+        cfg = fl.load_config()
+        self.assertEqual([e["id"] for e in cfg["exchanges"]], list(fl.FETCHERS))
+        self.assertTrue({"U", "M", "FRAX"} <= cfg["deny"])   # 동명 티커 제외
+
+    def test_broken_config_falls_back(self):
+        cfg = fl.load_config("/nonexistent/kr.json")
+        self.assertEqual(len(cfg["exchanges"]), 5)
+
+
 if __name__ == "__main__":
     unittest.main()
