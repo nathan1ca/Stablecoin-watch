@@ -2,6 +2,10 @@
 
 매일 자동 점검이 처리한 항목과 남은 백로그. 최신이 위.
 
+## 2026-10-07 (3) 텔레그램 알림 (auto/2026-10-07-3)
+
+- 보완 PR 이 열리면 "보완 제안", main 에 머지되면 "반영됨"을 텔레그램으로 보내는 워크플로 추가(`.github/workflows/notify-telegram.yml`, `.github/scripts/notify_telegram.py`, 표준 라이브러리만). 시크릿 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_CHAT_ID` 필요 — 없으면 건너뜀. 설정 방법은 README.
+
 ## 2026-10-07 (2) 디자인·UI 정비 (auto/2026-10-07-2)
 
 **처리**

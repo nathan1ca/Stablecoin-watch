@@ -253,3 +253,17 @@ GitHub Pages 기준입니다. 저장소 Settings → Pages → Source를 **GitHu
 데이터는 [DefiLlama](https://defillama.com/stablecoins) 공개 엔드포인트에서 가져옵니다. 무료 이용 시 출처 표기가 요구되며, 화면과 이 문서에 표기되어 있습니다.
 
 공개 데이터만으로 만든 개인 참고 자료입니다. 어떠한 기관의 공식 견해도 아니며, 투자 판단의 근거로 쓰기에 적합하지 않습니다.
+
+## 텔레그램 알림 (보완 PR 열림·반영)
+
+`.github/workflows/notify-telegram.yml` 이 PR 이 열리면 "🆕 보완 제안", main 에 머지되면 "✅ 대시보드에 반영됨"을 텔레그램으로 보냅니다. 메시지에는 PR 제목, 본문 `## 변경내용` 요약, 변경 규모, PR·대시보드·상세 보고서 링크가 들어갑니다.
+
+설정(한 번만):
+
+1. 텔레그램에서 `@BotFather` → `/newbot` 으로 봇을 만들고 토큰을 받습니다.
+2. 만든 봇과 대화를 열어 아무 메시지나 한 번 보냅니다(그룹이면 봇을 그룹에 초대).
+3. 브라우저에서 `https://api.telegram.org/bot<토큰>/getUpdates` 를 열어 `"chat":{"id":…}` 값을 확인합니다(그룹은 음수).
+4. 저장소 Settings → Secrets and variables → Actions 에 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` 를 추가합니다.
+5. Actions → "텔레그램 알림" → Run workflow 로 시험 메시지가 오는지 확인합니다.
+
+시크릿이 없으면 알림 단계는 조용히 건너뛰며 다른 워크플로에는 영향이 없습니다.
