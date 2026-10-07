@@ -7,14 +7,18 @@
   const SCALE_BP = 150; // 계기판 눈금 한계
 
   // ── 포맷 ────────────────────────────────────────────────
+  // 백만 단위는 1억 미만이면 소수 한 자리까지 둔다("$55M" → "$55.4M").
+  // 백만 미만은 천 단위 쉼표를 찍는다("153281" → "153,281").
   const usd = (n) => {
     if (n == null || !isFinite(n)) return "—";
     const a = Math.abs(n);
     if (a >= 1e12) return (n / 1e12).toFixed(2) + "T";
     if (a >= 1e9) return (n / 1e9).toFixed(1) + "B";
-    if (a >= 1e6) return (n / 1e6).toFixed(0) + "M";
-    return n.toFixed(0);
+    if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e8 ? 0 : 1) + "M";
+    return Math.round(n).toLocaleString("en-US");
   };
+  // 기준선처럼 딱 떨어지는 값은 ".0" 을 떼어 읽는다("$50.0M" → "$50M").
+  const usdR = (n) => usd(n).replace(/\.0(?=[MBT]$)/, "");
   // 감시목록·소형 통화용. 백만 달러 아래도 읽히게 K 단위를 쓴다.
   const usdC = (n) => {
     if (n == null || !isFinite(n)) return "—";
@@ -318,7 +322,7 @@
       else if (a.status_note && a.status === "ok") notes.push(`<li><strong>${esc(a.symbol)}</strong> — ${esc(a.status_note)}</li>`);
     });
     if (rows.some((a) => a.price_reliability === "low"))
-      notes.push(`<li>* 유통액 $${usdC(m.min_reliable_mcap_usd ?? 1e6)} 미만 — 가격이 시장에서 매겨진 값인지 믿기 어려워 등급을 매기지 않습니다.</li>`);
+      notes.push(`<li>* 유통액 $${usdR(m.min_reliable_mcap_usd ?? 1e6)} 미만 — 가격이 시장에서 매겨진 값인지 믿기 어려워 등급을 매기지 않습니다.</li>`);
     const nEl = $("#watch-notes");
     nEl.innerHTML = notes.join("");
     nEl.hidden = !notes.length;
@@ -575,7 +579,7 @@
   function lineChart(el, pts, opts) {
     if (!pts || pts.length < 2) {
       el._chart = null;
-      el.innerHTML = '<p class="foot">시계열 없음</p>';
+      el.innerHTML = `<p class="chart-empty">${esc((opts && opts.empty) || "표시할 시계열이 없습니다.")}</p>`;
       return;
     }
     el._chart = { pts, opts, w: 0 };
@@ -592,7 +596,8 @@
     // 카드 전폭을 혼자 쓰기 때문에 비례만 따르면 1400px 화면에서 1000px 가 넘게
     // 솟는다. hMin/hMax 를 주는 차트만 그 범위로 눌러 4:1 안팎을 유지한다.
     let H = Math.round(W * (opts.height || 170) / AX_BASE);
-    if (opts.hMin) H = Math.max(H, opts.hMin);
+    // 좁은 화면에서 비례만 따르면 2단 차트가 110px 안팎으로 납작해진다.
+    H = Math.max(H, opts.hMin || 160);
     if (opts.hMax) H = Math.min(H, opts.hMax);
     const mt = 12, mb = 26;
     const xs = pts.map((p) => p.t), ys = pts.map((p) => p.v);
@@ -624,9 +629,28 @@
     const zeroLine = opts.zero
       ? `<line x1="${ml}" x2="${W - mr}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--ink)" stroke-opacity=".5" stroke-width="1.6"/>` : "";
 
-    const tick = (t) => new Date(t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "short" });
-    const xt = [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]]
-      .map((p, i) => `<text x="${X(p.t).toFixed(1)}" y="${H - 8}" text-anchor="${i === 0 ? "start" : i === 2 ? "end" : "middle"}" class="ax">${tick(p.t)}</text>`).join("");
+    // x축 눈금. 기간이 짧으면(약 5개월 미만) "26년 10월"만 세 번 겹쳐 찍히던
+    // 문제가 있어 월/일로 바꾸고, 같은 글자나 서로 겹치는 눈금은 뺀다.
+    const shortSpan = (x1 - x0) < 150 * 86400;
+    const tick = (t) => shortSpan
+      ? (() => { const d = new Date(t * 1000); return `${d.getMonth() + 1}/${d.getDate()}`; })()
+      : new Date(t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "short" });
+    const cand = [
+      { p: pts[0], a: "start" },
+      { p: pts[Math.floor(pts.length / 2)], a: "middle" },
+      { p: pts[pts.length - 1], a: "end" },
+    ].map((c) => ({ ...c, s: tick(c.p.t), x: X(c.p.t) }));
+    const lw = (s) => s.length * AX_SIZE * 0.9; // 한글 섞인 라벨 폭 어림값
+    const keep = [cand[0], cand[2]];
+    const mid = cand[1];
+    if (mid.s !== cand[0].s && mid.s !== cand[2].s &&
+        mid.x - lw(mid.s) / 2 > cand[0].x + lw(cand[0].s) + 6 &&
+        mid.x + lw(mid.s) / 2 < cand[2].x - lw(cand[2].s) - 6) keep.splice(1, 0, mid);
+    if (cand[2].s === cand[0].s || cand[2].x - lw(cand[2].s) < cand[0].x + lw(cand[0].s) + 6) {
+      keep.splice(keep.indexOf(cand[0]), 1);
+    }
+    const xt = keep.map((c) =>
+      `<text x="${c.x.toFixed(1)}" y="${H - 8}" text-anchor="${c.a}" class="ax">${esc(c.s)}</text>`).join("");
 
     // 마지막 점 옆에 최신값을 그대로 붙인다. 축을 훑지 않아도 지금 값이 읽힌다.
     const lx = X(last.t), ly = Y(last.v);
@@ -754,8 +778,10 @@
     $("#tk-value").textContent = last
       ? (flow ? signed(last.v, 2, "%") : "$" + usd(last.v))
       : "—";
+    // 차트는 DefiLlama 일별 집계라 상단 '총 발행잔액'(현재 시점 종목 합계)과
+    // 수치가 조금 다를 수 있다. 같은 이름의 두 숫자를 혼동하지 않게 밝혀 둔다.
     $("#tk-sub").textContent = last
-      ? `최근 관측 ${fullDate(last.t)} · ${pts.length}일 시계열`
+      ? `최근 관측 ${fullDate(last.t)} · ${pts.length}일 시계열` + (flow ? "" : " · 일별 집계 기준")
       : "시계열 없음";
   }
 
@@ -911,10 +937,81 @@
   // ── 표 ──────────────────────────────────────────────────
   let TABLE_ROWS = []; // 개요 패널이 참조할 행 데이터 (GAUGE_ROWS 와 같은 역할)
 
+  // 정렬. 머리글을 누르면 그 열로 정렬하고, 다시 누르면 방향을 뒤집는다.
+  // 값이 없는 칸(—)은 방향과 관계없이 항상 맨 아래로 보낸다.
+  const SORT_COLS = [
+    { key: "symbol", type: "text" },
+    { key: "mechanism_ko", type: "text" },
+    { key: "peg_currency", type: "text" },
+    { key: "mcap_usd", type: "num" },
+    { key: "share", type: "num" },
+    { key: "dev_bp", type: "abs", hint: "편차 크기(절댓값) 순" },
+    { key: "chg_7d", type: "num" },
+    { key: "chg_30d", type: "num" },
+    { key: "grade", type: "grade" },
+  ];
+  const GRADE_RANK = { breach: 3, watch: 2, sound: 1, unknown: 0 };
+  const SORT = { col: 3, dir: "descending", src: [] };
+
+  const sortVal = (a, c) => {
+    const v = a[c.key];
+    if (c.type === "grade") return GRADE_RANK[v] ?? -1;
+    if (c.type === "abs") return v == null ? null : Math.abs(v);
+    if (c.type === "num") return v == null || !isFinite(v) ? null : v;
+    return v == null ? null : String(v);
+  };
+
+  function sortedRows() {
+    const c = SORT_COLS[SORT.col];
+    const sign = SORT.dir === "ascending" ? 1 : -1;
+    return SORT.src
+      .map((a, i) => ({ a, i }))
+      .sort((x, y) => {
+        const vx = sortVal(x.a, c), vy = sortVal(y.a, c);
+        if (vx == null && vy == null) return x.i - y.i;
+        if (vx == null) return 1;
+        if (vy == null) return -1;
+        const d = c.type === "text" ? vx.localeCompare(vy, "ko") : vx - vy;
+        return d ? d * sign : x.i - y.i;
+      })
+      .map((r) => r.a);
+  }
+
+  function initTableSort() {
+    const ths = Array.from(document.querySelectorAll("#tbl thead th"));
+    ths.forEach((th, i) => {
+      const c = SORT_COLS[i];
+      if (!c || th.querySelector(".th-sort")) return;
+      const label = th.textContent.trim();
+      th.innerHTML = `<button type="button" class="th-sort" title="${esc(c.hint || label + " 기준 정렬")}">${esc(label)}</button>`;
+      th.querySelector("button").addEventListener("click", () => {
+        if (SORT.col === i) SORT.dir = SORT.dir === "descending" ? "ascending" : "descending";
+        else { SORT.col = i; SORT.dir = c.type === "text" ? "ascending" : "descending"; }
+        paintTable();
+      });
+    });
+  }
+
+  function paintSortState() {
+    document.querySelectorAll("#tbl thead th").forEach((th, i) => {
+      if (i === SORT.col) th.setAttribute("aria-sort", SORT.dir);
+      else th.removeAttribute("aria-sort");
+    });
+  }
+
   function renderTable(d) {
-    TABLE_ROWS = d.assets;
-    const icons = hasIcons(d.assets);
-    $("#tbl tbody").innerHTML = d.assets.map((a, i) => `<tr>
+    SORT.src = d.assets || [];
+    initTableSort();
+    paintTable();
+  }
+
+  function paintTable() {
+    popClose(); // 다시 그리면 열려 있던 개요의 기준 행이 사라진다
+    paintSortState();
+    const rows = sortedRows();
+    TABLE_ROWS = rows;
+    const icons = hasIcons(rows);
+    $("#tbl tbody").innerHTML = rows.map((a, i) => `<tr>
       <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
           data-i="${i}" aria-expanded="false"
           aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></span></td>
@@ -935,11 +1032,11 @@
     const items = [
       ["페그 편차", `주의 ±${t.peg_watch_bp}bp · 경보 ±${t.peg_breach_bp}bp`],
       ...(wm ? [["감시목록 페그 편차(엔·원 기준)",
-        `주의 ±${wm.peg_watch_bp}bp · 경보 ±${wm.peg_breach_bp}bp (환율 시차 허용 ${wm.fx_lag_tolerance_bp}bp 포함) · 유통액 $${usdC(wm.min_reliable_mcap_usd)} 미만은 등급 미부여`]] : []),
+        `주의 ±${wm.peg_watch_bp}bp · 경보 ±${wm.peg_breach_bp}bp (환율 시차 허용 ${wm.fx_lag_tolerance_bp}bp 포함) · 유통액 $${usdR(wm.min_reliable_mcap_usd)} 미만은 등급 미부여`]] : []),
       ["30일 순증감률", `주의 ${t.redemption_watch}% · 경보 ${t.redemption_breach}%`],
       ["발행사 집중도", `HHI ${t.hhi_concentrated.toLocaleString()} 초과 시 고집중`],
       ["알고리즘형 비중", `${t.algo_share_watch}% 초과 시 주의`],
-      ["관측 하한", `발행잔액 $${usd(t.min_mcap_usd)} 이상`],
+      ["관측 하한", `발행잔액 $${usdR(t.min_mcap_usd)} 이상`],
     ];
     $("#thr-list").innerHTML = items
       .map(([k, v]) => `<li><span class="thr-k">${k}</span> — <span class="thr-v">${v}</span></li>`).join("");
@@ -996,7 +1093,9 @@
 
     // 최근 조치
     const short = (a) => (a && a.length > 12 ? a.slice(0, 8) + "…" + a.slice(-4) : a || "—");
-    $("#fz-tbl tbody").innerHTML = (f.events || []).slice(0, 60).map((e) => `<tr>
+    $("#fz-tbl tbody").innerHTML = !(f.events || []).length
+      ? `<tr class="empty-row"><td colspan="5">최근 ${days}일 동안 관측된 조치가 없습니다.</td></tr>`
+      : (f.events || []).slice(0, 60).map((e) => `<tr>
       <td>${new Date(e.t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</td>
       <td>${e.issuer} <span class="tname">${e.symbol}</span></td>
       <td class="kind-${e.kind}">${KIND_KO[e.kind]}</td>
@@ -1095,17 +1194,21 @@
     $("#fl-out").textContent = "$" + usd(t.outflow_usd);
     $("#fl-count").textContent = t.event_count.toLocaleString();
 
-    if (f.daily && f.daily.length > 1) {
-      const pts = f.daily.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_usd }));
-      lineChart($("#chart-flow2"), pts, {
-        color: "var(--breach)", label: "일별 순유출입", zero: true,
-        fmt: (v) => (v >= 0 ? "+" : "−") + usd(Math.abs(v)),
-      });
-    }
+    const none = !t.event_count;
+    const emptyMsg = `최근 ${f.meta.lookback_days}일 동안 집계 범위(지정 지갑 사이 직접 이체) 안에서 관측된 이체가 없습니다.`;
+    const pts = (f.daily || []).map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_usd }));
+    lineChart($("#chart-flow2"), none ? [] : pts, {
+      color: "var(--breach)", label: "일별 순유출입", zero: true, empty: emptyMsg,
+      fmt: (v) => (v >= 0 ? "+$" : "−$") + usdC(Math.abs(v)),
+    });
 
     const flowMax = Math.max(1, ...(f.by_asset || []).map((r) => Math.max(r.inflow, r.outflow)),
                              ...(f.by_exchange || []).map((r) => Math.max(r.inflow, r.outflow)));
     const flowBars = (el, items) => {
+      if (!items.length || items.every((r) => !r.inflow && !r.outflow)) {
+        el.innerHTML = '<p class="bars-empty">관측된 이체가 없습니다.</p>';
+        return;
+      }
       el.innerHTML = items.map((r) => `<div class="bar-r">
         <span class="bar-l">${r.label}</span>
         <span class="bar-n t-${r.net >= 0 ? "watch" : "sound"}">${r.net >= 0 ? "+" : "−"}$${usd(Math.abs(r.net))}
@@ -1121,7 +1224,9 @@
     })));
 
     const dirKo = { outflow: "유출", inflow: "유입" };
-    $("#fl-tbl tbody").innerHTML = (f.events || []).slice(0, 60).map((e) => `<tr>
+    $("#fl-tbl tbody").innerHTML = !(f.events || []).length
+      ? `<tr class="empty-row"><td colspan="6">${esc(emptyMsg)}</td></tr>`
+      : (f.events || []).slice(0, 60).map((e) => `<tr>
       <td>${new Date(e.t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</td>
       <td class="tsym">${e.asset}</td>
       <td class="kind-${e.direction === "outflow" ? "seize" : "freeze"}">${dirKo[e.direction]}</td>
@@ -1169,16 +1274,17 @@
     $("#fx-out").textContent = usd(t.outflow_xrp) + " XRP";
     $("#fx-count").textContent = t.event_count.toLocaleString();
 
-    if (f.daily && f.daily.length > 1) {
-      const pts = f.daily.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_xrp }));
-      lineChart($("#chart-flowxrp"), pts, {
-        color: "var(--breach)", label: "일별 순유출입", zero: true,
-        fmt: (v) => (v >= 0 ? "+" : "−") + usd(Math.abs(v)),
-      });
-    }
+    const xpts = (f.daily || []).map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_xrp }));
+    lineChart($("#chart-flowxrp"), xpts, {
+      color: "var(--breach)", label: "일별 순유출입", zero: true,
+      empty: `최근 ${f.meta.lookback_days}일 동안 관측된 결제가 하루치 이하라 추이를 그릴 수 없습니다.`,
+      fmt: (v) => (v >= 0 ? "+" : "−") + usdC(Math.abs(v)),
+    });
 
     const dirKo = { outflow: "유출", inflow: "유입" };
-    $("#fx-tbl tbody").innerHTML = (f.events || []).slice(0, 60).map((e) => `<tr>
+    $("#fx-tbl tbody").innerHTML = !(f.events || []).length
+      ? `<tr class="empty-row"><td colspan="5">최근 ${f.meta.lookback_days}일 동안 관측된 결제가 없습니다.</td></tr>`
+      : (f.events || []).slice(0, 60).map((e) => `<tr>
       <td>${new Date(e.t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</td>
       <td class="kind-${e.direction === "outflow" ? "seize" : "freeze"}">${dirKo[e.direction]}</td>
       <td>${e.kr_wallet}</td>
@@ -1227,24 +1333,75 @@
     if (!tabs.length) return;
     const panels = tabs.map((t) => document.getElementById(t.getAttribute("aria-controls")));
 
-    const activate = (i, focus) => {
+    const bar = document.querySelector(".tabbar");
+    const scroller = document.querySelector(".tabbar-scroll");
+
+    // 가로로 더 있는 탭이 있으면 그쪽 가장자리를 흐리게 해 스크롤 가능함을 알린다.
+    const paintFade = () => {
+      if (!scroller) return;
+      const max = scroller.scrollWidth - scroller.clientWidth;
+      scroller.classList.toggle("fade-l", scroller.scrollLeft > 2);
+      scroller.classList.toggle("fade-r", scroller.scrollLeft < max - 2);
+    };
+    if (scroller) {
+      scroller.addEventListener("scroll", paintFade, { passive: true });
+      addEventListener("resize", paintFade);
+    }
+
+    // user: 사람이 누른 전환인지(주소창 갱신·스크롤 보정은 그때만 한다)
+    const activate = (i, focus, user) => {
       tabs.forEach((t, j) => {
         const on = j === i;
         t.setAttribute("aria-selected", String(on));
         t.tabIndex = on ? 0 : -1;
         if (panels[j]) panels[j].hidden = !on;
       });
-      if (focus) tabs[i].focus();
+      if (focus) tabs[i].focus({ preventScroll: true });
+      // 고른 탭이 탭바 밖으로 잘려 있으면 보이게 민다(좁은 화면).
+      if (scroller) {
+        const t = tabs[i], sl = scroller.scrollLeft, w = scroller.clientWidth;
+        if (t.offsetLeft < sl + 16 || t.offsetLeft + t.offsetWidth > sl + w - 16) {
+          scroller.scrollTo({ left: t.offsetLeft - (w - t.offsetWidth) / 2, behavior: user ? "smooth" : "auto" });
+        }
+      }
+      if (!user) return;
+      // 주소에 탭을 남겨 링크로 공유·새로고침해도 같은 탭이 열리게 한다.
+      try { history.replaceState(null, "", "#" + tabs[i].id.replace(/^tab-/, "")); } catch (e) {}
+      // 긴 탭을 한참 내려 읽다 다른 탭을 누르면 새 탭의 중간(또는 바닥)부터
+      // 보이게 된다. 탭바가 위에 붙어 있는 상태라면 새 탭의 첫머리로 올린다.
+      // (sticky 요소의 offsetTop 은 붙어 있는 위치를 돌려줄 수 있어서, 탭바 바로
+      // 앞 요소의 끝을 탭바의 원래 자리로 쓴다.)
+      if (bar && bar.getBoundingClientRect().top <= 0.5) {
+        const prev = bar.previousElementSibling;
+        if (prev) {
+          const home = prev.getBoundingClientRect().bottom + window.scrollY;
+          if (window.scrollY > home) window.scrollTo({ top: home, behavior: "auto" });
+        }
+      }
     };
 
+    // 주소의 #premium 같은 꼬리로 첫 탭을 고른다.
+    const fromHash = () => {
+      const h = decodeURIComponent((location.hash || "").slice(1));
+      const i = tabs.findIndex((t) => t.id === "tab-" + h);
+      return i;
+    };
+    const first = fromHash();
+    if (first > 0) activate(first, false, false);
+    addEventListener("hashchange", () => {
+      const i = fromHash();
+      if (i >= 0) activate(i, false, false);
+    });
+    requestAnimationFrame(paintFade);
+
     tabs.forEach((t, i) => {
-      t.addEventListener("click", () => activate(i, false));
+      t.addEventListener("click", () => activate(i, false, true));
       t.addEventListener("keydown", (e) => {
         const n = tabs.length;
-        if (e.key === "ArrowRight") { e.preventDefault(); activate((i + 1) % n, true); }
-        else if (e.key === "ArrowLeft") { e.preventDefault(); activate((i - 1 + n) % n, true); }
-        else if (e.key === "Home") { e.preventDefault(); activate(0, true); }
-        else if (e.key === "End") { e.preventDefault(); activate(n - 1, true); }
+        if (e.key === "ArrowRight") { e.preventDefault(); activate((i + 1) % n, true, true); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); activate((i - 1 + n) % n, true, true); }
+        else if (e.key === "Home") { e.preventDefault(); activate(0, true, true); }
+        else if (e.key === "End") { e.preventDefault(); activate(n - 1, true, true); }
       });
     });
   }
