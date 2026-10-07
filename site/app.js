@@ -1464,6 +1464,59 @@
     }
   }
 
+  // ── 원화마켓 스테이블코인 거래대금 ─────────────────────────
+  // 조 단위는 "1.6조", 억 단위는 "1,634억" — 국내 독자가 읽는 단위로.
+  const krwK = (v) => v == null ? "—" : v >= 1e12 ? (v / 1e12).toFixed(2) + "조" : Math.round(v / 1e8).toLocaleString("ko-KR") + "억";
+  function renderKrwVolume(k, fxKrw) {
+    if (!k || !k.daily || !k.daily.length) return;
+    const sec = $("#krv-sec");
+    if (!sec) return;
+    sec.hidden = false;
+    const s = k.summary || {};
+    const exName = {};
+    (k.meta.exchanges || []).forEach((e) => { exName[e.id] = e.name; });
+    $("#kv-last").textContent = "₩" + krwK(s.last_full_krw);
+    $("#kv-last-s").textContent = s.last_full_date ? `${s.last_full_date} 하루` : "";
+    $("#kv-avg").textContent = "₩" + krwK(s.avg30_krw);
+    $("#kv-avg-s").textContent = s.chg30_pct != null ? `직전 30일 대비 ${signed(s.chg30_pct, 1, "%")}` : "직전 30일 비교 불가";
+    const sh = Object.entries(s.share30_pct || {}).sort((a, b) => b[1] - a[1]);
+    $("#kv-share").textContent = sh.map(([id, v]) => `${exName[id] || id} ${v.toFixed(0)}%`).join(" · ") || "—";
+    const us = (s.asset_share30_pct || {}).USDT;
+    $("#kv-usdt").textContent = us != null ? us.toFixed(1) + "%" : "—";
+
+    const full = k.daily.filter((d) => !d.partial);
+    const toT = (d) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 1000);
+    const byDate = {};
+    full.forEach((d) => { byDate[d.date] = d; });
+    lineChart($("#chart-krv"), full.map((d) => ({ t: toT(d.date), v: d.total_krw })), {
+      color: "var(--accent)", label: "원화마켓 스테이블코인 일별 거래대금", interactive: true, fillGradient: true,
+      fmt: (v) => krwK(v),
+      tipRows: (p) => {
+        const d = byDate[isoDate(p.t)];
+        if (!d) return [["합계", krwK(p.v), "is-main"]];
+        const rows = [["합계", "₩" + krwK(d.total_krw), "is-main"]];
+        Object.keys(exName).forEach((id) => {
+          const b = d.by[id];
+          if (!b) return;
+          rows.push([exName[id], `USDT ${krwK(b.USDT || 0)} · USDC ${krwK(b.USDC || 0)}`, ""]);
+        });
+        return rows;
+      },
+    });
+
+    const fails = Object.entries(k.meta.status || {}).flatMap(([ex, st]) =>
+      Object.entries(st).filter(([, v]) => v !== "ok").map(([a]) => `${exName[ex] || ex} ${a}`));
+    $("#kv-foot").textContent = `출처: ${k.meta.source} · 갱신 ${fmtTime(k.meta.generated_at)}`
+      + (fails.length ? ` · 이번 수집 실패: ${fails.join(", ")}(해당 거래소가 빠진 날은 표시하지 않음)` : "")
+      + ". 디지털엑스(옛 코빗)·고팍스는 거래대금이 작아 뺐습니다. 진행 중인 오늘은 그래프에서 제외합니다.";
+
+    if (s.avg30_krw) {
+      const usdAmt = s.avg30_krw / (fxKrw || 1350); // 문장용 어림(기준환율) — 정확한 값은 위 수치
+      setLead("krv", `최근 30일 국내 원화마켓에서 USDT·USDC 가 하루 평균 ${bold("₩" + krwK(s.avg30_krw))}(약 $${usdR(usdAmt)}) 거래됐습니다`
+        + (s.chg30_pct != null ? ` — 직전 30일보다 ${bold(signed(s.chg30_pct, 1, "%"))}.` : "."));
+    }
+  }
+
   // ── 온체인 코너 자금흐름 ─────────────────────────────────
   function renderFlow(f) {
     if (!f || !f.totals) return;
@@ -1522,7 +1575,15 @@
       <td class="num">${usd(e.amount)}</td>
     </tr>`).join("");
 
-    $("#fl-coverage").innerHTML = [
+    // 0건일 때는 빈 차트·표 대신 원인 진단을 앞세운다(2026-10-07 점검 결과).
+    const diag = none ? [
+      "<b>왜 0건인가 — 2026-10-07 점검</b>: 지정한 업비트 지갑 4개 중 3개(업비트 1·3·콜드)는 USDT·USDC 이체 기록이 아예 없고, 업비트 2 는 약 7년간 495건뿐이며, 빗썸 핫월렛은 금액 0인 이체만 있습니다. 공개 라벨이 붙은 지갑이 실제 스테이블코인 입출금 지갑이 아니라는 뜻입니다.",
+      "또 국내 거래소에서 나간 돈은 해외 거래소 핫월렛으로 바로 가지 않고, 이용자 개인별 입금주소를 거쳐 모입니다(점검 표본에서 업비트 2 의 출금 상대 다수가 Binance 핫월렛으로 다시 보냄). 직접 이체만 세는 지금 방식으로는 구조적으로 잡히지 않습니다.",
+      "그래서 이 탭 위쪽에 원화마켓 스테이블코인 거래대금을 대신 둡니다. 실제 입출금 지갑 목록을 확보하면 2단계(입금주소 경유) 추적으로 다시 살릴 수 있습니다.",
+    ] : [];
+    ["#chart-flow2"].forEach((id) => { const fig = $(id) && $(id).closest("figure"); if (fig) fig.hidden = none; });
+    document.querySelectorAll("#flow-sec .fz-cols3, #flow-sec .fz-recent").forEach((n) => { n.hidden = none; });
+    $("#fl-coverage").innerHTML = diag.map((h) => `<li class="fl-diag">${h}</li>`).join("") + [
       "이더리움 메인넷의 USDT·USDC 이체만 봅니다. 트론·XRP 통로는 포함되지 않습니다.",
       "업비트·빗썸의 태그된 지갑만 봅니다. 코인원은 이용자별 입금주소가 개별 태그되어 있어 단일 지갑으로 묶을 수 없습니다.",
       "해외 비교군은 Binance·OKX·Bybit 각각 잔액이 가장 큰 핫월렛 하나씩입니다. 같은 거래소가 굴리는 다른 지갑들은 빠져 있습니다.",
@@ -1840,6 +1901,14 @@
       if (r.ok) renderFlowXRP(await r.json());
     } catch (e) {
       console.info("flow_xrp.json 없음 — XRP 자금흐름 섹션 생략");
+    }
+
+    // 원화마켓 스테이블코인 거래대금
+    try {
+      const r = await fetch("data/krw_volume.json", { cache: "no-cache" });
+      if (r.ok) renderKrwVolume(await r.json(), snap.watchlist && snap.watchlist.meta && snap.watchlist.meta.fx_rates && snap.watchlist.meta.fx_rates.KRW);
+    } catch (e) {
+      console.info("krw_volume.json 없음 — 원화 거래대금 생략");
     }
 
     // 어테스테이션 시차는 손으로 갱신되는 데이터다.

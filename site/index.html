@@ -83,7 +83,7 @@
       <button type="button" class="tab-btn" role="tab" id="tab-issuance" aria-controls="panel-issuance" aria-selected="true">발행 현황</button>
       <button type="button" class="tab-btn" role="tab" id="tab-freeze" aria-controls="panel-freeze" aria-selected="false" tabindex="-1">동결 조치</button>
       <button type="button" class="tab-btn" role="tab" id="tab-premium" aria-controls="panel-premium" aria-selected="false" tabindex="-1">김치프리미엄</button>
-      <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">코너 흐름 · ETH</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">원화 거래대금 · ETH</button>
       <button type="button" class="tab-btn" role="tab" id="tab-flowxrp" aria-controls="panel-flowxrp" aria-selected="false" tabindex="-1">코너 흐름 · XRP</button>
       <button type="button" class="tab-btn" role="tab" id="tab-attest" aria-controls="panel-attest" aria-selected="false" tabindex="-1">어테스테이션</button>
       <button type="button" class="tab-btn" role="tab" id="tab-method" aria-controls="panel-method" aria-selected="false" tabindex="-1">방법론</button>
@@ -363,6 +363,25 @@
 
 <div class="tabpanel" id="panel-flow" role="tabpanel" aria-labelledby="tab-flow" tabindex="0" hidden>
 
+<section class="wrap block" id="krv-sec" aria-labelledby="h-krv" hidden>
+  <div class="block-head">
+    <h2 id="h-krv">원화마켓 스테이블코인 거래대금</h2>
+    <p class="lead-stat" id="lead-krv" hidden></p>
+    <p>국내 거래소에서 원화로 USDT·USDC 를 사고판 금액입니다. 원화와 달러 스테이블코인 사이의 전환(온·오프램프) 규모를 보여 주며, 해외로 실어 나르기 전 단계의 수요를 가장 넓게 잡는 공개 지표입니다. 매수와 매도를 합친 회전량이라 순유출입(해외 송금액)은 아닙니다.</p>
+  </div>
+  <div class="figs">
+    <div class="fig"><p class="fig-k">최근 거래대금</p><p class="fig-v" id="kv-last">—</p><p class="fig-s" id="kv-last-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">30일 일평균</p><p class="fig-v" id="kv-avg">—</p><p class="fig-s" id="kv-avg-s">&nbsp;</p></div>
+    <div class="fig"><p class="fig-k">거래소 비중</p><p class="fig-v fig-v-sm" id="kv-share">—</p><p class="fig-s">최근 30일</p></div>
+    <div class="fig"><p class="fig-k">USDT 비중</p><p class="fig-v" id="kv-usdt">—</p><p class="fig-s" id="kv-usdt-s">최근 30일, 나머지 USDC</p></div>
+  </div>
+  <figure class="chart chart-wide">
+    <figcaption>일별 거래대금 <span class="unit">원, 업비트·빗썸·코인원 USDT+USDC</span></figcaption>
+    <div id="chart-krv" class="chart-plot"></div>
+  </figure>
+  <p class="foot" id="kv-foot"></p>
+</section>
+
 <section class="wrap block" id="flow-sec" aria-labelledby="h-flow" hidden>
   <div class="block-head">
     <h2 id="h-flow">온체인 코너 자금흐름 (이더리움 USDT·USDC, 좁은 대리지표)</h2>
@@ -547,6 +566,8 @@
       <div><dt>이자부 상품</dt><dd>이자가 가격에 쌓여 1달러보다 점점 비싸지는 토큰(USYC·USDY 등). 가격 상승은 페그 이탈이 아니어서 편차 계산에서 뺍니다.</dd></div>
       <div><dt>동결·소각</dt><dd>발행사가 특정 지갑의 토큰을 못 움직이게 막는 것(동결)과, 그 잔액을 아예 없애는 것(소각).</dd></div>
       <div><dt>김치프리미엄</dt><dd>국내 거래소 가격이 해외보다 비싼 비율. 클수록 해외에서 사서 국내로 들여올 유인(재정거래)이 큽니다.</dd></div>
+      <div><dt>프리미엄 스프레드</dt><dd>BTC 프리미엄에서 USDT 프리미엄을 뺀 값(%p). 원화로 산 테더를 기준으로 잰 BTC 프리미엄에 가까워, 테더를 들여와 코인을 파는 재정거래의 실제 마진을 보여 줍니다.</dd></div>
+      <div><dt>원화 거래대금</dt><dd>국내 거래소에서 원화로 USDT·USDC 를 사고판 금액. 원화와 달러 스테이블코인 사이 전환 규모의 지표이며, 해외 송금액(순유출)과는 다릅니다.</dd></div>
       <div><dt>코너 흐름</dt><dd>국내 거래소와 해외 거래소 지갑 사이를 직접 오간 자금. 국경 간 자금 이동의 대리지표입니다.</dd></div>
       <div><dt>어테스테이션</dt><dd>회계법인이 “이 시점에 준비금이 이만큼 있다”고 확인해 주는 보고서. 기준일이 오래될수록 지금 상태와 멀어집니다.</dd></div>
       <div><dt>감시목록</dt><dd>규모가 작아도 국내 논의에 중요해 항상 따로 보여 주는 종목(원화·엔화 스테이블코인 등).</dd></div>

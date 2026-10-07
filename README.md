@@ -43,6 +43,7 @@ etl/watchlist.json     감시목록 — 시총 하한과 무관하게 항상 표
 etl/lib/fx.py           Frankfurter 환율 · 비달러 페그의 자기 통화 기준 편차
 etl/attestations.json   어테스테이션 원본 데이터 (손으로 갱신)
 etl/fetch_attestation.py 어테스테이션 시차 계산
+etl/fetch_krw_volume.py 국내 원화마켓 USDT·USDC 일별 거래대금 (업비트·빗썸·코인원, 키 불필요)
 etl/live_loop.py        상시 실행 루프 (실시간 갱신용, 선택)
 etl/keccak.py           keccak-256 순수 구현 (topic0 계산)
 etl/make_sample.py      샘플 데이터 생성 (개발용)

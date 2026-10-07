@@ -1122,3 +1122,10 @@ html[data-theme="dark"] .range-btn[aria-pressed="true"]{background:var(--rule)}
 .attest-gaps-list li:first-child{border-top:0}
 .att-gap-k{flex:none;font-size:.72rem;border:1px solid currentColor;padding:0 .35rem;color:var(--mid);white-space:nowrap}
 .gap--pending{color:var(--watch)}
+
+/* 원화 거래대금 · ETH 진단 */
+.fig-v-sm{font-size:1.05rem;line-height:1.35;font-family:var(--sans);font-weight:600}
+.fl-diag{line-height:1.6}
+.fl-diag b{color:var(--ink)}
+
+#flow-sec figure[hidden],#flow-sec .cols[hidden],#flow-sec .panel[hidden]{display:none}
