@@ -944,7 +944,7 @@
 
     const height = chartHeight();
     const box = { height, hMin: 200, hMax: Math.round(height * 1.5) };
-    document.querySelectorAll(".range-btn").forEach((btn) =>
+    document.querySelectorAll("#trend-range .range-btn").forEach((btn) =>
       btn.setAttribute("aria-pressed", String(Number(btn.dataset.days) === TREND.days)));
     lineChart($("#chart-total"), inRange(o.total), {
       ...box, color: TREND_COLOR, label: `${o.short} 발행잔액 추이`, interactive: true,
@@ -1079,7 +1079,7 @@
     $("#png-dl").addEventListener("click", downloadTrendPng);
 
     // 표시 기간 (1M·3M·6M·1Y·전체)
-    document.querySelectorAll(".range-btn").forEach((btn) => {
+    document.querySelectorAll("#trend-range .range-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         TREND.days = Number(btn.dataset.days) || 0;
         renderTrend();
@@ -1459,19 +1459,61 @@
       $("#pm-spread-s").textContent = spreadAvg == null ? "BTC − USDT" : `BTC − USDT · ${both.length}일 평균 ${signed(spreadAvg, 2, "%p")}`;
     }
 
-    if (redraw && btcPts.length > 1) {
-      lineChart($("#chart-premium"), btcPts.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
+    PREM_VIEW.byDay = byDay; PREM_VIEW.btcPts = btcPts; PREM_VIEW.usdtPts = usdtPts; PREM_VIEW.tipRows = tipRows;
+    if (redraw) { bindPremTools(); drawPremCharts(); }
+  }
+
+  // 김치프리미엄 차트 기간(발행 현황과 같은 방식, 이력이 180일이라 1M·3M·전체)과 CSV
+  const PREM_VIEW = { days: 0, byDay: {}, btcPts: [], usdtPts: [], tipRows: null, bound: false };
+  function drawPremCharts() {
+    const v = PREM_VIEW;
+    const toT = (d) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 1000);
+    const cut = (arr) => {
+      if (!v.days || !arr.length) return arr;
+      const last = toT(arr[arr.length - 1].date);
+      return arr.filter((d) => toT(d.date) > last - v.days * 86400);
+    };
+    const b = cut(v.btcPts), u = cut(v.usdtPts);
+    const span = b.length || u.length;
+    document.querySelectorAll(".pm-unit").forEach((el) => { el.textContent = `%, ${span}일`; });
+    document.querySelectorAll("#pm-range .range-btn").forEach((btn) =>
+      btn.setAttribute("aria-pressed", String((Number(btn.dataset.days) || 0) === v.days)));
+    if (b.length > 1) {
+      lineChart($("#chart-premium"), b.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
         color: "var(--petrol)", label: "BTC 프리미엄 추이", zero: true, interactive: true, sync: "premium",
-        fmt: (v) => v.toFixed(1) + "%", tipRows: tipRows("btc"),
+        fmt: (x) => x.toFixed(1) + "%", tipRows: v.tipRows("btc"),
       });
     }
     const usdtChart = $("#chart-premium-usdt");
-    if (redraw && usdtChart && usdtPts.length > 1) {
-      lineChart(usdtChart, usdtPts.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
+    if (usdtChart && u.length > 1) {
+      lineChart(usdtChart, u.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
         color: "var(--accent)", label: "USDT 프리미엄 추이", zero: true, interactive: true, sync: "premium",
-        fmt: (v) => v.toFixed(2) + "%", tipRows: tipRows("usdt"),
+        fmt: (x) => x.toFixed(2) + "%", tipRows: v.tipRows("usdt"),
       });
     }
+  }
+  function downloadPremCsv() {
+    const days = Object.keys(PREM_VIEW.byDay).sort();
+    if (!days.length) return;
+    const n = (x) => (x == null ? "" : x);
+    const lines = ["날짜,USDT 프리미엄(%),BTC 프리미엄(%),스프레드 BTC-USDT(%p)"];
+    days.forEach((d) => {
+      const r = PREM_VIEW.byDay[d];
+      const sp = r.btc != null && r.usdt != null ? Math.round((r.btc - r.usdt) * 1000) / 1000 : null;
+      lines.push(`${d},${n(r.usdt)},${n(r.btc)},${n(sp)}`);
+    });
+    // BOM 을 붙여야 엑셀에서 한글 머리글이 깨지지 않는다.
+    saveBlob(new Blob(["\ufeff" + lines.join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" }),
+      `stablecoin-monitor_kimchi-premium_${isoDate(Math.floor(Date.now() / 1000))}.csv`);
+  }
+  function bindPremTools() {
+    if (PREM_VIEW.bound) return;
+    PREM_VIEW.bound = true;
+    document.querySelectorAll("#pm-range .range-btn").forEach((btn) => {
+      btn.addEventListener("click", () => { PREM_VIEW.days = Number(btn.dataset.days) || 0; drawPremCharts(); });
+    });
+    const dl = $("#pm-csv-dl");
+    if (dl) dl.addEventListener("click", downloadPremCsv);
   }
 
   // ── 원화마켓 스테이블코인 거래대금 ─────────────────────────
