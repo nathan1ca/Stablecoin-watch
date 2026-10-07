@@ -33,8 +33,50 @@ EXCHANGES = [
     {"id": "upbit", "name": "업비트"},
     {"id": "bithumb", "name": "빗썸"},
     {"id": "coinone", "name": "코인원"},
+    {"id": "digitalx", "name": "디지털엑스"},   # 옛 코빗(2026-08 사명 변경) — 공개 API 는 api.korbit.co.kr
+    {"id": "gopax", "name": "고팍스"},          # 운영사 스트리미
 ]
 DAYS = 200
+RAW_SAMPLE: dict[str, str] = {}  # --probe 때 응답 형식을 눈으로 확인하려고 앞부분을 남긴다
+
+
+def _kst_date(ms) -> str:
+    return datetime.fromtimestamp(int(float(ms)) / 1000, KST).strftime("%Y-%m-%d")
+
+
+def parse_digitalx(resp) -> dict[str, dict]:
+    """디지털엑스(옛 코빗) v2 일봉. 원화 거래대금 필드가 없으면 수량 × 종가로 어림한다(estimated)."""
+    rows = resp.get("data") if isinstance(resp, dict) else resp
+    out = {}
+    for r in rows or []:
+        try:
+            if isinstance(r, dict):
+                ts = r.get("timestamp") or r.get("time") or r.get("t")
+                close = float(r.get("close") or r.get("c") or 0)
+                quote = r.get("quoteVolume") or r.get("quote_volume") or r.get("value")
+                krw = float(quote) if quote is not None else float(r.get("volume") or r.get("v") or 0) * close
+                est = quote is None
+            else:  # [time, open, high, low, close, volume]
+                ts, close, krw, est = r[0], float(r[4]), float(r[5]) * float(r[4]), True
+            out[_kst_date(ts)] = {"krw": krw, "close": close, "estimated": est}
+        except (KeyError, IndexError, TypeError, ValueError):
+            continue
+    return out
+
+
+def parse_gopax(rows) -> dict[str, dict]:
+    """고팍스 일봉 [시각(ms), 저가, 고가, 시가, 종가, 거래량]. 원화 거래대금 = 거래량 × 종가(어림)."""
+    out = {}
+    for r in rows or []:
+        try:
+            if isinstance(r, dict):
+                ts, close, vol = r.get("time") or r.get("timestamp"), float(r.get("close")), float(r.get("volume"))
+            else:
+                ts, close, vol = r[0], float(r[4]), float(r[5])
+            out[_kst_date(ts)] = {"krw": vol * close, "close": close, "estimated": True}
+        except (KeyError, IndexError, TypeError, ValueError):
+            continue
+    return out
 
 
 def parse_upbit_style(rows) -> dict[str, dict]:
@@ -69,6 +111,16 @@ def fetch_one(ex: str, asset: str) -> dict[str, dict]:
         return parse_upbit_style(get_json(f"https://api.bithumb.com/v1/candles/days?market=KRW-{asset}&count={DAYS}", timeout=20))
     if ex == "coinone":
         return parse_coinone(get_json(f"https://api.coinone.co.kr/public/v2/chart/KRW/{asset}?interval=1d&size={DAYS}", timeout=20))
+    if ex == "digitalx":
+        r = get_json(f"https://api.korbit.co.kr/v2/candles?symbol={asset.lower()}_krw&interval=1D&limit={DAYS}", timeout=20)
+        RAW_SAMPLE[f"{ex} {asset}"] = json.dumps(r, ensure_ascii=False)[:400]
+        return parse_digitalx(r)
+    if ex == "gopax":
+        end = int(datetime.now(timezone.utc).timestamp() * 1000)
+        start = end - DAYS * 86400 * 1000
+        r = get_json(f"https://api.gopax.co.kr/trading-pairs/{asset}-KRW/candles?start={start}&end={end}&interval=1440", timeout=20)
+        RAW_SAMPLE[f"{ex} {asset}"] = json.dumps(r, ensure_ascii=False)[:400]
+        return parse_gopax(r)
     raise ValueError(ex)
 
 
@@ -159,6 +211,8 @@ def main() -> None:
     print(f"일수 {len(res['daily'])} · 최근 완결일 {s['last_full_date']} ₩{(s['last_full_krw'] or 0):,.0f} · "
           f"30일 평균 ₩{(s['avg30_krw'] or 0):,.0f} ({s['chg30_pct']}%) · 점유 {s['share30_pct']} · 자산 {s['asset_share30_pct']}")
     if args.probe:
+        for k, v in RAW_SAMPLE.items():
+            print(f"  [원문 {k}] {v}")
         print("KRWVOL_JSON " + json.dumps(res, ensure_ascii=False, separators=(",", ":")))
         return
     if not res["daily"]:
