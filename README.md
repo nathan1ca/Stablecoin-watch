@@ -280,4 +280,6 @@ python etl/fetch_listings.py --probe    # 거래소별 응답·매칭 확인(쓰
 python etl/fetch_listings.py
 ```
 
+거래소 아이콘은 각 거래소 공식 아이콘의 사본을 처음 한 번 받아 `site/data/ex-icons/`에 둡니다(빗썸·코인원은 앱스토어 공식 앱 아이콘, 못 받으면 머리글자 배지). 다시 받으려면 `--refresh-icons`.
+
 대조는 거래소 티커 = DefiLlama 심볼(대문자)입니다. 같은 티커의 다른 토큰은 `etl/kr_exchanges.json`의 `deny_symbols`로 빼고(사유는 `deny_notes`), 티커가 다르면 `aliases`로 잇습니다.

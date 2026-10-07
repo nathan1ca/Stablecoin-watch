@@ -1105,24 +1105,45 @@ html[data-theme="dark"] .range-btn[aria-pressed="true"]{background:var(--rule)}
 }
 
 /* ── 국내 거래소 거래지원 ─────────────────────────────────
-   표의 '국내' 열(곳 수)과 별도 절의 종목×거래소 행렬. 색 하나에 기대지 않고
-   글자(KRW·유의)로 뜻을 전한다. */
-.kr-n{font-family:var(--mono)}
+   종목별 현황의 '국내 거래소' 열: 거래소 순서를 고정한 아이콘 줄.
+   아이콘(공식 아이콘 사본) 아래에 머리글자 배지를 깔아 두어, 사본이 없거나
+   못 읽으면 배지가 드러난다. 오른쪽 위 작은 글자가 마켓(원·B·T). */
 .kr-0{color:var(--dim)}
-.kr-warn{
-  display:inline-block;margin-left:.35rem;font-family:var(--sans);font-size:.7rem;
-  color:var(--watch);border:1px solid currentColor;padding:0 .3rem;line-height:1.35;
+.td-ex{padding-top:.5rem;padding-bottom:.5rem}
+.exl{display:inline-flex;gap:.8rem;vertical-align:middle;padding-top:.35rem;padding-right:.5rem}
+.ex{
+  position:relative;flex:none;width:24px;height:24px;border-radius:6px;
+  background:#fff;box-shadow:0 0 0 1px var(--rule);
 }
-.kr-tbl{min-width:640px}
-.kr-tbl tbody th{font-weight:400;text-align:left;border-bottom:1px solid var(--rule-soft);padding:.62rem .85rem}
-.kr-tbl tbody tr:last-child th{border-bottom:1px solid var(--rule)}
-.kr-cell{white-space:nowrap}
-.kr-none{color:var(--dim)}
-.mk{
-  display:inline-block;font-family:var(--mono);font-size:.7rem;letter-spacing:.03em;
-  padding:.08rem .38rem;margin-right:.25rem;border:1px solid var(--rule);color:var(--mid);
+.ex--empty{background:transparent;box-shadow:0 0 0 1px var(--rule-soft) inset;opacity:.6;border-radius:6px}
+.ex-mono{
+  position:absolute;inset:0;display:grid;place-items:center;border-radius:6px;
+  background:var(--exc);color:#fff;font:600 .72rem/1 var(--sans);
 }
-.mk-krw{color:var(--ink);border-color:var(--ink);font-weight:500}
+.ex-img{position:absolute;inset:1px;width:22px;height:22px;border-radius:5px;object-fit:contain;background:#fff}
+.ex-mk{
+  position:absolute;top:-.42rem;right:-.5rem;z-index:1;
+  font:600 .66rem/1 var(--sans);font-style:normal;letter-spacing:-.02em;color:var(--ink);
+  background:var(--card);padding:.06rem .16rem;border-radius:3px;box-shadow:0 0 0 1px var(--rule);
+  white-space:nowrap;
+}
+.ex--warn{box-shadow:0 0 0 2px var(--watch)}
+.ex--warn .ex-mk{color:var(--watch);box-shadow:0 0 0 1px var(--watch)}
+.ex--stale{opacity:.45}
+.ex--lg{width:32px;height:32px;border-radius:8px}
+.ex--lg .ex-mono{border-radius:8px;font-size:.9rem}
+.ex--lg .ex-img{width:30px;height:30px;border-radius:7px}
+.th-ex abbr{text-decoration:none}
+.ex-legend b{font-weight:600;color:var(--ink)}
+.ex-sum{
+  list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+  background:var(--card);border-top:2px solid var(--ink);
+}
+.ex-sum-i{display:flex;gap:.7rem;align-items:center;padding:1rem 1.1rem;border-left:1px solid var(--rule-soft)}
+.ex-sum-i:first-child{border-left:0}
+.ex-sum-t{display:flex;flex-direction:column;gap:.15rem;min-width:0}
+.ex-sum-n{font-size:.78rem;color:var(--mid)}
+.ex-sum-i.is-fail .ex-sum-n{color:var(--watch)}
 .kr-events{margin-top:1.4rem}
 .kr-events-list{list-style:none;margin:0;padding:0}
 .kr-ev{display:flex;gap:.7rem;align-items:baseline;padding:.45rem 0;border-top:1px solid var(--rule-soft);font-size:.85rem}
@@ -1131,10 +1152,10 @@ html[data-theme="dark"] .range-btn[aria-pressed="true"]{background:var(--rule)}
 .kr-ev-k{flex:none;font-size:.72rem;border:1px solid currentColor;padding:0 .35rem}
 .kr-ev--listed .kr-ev-k{color:var(--sound)}
 .kr-ev--delisted .kr-ev-k{color:var(--watch)}
-@media (max-width:760px){
-  #kr-tbl tbody th,#kr-tbl thead th:first-child{
-    position:sticky;left:0;z-index:1;background:var(--card);box-shadow:1px 0 0 var(--rule-soft);
-  }
-  #kr-tbl thead th:first-child{z-index:2}
-  #kr-tbl .tname{display:none}
+html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{background:#fff}
+@media (max-width:900px){
+  .ex-sum{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ex-sum-i{border-left:0;border-top:1px solid var(--rule-soft)}
+  .ex-sum-i:nth-child(-n+2){border-top:0}
+  .ex-sum-i:nth-child(even){border-left:1px solid var(--rule-soft)}
 }

@@ -433,6 +433,7 @@
         <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
             data-i="${i}" aria-expanded="false"
             aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || a.label || "")}</span></span></td>
+        <td class="td-ex">${krLogos(a.symbol)}</td>
         <td>${ok ? esc(a.mechanism_ko) : "—"}</td>
         <td>${esc(a.peg_currency)}</td>
         <td class="num" title="${ok ? esc(localAmt(a.circulating, a.peg_currency)) : ""}">${ok ? "$" + usdC(a.mcap_usd) : "—"}</td>
@@ -441,7 +442,6 @@
           ok && a.dev_bp_local != null ? signed(a.dev_bp_local, 1) + (thin ? "*" : "") : "—"}</td>
         <td class="num">${ok ? signed(a.chg_7d, 1, "%") : "—"}</td>
         <td class="num t-${ok ? a.grade_redemption : "unknown"}">${ok ? signed(a.chg_30d, 1, "%") : "—"}</td>
-        <td class="num">${krCell(a.symbol)}</td>
         <td><span class="pill is-${a.grade} t-${a.grade}">${ok ? GRADE_KO[a.grade] : "미수집"}</span></td>
       </tr>`;
       }).join("");
@@ -1091,6 +1091,7 @@
   // 값이 없는 칸(—)은 방향과 관계없이 항상 맨 아래로 보낸다.
   const SORT_COLS = [
     { key: "symbol", type: "text" },
+    { key: "kr", type: "kr", hint: "국내 거래지원 거래소 수 순" },
     { key: "mechanism_ko", type: "text" },
     { key: "peg_currency", type: "text" },
     { key: "mcap_usd", type: "num" },
@@ -1098,11 +1099,10 @@
     { key: "dev_bp", type: "abs", hint: "편차 크기(절댓값) 순" },
     { key: "chg_7d", type: "num" },
     { key: "chg_30d", type: "num" },
-    { key: "kr", type: "kr", hint: "국내 거래지원 거래소 수 순" },
     { key: "grade", type: "grade" },
   ];
   const GRADE_RANK = { breach: 3, watch: 2, sound: 1, unknown: 0 };
-  const SORT = { col: 3, dir: "descending", src: [] };
+  const SORT = { col: 4, dir: "descending", src: [] };
 
   const sortVal = (a, c) => {
     const v = a[c.key];
@@ -1222,6 +1222,7 @@
       <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
           data-i="${i}" aria-expanded="false"
           aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></span></td>
+      <td class="td-ex">${krLogos(a.symbol)}</td>
       <td>${a.mechanism_ko}</td>
       <td>${a.peg_currency}</td>
       <td class="num">$${usd(a.mcap_usd)}</td>
@@ -1231,7 +1232,6 @@
       }>${a.dev_bp == null ? "—" : signed(a.dev_bp, 1)}</td>
       <td class="num">${signed(a.chg_7d, 1, "%")}</td>
       <td class="num t-${a.grade_redemption}">${signed(a.chg_30d, 1, "%")}</td>
-      <td class="num">${krCell(a.symbol)}</td>
       <td><span class="pill is-${a.grade} t-${a.grade}">${GRADE_KO[a.grade]}</span></td>
     </tr>`).join("");
   }
@@ -1665,69 +1665,78 @@
     return Object.entries(k.exchanges).map(([id, v]) =>
       `${EX_NAME[id] || id} ${mkTxt(v.markets)}${v.warning ? "(유의)" : ""}${v.stale ? "*" : ""}`).join(" · ");
   }
-  function krCell(sym) {
+  // 거래소 아이콘 한 칸: 공식 아이콘 사본(있으면) 위에, 없거나 못 읽으면 머리글자 배지.
+  // 오른쪽 위 작은 글자 = 마켓(원=KRW, B=BTC, T=USDT).
+  const MK_SHORT = { KRW: "원", BTC: "B", USDT: "T" };
+  const MK_KO = { KRW: "원화", BTC: "BTC", USDT: "USDT" };
+  const EX = {}; // id → 거래소 메타(이름·아이콘·머리글자·색)
+  function exBadge(e, v, cls = "") {
+    const mk = v ? v.markets.map((m) => MK_SHORT[m] || m[0]).join("") : "";
+    const tip = v ? `${e.name} · ${v.markets.map((m) => MK_KO[m] || m).join("·")} 마켓${v.warning ? " · 투자유의" : ""}${v.stale ? " · 이번 수집 실패, 직전 값" : ""}` : e.name;
+    return `<span class="ex${v && v.warning ? " ex--warn" : ""}${v && v.stale ? " ex--stale" : ""}${cls}" title="${esc(tip)}" role="listitem" aria-label="${esc(tip)}">
+      <span class="ex-mono" style="--exc:${esc(e.color || "#475569")}" aria-hidden="true">${esc(e.short || e.name[0])}</span>${
+      e.icon ? `<img class="ex-img" src="${esc(e.icon)}" alt="" width="22" height="22" loading="lazy" decoding="async">` : ""}${
+      mk ? `<i class="ex-mk" aria-hidden="true">${esc(mk)}</i>` : ""}</span>`;
+  }
+  function krLogos(sym) {
     if (!LISTINGS) return "";
     const k = krOf(sym);
     if (!k) return `<span class="kr-0" aria-label="국내 거래지원 없음">—</span>`;
-    const warn = Object.values(k.exchanges).some((v) => v.warning);
-    return `<span class="kr-n" title="${esc(krText(sym))}">${k.count}곳</span>${warn ? '<span class="kr-warn" title="투자유의 지정 거래소 있음">유의</span>' : ""}`;
+    // 거래소 순서를 고정해(빈 자리 유지) 행끼리 같은 거래소가 세로로 맞도록 한다.
+    const ids = Object.keys(EX);
+    return `<span class="exl" role="list">${ids.map((id) => k.exchanges[id]
+      ? exBadge(EX[id], k.exchanges[id]) : '<span class="ex ex--empty" aria-hidden="true"></span>').join("")}</span>`;
   }
+  // 아이콘 사본을 못 읽으면 머리글자 배지가 드러나게 이미지만 숨긴다(error 는 버블링하지 않아 캡처로 받는다).
+  document.addEventListener("error", (ev) => {
+    const t = ev.target;
+    if (t && t.classList && t.classList.contains("ex-img")) t.remove();
+  }, true);
 
   function renderListings(L, snap) {
     LISTINGS = L;
     const exs = (L.meta && L.meta.exchanges) || [];
-    exs.forEach((e) => { EX_NAME[e.id] = e.name; });
+    exs.forEach((e) => { EX_NAME[e.id] = e.name; EX[e.id] = e; });
     const sec = $("#kr-sec");
     const syms = Object.keys(L.assets || {});
-    // 표·감시목록·칩을 다시 그려 '국내' 열을 채운다.
+    // 표·감시목록·칩을 다시 그려 '국내 거래소' 열을 채운다.
     const chip = document.querySelector('.tbl-tools .chip[data-f="kr"]');
     if (chip) chip.hidden = false;
+    const leg = $("#ex-legend");
+    if (leg) leg.hidden = false;
     paintTable();
     renderWatchlist(snap);
     if (!sec) return;
 
-    // 행 순서: 거래소 수 → 발행잔액
     const mcapOf = {};
     (snap.assets || []).concat((snap.watchlist && snap.watchlist.rows) || [])
       .forEach((a) => { mcapOf[String(a.symbol).toUpperCase()] = a; });
-    syms.sort((x, y) => L.assets[y].count - L.assets[x].count
-      || ((mcapOf[y] || {}).mcap_usd || 0) - ((mcapOf[x] || {}).mcap_usd || 0));
 
-    const okEx = exs.filter((e) => e.status === "ok");
-    $("#kr-head").innerHTML = `<th scope="col">종목</th>` + exs.map((e) =>
-      `<th scope="col"${e.status !== "ok" ? ' title="이번 수집 실패 — 직전 값(*)을 표시"' : ""}>${esc(e.name)}${e.status !== "ok" ? " ⚠" : ""}</th>`).join("")
-      + `<th scope="col" class="num">곳</th>`;
-    const tb = $("#kr-tbl tbody");
-    tb.innerHTML = syms.length ? syms.map((sym) => {
-      const k = L.assets[sym];
-      const a = mcapOf[sym] || {};
-      return `<tr>
-        <th scope="row"><span class="tsym">${esc(a.symbol || sym)}</span><span class="tname">${esc(a.name || "")}</span></th>
-        ${exs.map((e) => {
-          const v = k.exchanges[e.id];
-          if (!v) return `<td class="kr-cell kr-none"><span aria-label="미지원">—</span></td>`;
-          return `<td class="kr-cell"${v.stale ? ' title="이번 수집 실패 — 직전 수집값"' : ""}>${v.markets.map((m) =>
-            `<span class="mk${m === "KRW" ? " mk-krw" : ""}">${esc(m)}</span>`).join("")}${
-            v.warning ? '<span class="kr-warn">유의</span>' : ""}${v.stale ? "*" : ""}</td>`;
-        }).join("")}
-        <td class="num">${k.count}</td>
-      </tr>`;
-    }).join("") : `<tr class="empty-row"><td colspan="${exs.length + 2}">국내 거래소에서 거래되는 대상 종목이 없습니다.</td></tr>`;
+    // 거래소별 요약: 아이콘 · 이름 · 스테이블코인 종목 수(원화마켓)
+    $("#ex-sum").innerHTML = exs.map((e) => {
+      const mine = syms.filter((sym) => L.assets[sym].exchanges[e.id]);
+      const krw = mine.filter((sym) => L.assets[sym].exchanges[e.id].markets.includes("KRW")).length;
+      return `<li class="ex-sum-i${e.status !== "ok" ? " is-fail" : ""}">
+        ${exBadge(e, null, " ex--lg")}
+        <span class="ex-sum-t"><b>${esc(e.name)}</b>
+          <span class="ex-sum-n">${mine.length}종${mine.length ? ` · 원화마켓 ${krw}종` : ""}${e.status !== "ok" ? " · 이번 수집 실패(직전 값)" : ""}</span></span>
+      </li>`;
+    }).join("");
 
-    // 핵심 문장: 몇 종이, 발행잔액 기준 얼마만큼이 국내에서 거래되는가
     const tracked = (snap.assets || []).length;
     const listedMain = (snap.assets || []).filter((a) => krOf(a.symbol));
-    const shareSum = listedMain.reduce((s, a) => s + (a.share || 0), 0);
-    const all5 = syms.filter((s) => L.assets[s].count === exs.length && exs.length > 1);
+    const shareSum = listedMain.reduce((acc, a) => acc + (a.share || 0), 0);
+    const all5 = syms.filter((x) => L.assets[x].count === exs.length && exs.length > 1);
     setLead("kr", syms.length
       ? `상위 ${bold(tracked + "종")} 가운데 ${bold(listedMain.length + "종")}이 국내 원화마켓 거래소에서 거래되며, 발행잔액으로는 ${bold(shareSum.toFixed(1) + "%")}입니다.`
-        + (all5.length ? ` ${exs.length}곳 모두 지원하는 종목은 ${all5.map((s) => bold((mcapOf[s] || {}).symbol || s)).join("·")}입니다.` : "")
+        + (all5.length ? ` ${exs.length}곳 모두 지원하는 종목은 ${all5.map((x) => bold((mcapOf[x] || {}).symbol || x)).join("·")}입니다.` : "")
       : "");
 
+    const okEx = exs.filter((e) => e.status === "ok");
     const fails = exs.filter((e) => e.status !== "ok").map((e) => e.name);
     $("#kr-basis").textContent =
       `출처: ${exs.map((e) => e.name).join("·")} 공개 마켓 목록(${okEx.length}/${exs.length}곳 수집) · 기준 ${fmtTime(L.meta.generated_at)}`
-      + (fails.length ? ` · 수집 실패: ${fails.join("·")} — 직전 값(*) 표시` : "")
+      + (fails.length ? ` · 수집 실패: ${fails.join("·")} — 직전 값 표시` : "")
       + ". 거래소 티커와 심볼이 같으면 같은 종목으로 봅니다(동명 티커는 다른 토큰일 수 있음). 시작·종료일은 이 수집이 처음 확인한 날로, 거래소 공지일과 다를 수 있습니다.";
 
     const ev = (L.events || []).slice(0, 12);
@@ -1736,13 +1745,12 @@
       $("#kr-events").innerHTML = ev.map((e) => `<li class="kr-ev kr-ev--${e.kind}">
         <span class="kr-ev-d">${esc(e.date)}</span>
         <span class="kr-ev-k">${e.kind === "listed" ? "시작" : "종료"}</span>
-        <span>${esc(EX_NAME[e.exchange] || e.exchange)} <b class="tsym">${esc(e.symbol)}</b> ${esc(e.market)} 마켓</span>
+        <span>${esc(EX_NAME[e.exchange] || e.exchange)} <b class="tsym">${esc(e.symbol)}</b> ${esc(MK_KO[e.market] || e.market)} 마켓</span>
       </li>`).join("");
       evWrap.hidden = false;
     } else evWrap.hidden = true;
     sec.hidden = false;
 
-    // 주요 신호: 최근 7일 거래지원 변동
     const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
     const recent = (L.events || []).filter((e) => e.date >= since);
     const nL = recent.filter((e) => e.kind === "listed").length, nD = recent.length - nL;
