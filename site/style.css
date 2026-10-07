@@ -979,3 +979,113 @@ html[data-theme="dark"] .seg-btn[aria-pressed="true"]{background:#2A6FAE}
 @media (max-width:960px){
   .block .figs .fig:last-child:nth-child(odd){grid-column:1/-1;border-left:0}
 }
+
+/* ═══════════════════════════════════════════════════════════
+   참고 사례 반영 (2026-10-07, 3차)
+   - 영란은행 FSR·영국 정부 통계 지침: 서술형 핵심 문장(.lead-stat), 요약 신호 상자
+   - rwa.xyz·DefiLlama·Visa Onchain Analytics: KPI 기간 변화·미니 추이선,
+     기간 선택(1M~전체), 표 검색·거르기, 용어 풀이, 업데이트 기록 링크
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── 머리말 압축: 첫 화면에 수치가 더 일찍 오게 ─────────────── */
+.masthead-in{padding-block:clamp(1.4rem,3.4vw,2.3rem) clamp(1.1rem,2.8vw,1.6rem)}
+.masthead h1{font-size:clamp(1.6rem,4.2vw,2.5rem)}
+.lede{margin-top:.6rem;font-size:.9rem}
+.stamp-age{color:#A8B1BC;margin-left:.35rem}
+.stamp-age.is-stale{color:#F2B55C}
+.stamp-age.is-stale::before{content:"⚠ "}
+
+/* ── 오늘의 주요 신호 ─────────────────────────────────── */
+.status .signals{grid-column:1/-1;border-top:1px solid var(--rule);padding:1rem 1.3rem 1.1rem}
+.signals-h{
+  margin:0 0 .6rem;font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--mid);
+}
+.signals-list{list-style:none;margin:0;padding:0;display:grid;gap:.45rem}
+.sig{display:grid;grid-template-columns:4.6rem 1fr auto;align-items:baseline;gap:.75rem;font-size:.88rem;line-height:1.45}
+.sig-sev{
+  display:inline-flex;align-items:center;gap:.35rem;font-family:var(--mono);font-size:.7rem;
+  font-weight:600;letter-spacing:.06em;white-space:nowrap;
+}
+/* 색만으로 구분하지 않도록 심각도마다 표식 모양도 다르게: 경보 ■ · 주의 ▲ · 참고 ● */
+.sig-sev i{display:inline-block;width:8px;height:8px;background:currentColor;flex:none}
+.sig.sig--watch .sig-sev i{width:0;height:0;background:none;border-inline:5px solid transparent;border-bottom:8px solid currentColor}
+.sig.sig--info .sig-sev i{border-radius:50%}
+.sig.sig--breach .sig-sev{color:var(--breach)}
+.sig.sig--watch .sig-sev{color:var(--watch)}
+.sig.sig--info .sig-sev{color:var(--mid)}
+.sig-txt b{font-weight:600}
+.sig-dim{color:var(--mid)}
+.sig-go{font-family:var(--mono);font-size:.72rem;white-space:nowrap;text-decoration:none;padding:.15rem 0}
+.sig-go::after{content:" →"}
+.sig-go:hover{text-decoration:underline}
+@media (max-width:560px){
+  .status .signals{padding:.9rem 1rem 1rem}
+  .sig{grid-template-columns:auto 1fr;row-gap:.1rem}
+  .sig-go{grid-column:2;justify-self:start}
+}
+
+/* ── 서술형 핵심 문장 ─────────────────────────────────── */
+.block-head .lead-stat{
+  margin:.1rem 0 .55rem;color:var(--ink);font-size:1rem;line-height:1.55;font-weight:400;
+}
+.block-head .lead-stat b{font-weight:600}
+.block-head .lead-stat[hidden]{display:none}
+.block-head .lead-stat + p{font-size:.86rem}
+/* 탭바(약 48px)에 가려지지 않게 */
+section[id],h2[id],.block{scroll-margin-top:64px}
+
+/* ── KPI: 30일 변화·미니 추이선 ────────────────────────── */
+.delta{font-family:var(--mono);font-weight:600;color:var(--ink)}
+.statuswrap .fig .spark{display:block;width:100%;max-width:160px;height:26px;margin-top:.5rem;color:var(--accent)}
+
+/* ── 차트 기간 선택 ───────────────────────────────────── */
+.range{display:inline-flex;gap:.15rem;margin-left:auto;background:var(--paper);border:1px solid var(--rule);border-radius:999px;padding:.18rem}
+.range-btn{
+  appearance:none;border:0;background:transparent;border-radius:999px;cursor:pointer;
+  font-family:var(--mono);font-size:.72rem;font-weight:500;color:var(--mid);padding:.35rem .7rem;min-height:30px;
+}
+.range-btn:hover{color:var(--ink)}
+.range-btn[aria-pressed="true"]{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(13,17,23,.12)}
+.range-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:560px){ .range{margin-left:0;width:100%;justify-content:space-between} .range-btn{flex:1 1 0;min-height:36px} }
+html[data-theme="dark"] .range{background:var(--paper)}
+html[data-theme="dark"] .range-btn[aria-pressed="true"]{background:var(--rule)}
+
+/* ── 표 도구줄: 검색·거르기·건수 ────────────────────────── */
+.tbl-tools{display:flex;align-items:center;flex-wrap:wrap;gap:.6rem .9rem;margin:0 0 .9rem}
+.tbl-q{
+  font:inherit;font-size:.86rem;color:var(--ink);background:var(--card);
+  border:1px solid var(--rule);border-radius:8px;padding:.5rem .75rem;min-height:38px;width:min(16rem,100%);
+}
+.tbl-q::placeholder{color:var(--dim)}
+.tbl-q:focus-visible{outline:2px solid var(--petrol);outline-offset:1px}
+.chips{display:flex;flex-wrap:wrap;gap:.35rem}
+.chip{
+  appearance:none;font:inherit;font-size:.78rem;color:var(--mid);background:var(--card);
+  border:1px solid var(--rule);border-radius:999px;padding:.32rem .75rem;min-height:32px;cursor:pointer;white-space:nowrap;
+}
+.chip:hover{color:var(--ink);border-color:var(--mid)}
+.chip[aria-pressed="true"]{color:var(--card);background:var(--ink);border-color:var(--ink);font-weight:600}
+.chip:focus-visible{outline:2px solid var(--petrol);outline-offset:2px}
+.tbl-count{margin-left:auto;font-family:var(--mono);font-size:.74rem;color:var(--mid)}
+.tbl-more{display:flex;justify-content:center;margin-top:.9rem}
+.tbl-more[hidden]{display:none}
+@media (max-width:620px){
+  .tbl-q{width:100%}
+  .chips{flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:.15rem;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .tbl-count{margin-left:0}
+}
+
+/* ── 용어 풀이 ────────────────────────────────────────── */
+.glossary{margin-top:1rem}
+.gloss{margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:.9rem 1.6rem}
+.gloss div{display:grid;gap:.2rem}
+.gloss dt{font-weight:600;font-size:.86rem}
+.gloss dd{margin:0;font-size:.82rem;color:var(--mid);line-height:1.55}
+
+/* ── 푸터 ─────────────────────────────────────────────── */
+.foot-bar .foot-disc{margin-top:.35rem;font-family:var(--sans)}
+.gloss div{align-content:start}
+.sig-go{display:inline-block;padding-block:.3rem}

@@ -63,11 +63,63 @@
     }).replace(/\.\s?/g, ".").replace(/\.$/, "") + " KST";
   };
 
+  // ── 핵심 문장 ───────────────────────────────────────────
+  // 각 절 제목 바로 아래에 "그래서 지금 어떤가"를 한 문장으로 적는다
+  // (영란은행 금융안정보고서·영국 정부 통계 차트 지침의 '서술형 제목' 방식).
+  // 숫자는 전부 같은 화면에 그려지는 데이터에서 계산한다.
+  function setLead(id, html) {
+    const el = document.getElementById("lead-" + id);
+    if (!el) return;
+    el.innerHTML = html || "";
+    el.hidden = !html;
+  }
+  const bold = (s) => `<b>${esc(s)}</b>`;
+  const pctTxt = (v, d = 1) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d) + "%";
+
+  // ── 오늘의 주요 신호 ─────────────────────────────────────
+  // 상단 상태 카드 아래 한 줄 목록. 데이터 파일마다 따로 도착하므로 출처별로
+  // 모아 두었다가 도착할 때마다 다시 그린다. 심각도 순, 최대 5개.
+  const SIGNALS = {};
+  const SEV_RANK = { breach: 3, watch: 2, info: 1 };
+  const SEV_KO = { breach: "경보", watch: "주의", info: "참고" };
+
+  function putSignals(source, items) {
+    SIGNALS[source] = items || [];
+    const all = Object.values(SIGNALS).flat()
+      .sort((x, y) => (SEV_RANK[y.sev] || 0) - (SEV_RANK[x.sev] || 0));
+    const row = $("#signals-row"), ul = $("#signals");
+    if (!row || !ul) return;
+    if (!all.length) { row.hidden = true; return; }
+    ul.innerHTML = all.slice(0, 5).map((g) => `<li class="sig sig--${g.sev}">
+      <span class="sig-sev"><i aria-hidden="true"></i>${SEV_KO[g.sev]}</span>
+      <span class="sig-txt">${g.html}</span>
+      ${g.tab ? `<a class="sig-go" href="#${g.tab}" data-tab="${g.tab}"${g.target ? ` data-target="${g.target}"` : ""}${g.filter ? ` data-filter="${g.filter}"` : ""}>보기<span class="sr"> — ${esc(g.label || "")}</span></a>` : ""}
+    </li>`).join("");
+    row.hidden = false;
+  }
+
+  // "n분 전" — 데이터가 얼마나 신선한지 기준시각 옆에 붙인다.
+  function ageTxt(iso) {
+    const t = new Date(iso).getTime();
+    if (!isFinite(t)) return "";
+    const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (m < 1) return "방금";
+    if (m < 60) return `${m}분 전`;
+    const h = Math.floor(m / 60);
+    if (h < 48) return `${h}시간 전`;
+    return `${Math.floor(h / 24)}일 전`;
+  }
+
   // ── 상단 상태 ───────────────────────────────────────────
   function renderStatus(d) {
     const t = d.totals, c = d.concentration, m = d.meta;
 
     $("#stamp-time").textContent = fmtTime(m.generated_at);
+    const ageH = (Date.now() - new Date(m.generated_at).getTime()) / 3.6e6;
+    const stamp = $("#stamp-time");
+    stamp.insertAdjacentHTML("beforeend",
+      ` <span class="stamp-age${ageH > 6 ? " is-stale" : ""}">${esc(ageTxt(m.generated_at))}</span>`);
+    if (ageH > 6) stamp.title = "마지막 수집 후 6시간이 넘었습니다. 수집 작업이 지연·실패했을 수 있습니다.";
     $("#stamp-src").textContent = m.source || "—";
     $("#stamp-count").textContent = `${m.asset_count}종목`;
     $("#foot-time").textContent = fmtTime(m.generated_at);
@@ -133,6 +185,38 @@
     $("#f-hhi").textContent = hhiV.toLocaleString("en-US", { maximumFractionDigits: 0 });
     $("#f-hhi").className = "fig-v t-" + (hhiV >= thr ? "watch" : "sound");
     $("#f-hhi-s").textContent = `상위 3종목 ${c.top3_share.toFixed(1)}% · ${thr.toLocaleString()} 초과 시 고집중`;
+
+    // 주요 신호 — 종목 경보·주의와 구조 지표
+    const sig = [];
+    (d.alerts || []).filter((a) => a.grade === "breach").slice(0, 3).forEach((a) => {
+      const why = a.grade_peg === "breach"
+        ? `페그 ${signed(a.dev_bp, 1)}bp 이탈`
+        : a.grade_redemption === "breach" ? `30일 발행잔액 ${signed(a.chg_30d, 1, "%")}` : "경보 구간";
+      sig.push({ sev: "breach", tab: "issuance", target: "gauge", label: a.symbol,
+        html: `${bold(a.symbol)} ${esc(why)} <span class="sig-dim">· 발행잔액 $${esc(usd(a.mcap_usd))}</span>` });
+    });
+    // alerts 는 상위 12건만 실려 오므로 건수는 totals 에서 읽는다.
+    const watchN = d.totals.watch_count || 0;
+    if (watchN) {
+      sig.push({ sev: "watch", tab: "issuance", target: "h-table", filter: "alert", label: "주의 종목",
+        html: `${bold("주의 " + watchN + "종")} <span class="sig-dim">— 페그 편차 또는 30일 상환·가격 품질이 관측선을 넘음</span>` });
+    }
+    if (c.hhi_issuer >= m.thresholds.hhi_concentrated) {
+      const top = (d.assets || [])[0];
+      sig.push({ sev: "info", tab: "issuance", target: "h-struct", label: "발행 집중도",
+        html: `발행 집중도 ${bold("HHI " + c.hhi_issuer.toLocaleString("en-US", { maximumFractionDigits: 0 }))} 고집중`
+          + (top ? ` <span class="sig-dim">· ${esc(top.symbol)} 한 종목이 ${top.share.toFixed(1)}%</span>` : "") });
+    }
+    putSignals("snapshot", sig);
+
+    // 발행 구조 핵심 문장
+    const top1 = (d.assets || [])[0];
+    if (top1) {
+      setLead("struct",
+        `${bold(top1.symbol)} 한 종목이 ${bold(top1.share.toFixed(1) + "%")}, 상위 3종목이 ${bold(c.top3_share.toFixed(1) + "%")}를 차지합니다`
+        + ` (HHI ${c.hhi_issuer.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+        + (c.hhi_issuer >= m.thresholds.hhi_concentrated ? ", 고집중)." : ")."));
+    }
 
     $("#f-algo").textContent = pct(c.algo_share);
     $("#f-algo").className = "fig-v t-" + (c.algo_share >= m.thresholds.algo_share_watch ? "watch" : "sound");
@@ -212,6 +296,17 @@
     };
     if (reduce) { marks.forEach((_, i) => place(i)); }
     else requestAnimationFrame(() => marks.forEach((_, i) => setTimeout(() => place(i), 60 + i * 45)));
+
+    // 핵심 문장 — 허용 구간 안 종목 수와 가장 크게 벗어난 종목
+    const measured = rows.filter((a) => a.dev_bp != null);
+    if (measured.length) {
+      const inBand = measured.filter((a) => Math.abs(a.dev_bp) < d.meta.thresholds.peg_watch_bp).length;
+      const worst = measured.reduce((x, y) => (Math.abs(y.dev_bp) > Math.abs(x.dev_bp) ? y : x));
+      setLead("gauge",
+        `발행잔액 상위 USD 페그 ${measured.length}종 중 ${bold(inBand + "종")}이 허용 구간(±${d.meta.thresholds.peg_watch_bp}bp) 안에 있습니다.`
+        + (Math.abs(worst.dev_bp) >= d.meta.thresholds.peg_watch_bp
+          ? ` 가장 크게 벗어난 종목은 ${bold(worst.symbol)}(${esc(signed(worst.dev_bp, 1))}bp)입니다.` : ""));
+    }
 
     // [B] 가격 출처와 기준시각
     const basis = d.meta.price_basis
@@ -742,7 +837,13 @@
   // ── 발행잔액·순증감률 차트 (전체 시장 / 종목별) ──────────
   // metric 은 세그먼트 토글이 고르는 지표다. 두 차트를 동시에 보여주던 것을
   // 한 번에 하나만 보여주는 방식으로 바꿨다 — 드롭다운·툴팁·CSV 는 그대로다.
-  const TREND = { opts: [], key: "__all__", metric: "total" };
+  const TREND = { opts: [], key: "__all__", metric: "total", days: 365 };
+  // 표시 기간으로 자른 시계열. 기간은 마지막 관측일 기준으로 센다.
+  const inRange = (pts) => {
+    if (!TREND.days || !pts || !pts.length) return pts || [];
+    const from = pts[pts.length - 1].t - TREND.days * 86400;
+    return pts.filter((p) => p.t >= from);
+  };
   const isoDate = (t) => new Date(t * 1000).toISOString().slice(0, 10);
   const TREND_COLOR = "var(--accent)";
 
@@ -803,11 +904,13 @@
 
     const height = chartHeight();
     const box = { height, hMin: 200, hMax: Math.round(height * 1.5) };
-    lineChart($("#chart-total"), o.total, {
+    document.querySelectorAll(".range-btn").forEach((btn) =>
+      btn.setAttribute("aria-pressed", String(Number(btn.dataset.days) === TREND.days)));
+    lineChart($("#chart-total"), inRange(o.total), {
       ...box, color: TREND_COLOR, label: `${o.short} 발행잔액 추이`, interactive: true,
       fillGradient: true, fmt: (v) => "$" + usd(v),
     });
-    lineChart($("#chart-flow"), o.flow, {
+    lineChart($("#chart-flow"), inRange(o.flow), {
       ...box, color: TREND_COLOR, label: `${o.short} 30일 순증감률`, zero: true, interactive: true,
       fillGradient: true, fmt: (v) => v.toFixed(1) + "%",
     });
@@ -887,6 +990,39 @@
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
   }
 
+  // 상단 TOTAL 카드에 30일 변화율과 90일 미니 추이선을 붙인다
+  // (rwa.xyz·DefiLlama 의 KPI 카드 방식: 값 + 기간 변화 + 작은 추이).
+  // 상승·하락에 초록·빨강을 쓰지 않는다 — 발행 증가가 곧 '좋음'은 아니므로
+  // 방향은 화살표 모양으로만 알린다.
+  function renderTotalTrend(d, hist) {
+    const pts = (hist && hist.total_circulating) || [];
+    if (pts.length < 31) return;
+    const last = pts[pts.length - 1];
+    const ago = pts.filter((p) => p.t <= last.t - 30 * 86400).pop();
+    if (!ago) return;
+    const chg = (last.v / ago.v - 1) * 100;
+    const arrow = chg > 0 ? "▲" : chg < 0 ? "▼" : "■";
+    const t = d.totals;
+    $("#f-total-s").innerHTML =
+      `<span class="delta">${arrow} ${esc(pctTxt(chg, 2))}</span> 30일 · 1일 ${t.net_1d_usd >= 0 ? "+" : "−"}$${esc(usd(Math.abs(t.net_1d_usd)))}`;
+
+    const sp = pts.slice(-90), W = 120, H = 26;
+    const ys = sp.map((p) => p.v), lo = Math.min(...ys), hi = Math.max(...ys);
+    const path = sp.map((p, i) => `${i ? "L" : "M"}${(i / (sp.length - 1) * W).toFixed(1)} ${(H - 2 - (p.v - lo) / ((hi - lo) || 1) * (H - 4)).toFixed(1)}`).join(" ");
+    const fig = $("#f-total").parentElement;
+    let svg = fig.querySelector(".spark");
+    if (!svg) {
+      fig.insertAdjacentHTML("beforeend", `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"></svg>`);
+      svg = fig.querySelector(".spark");
+    }
+    svg.setAttribute("aria-label", `최근 90일 총 발행잔액 추이, 30일 변화 ${pctTxt(chg, 2)}`);
+    svg.innerHTML = `<path d="${path}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+
+    setLead("trend",
+      `최근 30일 발행잔액은 $${esc(usd(ago.v))}에서 $${esc(usd(last.v))}로 ${bold(pctTxt(chg, 2))} `
+      + (chg >= 0 ? "늘었습니다 — 상환보다 발행이 많았습니다." : "줄었습니다 — 발행보다 상환이 많았습니다."));
+  }
+
   function initTrend(hist) {
     TREND.opts = trendOptions(hist);
     const sel = $("#series-pick"), hint = $("#series-hint");
@@ -901,6 +1037,14 @@
     sel.addEventListener("change", () => { TREND.key = sel.value; renderTrend(); });
     $("#csv-dl").addEventListener("click", downloadTrendCsv);
     $("#png-dl").addEventListener("click", downloadTrendPng);
+
+    // 표시 기간 (1M·3M·6M·1Y·전체)
+    document.querySelectorAll(".range-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        TREND.days = Number(btn.dataset.days) || 0;
+        renderTrend();
+      });
+    });
 
     // 세그먼트 토글 — 발행잔액 ↔ 30일 순증감률
     document.querySelectorAll(".seg-btn").forEach((b) => {
@@ -1001,16 +1145,70 @@
 
   function renderTable(d) {
     SORT.src = d.assets || [];
+    initTableTools();
+    // 표에는 하한 이상 종목 중 발행잔액 상위 60종만 실려 온다. 문장의 건수도
+    // 표 안에서 세어야 아래 '경보·주의' 거르기 결과와 맞는다.
+    const nB = SORT.src.filter((a) => a.grade === "breach").length;
+    const nW = SORT.src.filter((a) => a.grade === "watch").length;
+    setLead("table",
+      `발행잔액 상위 ${bold(SORT.src.length + "종")} 가운데 경보 ${bold(String(nB))} · 주의 ${bold(String(nW))}종입니다.`);
     initTableSort();
     paintTable();
+  }
+
+  // 검색·거르기·더 보기 (DefiLlama·rwa.xyz 의 표 도구줄 방식)
+  const TBL = { q: "", f: "all", limit: 25, all: false };
+  const PAGE = 25;
+  const matchRow = (a) => {
+    if (TBL.f === "alert" && !(a.grade === "watch" || a.grade === "breach")) return false;
+    if (TBL.f !== "all" && TBL.f !== "alert" && a.mechanism !== TBL.f) return false;
+    if (TBL.q) {
+      const q = TBL.q.toLowerCase();
+      return String(a.symbol || "").toLowerCase().includes(q) || String(a.name || "").toLowerCase().includes(q)
+        || String(a.issuer || "").toLowerCase().includes(q);
+    }
+    return true;
+  };
+
+  function initTableTools() {
+    const q = $("#tbl-q");
+    if (!q || q._bound) return;
+    q._bound = true;
+    let t = 0;
+    q.addEventListener("input", () => {
+      clearTimeout(t);
+      t = setTimeout(() => { TBL.q = q.value.trim(); TBL.all = false; paintTable(); }, 120);
+    });
+    document.querySelectorAll(".tbl-tools .chip").forEach((c) => {
+      c.addEventListener("click", () => {
+        TBL.f = c.dataset.f; TBL.all = false;
+        document.querySelectorAll(".tbl-tools .chip").forEach((x) =>
+          x.setAttribute("aria-pressed", String(x === c)));
+        paintTable();
+      });
+    });
+    $("#tbl-more").addEventListener("click", () => { TBL.all = !TBL.all; paintTable(); });
   }
 
   function paintTable() {
     popClose(); // 다시 그리면 열려 있던 개요의 기준 행이 사라진다
     paintSortState();
-    const rows = sortedRows();
+    const matched = sortedRows().filter(matchRow);
+    const rows = TBL.all ? matched : matched.slice(0, PAGE);
+    const total = SORT.src.length;
+    $("#tbl-count").textContent = matched.length === total
+      ? `${total}종` : `${matched.length}종 / 전체 ${total}종`;
+    const more = $("#tbl-more-wrap");
+    if (more) {
+      more.hidden = matched.length <= PAGE;
+      $("#tbl-more").textContent = TBL.all ? "처음 25종만 보기" : `나머지 ${matched.length - PAGE}종 더 보기`;
+    }
     TABLE_ROWS = rows;
     const icons = hasIcons(rows);
+    if (!rows.length) {
+      $("#tbl tbody").innerHTML = `<tr class="empty-row"><td colspan="9">조건에 맞는 종목이 없습니다.</td></tr>`;
+      return;
+    }
     $("#tbl tbody").innerHTML = rows.map((a, i) => `<tr>
       <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
           data-i="${i}" aria-expanded="false"
@@ -1058,6 +1256,13 @@
     $("#fz-seize").textContent = t.seize.toLocaleString();
     $("#fz-seize").className = "fig-v" + (t.seize ? " t-breach" : "");
     $("#fz-amount").textContent = t.seized_units ? usd(t.seized_units) : "—";
+    {
+      const topSeize = (f.issuers || []).slice().sort((x, y) => (y.seize || 0) - (x.seize || 0))[0];
+      setLead("freeze",
+        `최근 ${days}일(${esc(f.meta.chain || "이더리움")}) 동결 ${bold(t.freeze.toLocaleString() + "건")}, 잔액 소각 ${bold(t.seize.toLocaleString() + "건")}이 있었습니다.`
+        + (topSeize && topSeize.seize && t.seize
+          ? ` 소각의 ${Math.round(topSeize.seize / t.seize * 100)}%는 ${esc(topSeize.issuer)}가 했습니다.` : ""));
+    }
 
     if (f.meta.notes && f.meta.notes.length) {
       $("#fz-notes").textContent = "확인 필요 — " + f.meta.notes.join(" / ");
@@ -1133,6 +1338,19 @@
       pmStable.textContent = stableAvg != null ? signed(stableAvg, 2, "%") : "—";
       pmStable.className = "fig-v t-" + (stableAvg != null ? stableGrade : "unknown");
     }
+    if (stableAvg != null) {
+      const inv = thr.inverted_pct != null ? thr.inverted_pct : -1;
+      const line = stableAvg <= inv ? `역프리미엄 주의선(${inv}%)`
+        : stableGrade === "breach" ? `경보선(${sb}%)` : stableGrade === "watch" ? `주의선(${sw}%)` : null;
+      setLead("premium",
+        `국내 거래소의 USDT·USDC가 해외 기준($1)보다 평균 ${bold(signed(stableAvg, 2, "%"))} `
+        + (stableAvg >= 0 ? "비싸게" : "싸게") + " 거래됩니다"
+        + (line ? (stableAvg <= inv ? ` — ${line} 아래입니다.` : ` — ${line}을 넘었습니다.`) : "."));
+      putSignals("premium", line ? [{
+        sev: stableGrade, tab: "premium", label: "김치프리미엄",
+        html: `스테이블코인 김치프리미엄 ${bold(signed(stableAvg, 2, "%"))} <span class="sig-dim">· ${esc(line)} ${stableAvg <= inv ? "하회" : "초과"}</span>`,
+      }] : []);
+    }
 
     const cryptoAvg = p.crypto_avg_pct != null ? p.crypto_avg_pct : p.basket_avg_pct;
     const cryptoGrade = p.crypto_grade || p.basket_grade || gradeOf(cryptoAvg, false);
@@ -1193,6 +1411,9 @@
     $("#fl-in").textContent = "$" + usd(t.inflow_usd);
     $("#fl-out").textContent = "$" + usd(t.outflow_usd);
     $("#fl-count").textContent = t.event_count.toLocaleString();
+    setLead("flow", !t.event_count
+      ? `최근 ${f.meta.lookback_days}일 동안 집계 범위 안에서 관측된 이체가 ${bold("없습니다")}. 좁은 대리지표라 실제 흐름이 없다는 뜻은 아닙니다.`
+      : `최근 ${f.meta.lookback_days}일 ${t.net_outflow_usd >= 0 ? "국내 → 해외 순유출" : "해외 → 국내 순유입"} ${bold("$" + usd(Math.abs(t.net_outflow_usd)))} (${t.event_count.toLocaleString()}건).`);
 
     const none = !t.event_count;
     const emptyMsg = `최근 ${f.meta.lookback_days}일 동안 집계 범위(지정 지갑 사이 직접 이체) 안에서 관측된 이체가 없습니다.`;
@@ -1258,6 +1479,17 @@
       <td><span class="pill is-${e.grade} t-${e.grade}">${GRADE_KO[e.grade] || e.grade}</span></td>
     </tr>`).join("");
     $("#attest-note").textContent = a.meta.maintenance_note || "";
+    const worstA = a.entries.slice().sort((x, y) => (y.days_since || 0) - (x.days_since || 0))[0];
+    if (worstA && worstA.days_since != null) {
+      setLead("attest",
+        `${esc(worstA.issuer)} ${esc(worstA.symbol)} 준비금 보고서 기준일(${esc(worstA.as_of_date)})이 ${bold(worstA.days_since + "일")} 지났고, `
+        + (worstA.drift_pct != null
+          ? `그 뒤 발행량이 ${bold(signed(worstA.drift_pct, 1, "%"))} ${worstA.drift_pct >= 0 ? "늘었습니다" : "줄었습니다"}.` : "발행량 변화는 계산되지 않았습니다."));
+      putSignals("attest", a.entries.filter((e) => e.grade === "breach" || e.grade === "watch").map((e) => ({
+        sev: e.grade, tab: "attest", label: "어테스테이션",
+        html: `${bold(e.symbol)} 준비금 보고서 ${bold(e.days_since + "일")} 경과 <span class="sig-dim">· 기준일 ${esc(e.as_of_date)}</span>`,
+      })));
+    }
   }
 
   // ── XRP 코너 자금흐름 ────────────────────────────────────
@@ -1273,6 +1505,9 @@
     $("#fx-in").textContent = usd(t.inflow_xrp) + " XRP";
     $("#fx-out").textContent = usd(t.outflow_xrp) + " XRP";
     $("#fx-count").textContent = t.event_count.toLocaleString();
+    setLead("flowxrp", t.event_count
+      ? `최근 ${f.meta.lookback_days}일 ${t.net_outflow_xrp >= 0 ? "국내 → 해외로" : "해외 → 국내로"} XRP가 ${bold(usd(Math.abs(t.net_outflow_xrp)) + "개")} 더 ${t.net_outflow_xrp >= 0 ? "나갔습니다(순유출)" : "들어왔습니다(순유입)"} — ${t.event_count.toLocaleString()}건.`
+      : "");
 
     const xpts = (f.daily || []).map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_xrp }));
     lineChart($("#chart-flowxrp"), xpts, {
@@ -1425,6 +1660,21 @@
       return;
     }
 
+    // 주요 신호의 "보기": 해당 탭을 열고 그 절로 내려간다.
+    $("#signals").addEventListener("click", (e) => {
+      const a = e.target.closest ? e.target.closest(".sig-go") : null;
+      if (!a) return;
+      e.preventDefault();
+      const tab = document.getElementById("tab-" + a.dataset.tab);
+      if (tab) tab.click();
+      if (a.dataset.filter) {
+        const chip = document.querySelector(`.tbl-tools .chip[data-f="${a.dataset.filter}"]`);
+        if (chip) chip.click();
+      }
+      const target = a.dataset.target && document.getElementById(a.dataset.target);
+      if (target) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+    });
+
     renderStatus(snap);
     renderGauge(snap);
     renderTable(snap);
@@ -1433,6 +1683,7 @@
 
     renderThresholds(snap.meta.thresholds, snap.watchlist && snap.watchlist.meta);
     initTrend(hist);
+    renderTotalTrend(snap, hist);
 
     bars($("#mech-bars"), snap.by_mechanism.map((m) => ({
       label: m.label, share: m.share, amount: m.amount, algo: m.mechanism === "algorithmic",
