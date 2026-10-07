@@ -336,17 +336,19 @@
     <div class="fig"><p class="fig-k">BTC</p><p class="fig-v" id="pm-btc">—</p><p class="fig-s">기준 자산</p></div>
     <div class="fig"><p class="fig-k">ETH</p><p class="fig-v" id="pm-eth">—</p><p class="fig-s">&nbsp;</p></div>
     <div class="fig"><p class="fig-k">XRP</p><p class="fig-v" id="pm-xrp">—</p><p class="fig-s">국내 재정거래 최다 이용 이력</p></div>
+    <div class="fig"><p class="fig-k"><abbr title="BTC 프리미엄에서 USDT 프리미엄을 뺀 값. 원화로 산 USDT 를 기준으로 잰 BTC 프리미엄에 가깝습니다.">프리미엄 스프레드</abbr></p><p class="fig-v" id="pm-spread">—</p><p class="fig-s" id="pm-spread-s">BTC − USDT</p></div>
   </div>
   <figure class="chart chart-wide">
     <figcaption>USDT 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
-    <div id="chart-premium-usdt"></div>
+    <div id="chart-premium-usdt" class="chart-plot"></div>
   </figure>
   <figure class="chart chart-wide">
     <figcaption>BTC 기준 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
-    <div id="chart-premium"></div>
+    <div id="chart-premium" class="chart-plot"></div>
   </figure>
   <p class="foot">스테이블 프리미엄은 업비트 KRW 가격 ÷ 환율을 $1과 비교합니다(임계 0.5%/1.5%).
-    암호화폐 프리미엄은 해외 CEX 대비입니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
+    암호화폐 프리미엄은 해외 CEX 대비입니다. 두 차트에 커서를 올리면(터치 기기는 탭) 같은 날짜의 USDT·BTC 프리미엄과
+    스프레드(BTC − USDT, %p)가 함께 뜹니다. 스프레드가 크면 달러(USDT) 자체보다 코인에 원화 수요가 더 몰렸다는 뜻이고, USDT 로 들여와 BTC 로 파는 재정거래의 실제 마진에 가깝습니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
 </section>
 
 <div class="wrap empty-state" id="premium-empty">
@@ -471,19 +473,26 @@
   <div class="block-head">
     <h2 id="h-attest">어테스테이션 시차</h2>
     <p class="lead-stat" id="lead-attest" hidden></p>
-    <p>발행사가 공표한 준비금 보고서의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다.</p>
+    <p>발행사가 공표한 준비금 보고서(회계법인 검토)의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다. 경과일 등급은 발행사 공표 주기(월간·분기)에 맞춰 매깁니다.</p>
   </div>
   <div class="tablewrap">
     <table id="attest-tbl">
       <thead><tr>
-        <th scope="col">발행사</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
+        <th scope="col">종목</th><th scope="col">검토 기관</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
         <th scope="col" class="num">보고 시점 발행량</th><th scope="col" class="num">현재 발행량</th>
-        <th scope="col" class="num">드리프트</th><th scope="col">등급</th>
+        <th scope="col" class="num"><abbr title="보고서 기준일 이후 발행량 변화율. 크면 보고서가 지금 규모를 설명하지 못한다는 뜻입니다(성장도 포함).">드리프트</abbr></th>
+        <th scope="col" class="num"><abbr title="보고서상 준비금 ÷ 보고서상 발행량. 100% 이상이면 발행량보다 준비금이 많습니다.">준비금 비율</abbr></th>
+        <th scope="col">등급</th>
       </tr></thead>
       <tbody></tbody>
     </table>
   </div>
   <p class="foot" id="attest-note"></p>
+  <div class="panel attest-gaps" id="attest-gaps-wrap" hidden>
+    <h3>표에 없는 주요 스테이블코인</h3>
+    <p class="plain-p">회계법인 준비금 보고서가 없거나, 있어도 형식상 확인하지 못한 종목입니다.</p>
+    <ul class="attest-gaps-list" id="attest-gaps"></ul>
+  </div>
 </section>
 
 <div class="wrap empty-state" id="attest-empty">

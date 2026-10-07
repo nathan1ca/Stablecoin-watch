@@ -68,6 +68,11 @@ jobs:
         run: python etl/fetch_attestation.py
         continue-on-error: true
 
+      # 키 없이 항상 실행된다. 국내 원화마켓 USDT·USDC 일별 거래대금(업비트·빗썸·코인원).
+      - name: 국내 원화마켓 스테이블코인 거래대금 수집
+        run: python etl/fetch_krw_volume.py
+        continue-on-error: true
+
       - name: 갱신분 커밋
         run: |
           git config user.name  "github-actions[bot]"

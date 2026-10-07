@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""
+스테이블코인 감시 - 국내 원화마켓 스테이블코인 거래대금
+
+국내 거래소에서 원화로 USDT·USDC 를 사고판 금액(일별)을 거래소 공개 일봉 API 로
+모은다. 원화 ↔ 달러 스테이블코인 전환(온·오프램프)의 규모를 보여 주는 지표로,
+지갑 라벨에 기대는 온체인 코너 흐름(etl/fetch_flow.py)보다 범위가 넓고 키가
+필요 없다. 단, 거래대금은 매수·매도를 합친 회전량이라 순유출입이 아니다.
+
+    python etl/fetch_krw_volume.py --probe
+    python etl/fetch_krw_volume.py            # site/data/krw_volume.json
+
+출처(무인증 공개 API, 하루 단위·한국시간 기준 일봉)
+  업비트  https://api.upbit.com/v1/candles/days?market=KRW-USDT&count=200
+  빗썸    https://api.bithumb.com/v1/candles/days?market=KRW-USDT&count=200
+  코인원  https://api.coinone.co.kr/public/v2/chart/KRW/USDT?interval=1d&size=200
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.http import get_json  # noqa: E402
+
+KST = timezone(timedelta(hours=9))
+ASSETS = ("USDT", "USDC")
+EXCHANGES = [
+    {"id": "upbit", "name": "업비트"},
+    {"id": "bithumb", "name": "빗썸"},
+    {"id": "coinone", "name": "코인원"},
+]
+DAYS = 200
+
+
+def parse_upbit_style(rows) -> dict[str, dict]:
+    """업비트·빗썸 v1 일봉 → {날짜(KST): {krw, close}}"""
+    out = {}
+    for r in rows or []:
+        d = str(r.get("candle_date_time_kst") or "")[:10]
+        if len(d) != 10:
+            continue
+        try:
+            out[d] = {"krw": float(r.get("candle_acc_trade_price") or 0), "close": float(r.get("trade_price") or 0)}
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def parse_coinone(resp) -> dict[str, dict]:
+    out = {}
+    for r in (resp.get("chart") if isinstance(resp, dict) else None) or []:
+        try:
+            d = datetime.fromtimestamp(int(r["timestamp"]) / 1000, KST).strftime("%Y-%m-%d")
+            out[d] = {"krw": float(r.get("quote_volume") or 0), "close": float(r.get("close") or 0)}
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def fetch_one(ex: str, asset: str) -> dict[str, dict]:
+    if ex == "upbit":
+        return parse_upbit_style(get_json(f"https://api.upbit.com/v1/candles/days?market=KRW-{asset}&count={DAYS}", timeout=20))
+    if ex == "bithumb":
+        return parse_upbit_style(get_json(f"https://api.bithumb.com/v1/candles/days?market=KRW-{asset}&count={DAYS}", timeout=20))
+    if ex == "coinone":
+        return parse_coinone(get_json(f"https://api.coinone.co.kr/public/v2/chart/KRW/{asset}?interval=1d&size={DAYS}", timeout=20))
+    raise ValueError(ex)
+
+
+def build(raw: dict[tuple[str, str], dict | Exception], today: str | None = None) -> dict:
+    """raw: {(거래소, 자산): {날짜: {krw, close}} 또는 예외} → 일별 합계와 요약."""
+    today = today or datetime.now(KST).strftime("%Y-%m-%d")
+    status = {}
+    days: dict[str, dict] = {}
+    for (ex, asset), got in raw.items():
+        if isinstance(got, Exception) or got is None:
+            status.setdefault(ex, {})[asset] = f"실패: {str(got)[:120]}"
+            continue
+        status.setdefault(ex, {})[asset] = "ok"
+        for d, v in got.items():
+            row = days.setdefault(d, {"date": d, "total_krw": 0.0, "by": {}})
+            row["by"].setdefault(ex, {})[asset] = round(v["krw"])
+            row["total_krw"] += v["krw"]
+    # 모든 거래소가 다 나온 날만 합계를 믿는다(일부 거래소만 있는 앞쪽 날짜는 뺀다).
+    ok_pairs = {(ex, a) for ex, st in status.items() for a, s in st.items() if s == "ok"}
+    daily = []
+    for d in sorted(days):
+        row = days[d]
+        have = {(ex, a) for ex, by in row["by"].items() for a in by}
+        if ok_pairs and not ok_pairs <= have:
+            continue
+        row["total_krw"] = round(row["total_krw"])
+        row["partial"] = d == today  # 오늘은 아직 하루가 끝나지 않았다
+        daily.append(row)
+
+    full = [r for r in daily if not r["partial"]]
+    def avg(rows):
+        return round(sum(r["total_krw"] for r in rows) / len(rows)) if rows else None
+    last30, prev30 = full[-30:], full[-60:-30]
+    share = {}
+    if last30:
+        tot = sum(r["total_krw"] for r in last30) or 1
+        for ex in {e for r in last30 for e in r["by"]}:
+            share[ex] = round(sum(sum(r["by"].get(ex, {}).values()) for r in last30) / tot * 100, 1)
+        asset_share = {a: round(sum(sum(v.get(a, 0) for v in r["by"].values()) for r in last30) / tot * 100, 1)
+                       for a in ASSETS}
+    else:
+        asset_share = {}
+    a30, p30 = avg(last30), avg(prev30)
+    return {
+        "meta": {
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "is_sample": False,
+            "exchanges": EXCHANGES,
+            "assets": list(ASSETS),
+            "status": status,
+            "source": "업비트·빗썸·코인원 공개 일봉 API(한국시간 기준 일자)",
+            "note": "원화마켓 USDT·USDC 거래대금(매수+매도 합계). 원화와 달러 스테이블코인 사이 전환 규모의 지표이며, "
+                    "순유출입(국내→해외 송금액)이 아니다. 오늘 값은 진행 중인 하루.",
+        },
+        "summary": {
+            "last_full_date": full[-1]["date"] if full else None,
+            "last_full_krw": full[-1]["total_krw"] if full else None,
+            "avg30_krw": a30,
+            "avg_prev30_krw": p30,
+            "chg30_pct": round((a30 / p30 - 1) * 100, 1) if a30 and p30 else None,
+            "share30_pct": share,
+            "asset_share30_pct": asset_share,
+        },
+        "daily": daily,
+    }
+
+
+def collect() -> dict:
+    raw = {}
+    for ex in EXCHANGES:
+        for a in ASSETS:
+            try:
+                raw[(ex["id"], a)] = fetch_one(ex["id"], a)
+                print(f"  {ex['name']} {a}: {len(raw[(ex['id'], a)])}일")
+            except Exception as e:  # 한 곳 장애가 나머지를 막지 않게
+                raw[(ex["id"], a)] = e
+                print(f"  {ex['name']} {a}: 실패 — {e}", file=sys.stderr)
+    return raw
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="site/data")
+    ap.add_argument("--probe", action="store_true")
+    args = ap.parse_args()
+    res = build(collect())
+    s = res["summary"]
+    print(f"일수 {len(res['daily'])} · 최근 완결일 {s['last_full_date']} ₩{(s['last_full_krw'] or 0):,.0f} · "
+          f"30일 평균 ₩{(s['avg30_krw'] or 0):,.0f} ({s['chg30_pct']}%) · 점유 {s['share30_pct']} · 자산 {s['asset_share30_pct']}")
+    if args.probe:
+        print("KRWVOL_JSON " + json.dumps(res, ensure_ascii=False, separators=(",", ":")))
+        return
+    if not res["daily"]:
+        print("수집된 일자가 없어 파일을 쓰지 않음", file=sys.stderr)
+        sys.exit(1)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "krw_volume.json").write_text(json.dumps(res, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()
