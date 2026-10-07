@@ -24,16 +24,29 @@ from pathlib import Path
 
 # 법정 기준이 아니라 임의의 관측선. 월간 공표 주기를 기준으로 여유를 뒀다.
 THRESHOLDS = {
-    "watch_days": 45,   # 월간 공표 주기(약 30일) + 여유
-    "breach_days": 75,  # 한 주기를 통째로 건너뛴 것으로 간주
+    # 경과일 기준은 발행사 공표 주기(cadence_days)에 여유를 더한다.
+    # 월간(30일)이면 주의 45일·경보 75일로 예전 고정값과 같고, 분기(91일) 공표인
+    # USDT 는 주의 106일·경보 136일이 된다. 분기 공표사를 월간 잣대로 재면 정상
+    # 공표 일정만으로 늘 '경보'가 떠서(2026-10-07 USDT 99일) 신호가 무뎌진다.
+    "watch_grace_days": 15,   # 다음 보고서가 나올 때가 지났다고 보는 여유
+    "breach_grace_days": 45,  # 한 주기를 사실상 건너뛴 것으로 보는 여유
+    "default_cadence_days": 30,
+    "watch_days": 45,         # 월간 기준 환산값(화면 안내용)
+    "breach_days": 75,
     "drift_watch_pct": 3.0,
     "drift_breach_pct": 8.0,
 }
 
 
-def grade(days: int, drift_pct: float | None) -> str:
-    g_days = "breach" if days >= THRESHOLDS["breach_days"] else \
-             "watch" if days >= THRESHOLDS["watch_days"] else "sound"
+def day_limits(cadence_days: int | None) -> tuple[int, int]:
+    c = cadence_days or THRESHOLDS["default_cadence_days"]
+    return c + THRESHOLDS["watch_grace_days"], c + THRESHOLDS["breach_grace_days"]
+
+
+def grade(days: int, drift_pct: float | None, cadence_days: int | None = None) -> str:
+    watch_d, breach_d = day_limits(cadence_days)
+    g_days = "breach" if days >= breach_d else \
+             "watch" if days >= watch_d else "sound"
     if drift_pct is None:
         return g_days
     g_drift = "breach" if abs(drift_pct) >= THRESHOLDS["drift_breach_pct"] else \
@@ -46,17 +59,21 @@ def load_current_supply(snapshot_path: Path) -> dict[str, float]:
     if not snapshot_path.exists():
         return {}
     snap = json.loads(snapshot_path.read_text(encoding="utf-8"))
-    return {a["symbol"]: a["circulating"] for a in snap.get("assets", []) if a.get("circulating")}
+    # 심볼 대소문자가 원본마다 다르다(보고서 USDtb ↔ DefiLlama USDTB) — 대문자로 맞춘다.
+    rows = list(snap.get("assets", [])) + list((snap.get("watchlist") or {}).get("rows") or [])
+    return {str(a["symbol"]).upper(): a["circulating"] for a in rows if a.get("symbol") and a.get("circulating")}
 
 
-def build(entries: list[dict], current_supply: dict[str, float]) -> dict:
+def build(entries: list[dict], current_supply: dict[str, float], not_covered: list[dict] | None = None) -> dict:
     today = datetime.now(timezone.utc).date()
     rows = []
     for e in entries:
         as_of = date.fromisoformat(e["as_of_date"])
         days = (today - as_of).days
         reported = e.get("reported_circulating")
-        current = current_supply.get(e["symbol"])
+        current = current_supply.get(str(e["symbol"]).upper())
+        cadence_days = e.get("cadence_days")
+        watch_d, breach_d = day_limits(cadence_days)
         drift = None
         drift_pct = None
         if reported and current:
@@ -71,7 +88,13 @@ def build(entries: list[dict], current_supply: dict[str, float]) -> dict:
             "drift_pct": drift_pct,
             "source_url": e.get("source_url"),
             "verified": e.get("verified", False),
-            "grade": grade(days, drift_pct),
+            "grade": grade(days, drift_pct, cadence_days),
+            "cadence": e.get("cadence"), "cadence_days": cadence_days,
+            "watch_days": watch_d, "breach_days": breach_d,
+            "attestor": e.get("attestor"), "attestor_note": e.get("attestor_note"), "report_type": e.get("report_type"),
+            "published_date": e.get("published_date"),
+            "reserves_total": e.get("reserves_total"), "reserves_currency": e.get("reserves_currency"),
+            "verify": e.get("verify"), "note": e.get("note"),
         })
     rows.sort(key=lambda r: -r["days_since"])
     return {
@@ -82,6 +105,7 @@ def build(entries: list[dict], current_supply: dict[str, float]) -> dict:
                                 "유지됩니다. 자동 수집 API가 없습니다.",
         },
         "entries": rows,
+        "not_covered": not_covered or [],
     }
 
 
@@ -98,7 +122,7 @@ def main():
         print("경고: snapshot.json 을 못 읽었습니다. 먼저 python etl/fetch.py 를 실행하십시오. "
               "시차는 계산되지만 발행잔액 드리프트는 비어 있습니다.")
 
-    out_data = build(data["entries"], current_supply)
+    out_data = build(data["entries"], current_supply, data.get("not_covered"))
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

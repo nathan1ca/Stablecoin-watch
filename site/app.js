@@ -620,7 +620,9 @@
     year: "numeric", month: "2-digit", day: "2-digit",
   });
 
-  // 툴팁은 화면 전체에서 한 번에 하나만 남긴다.
+  const CHART_SYNC = {}; // 커서를 함께 움직이는 차트 묶음(이름 → 요소 목록)
+
+  // 툴팁은 화면 전체에서 한 번에 하나만 남긴다(같은 sync 묶음은 예외).
   function hideChartTip(plot) {
     const tip = plot.querySelector(".ch-tip");
     if (!tip || tip.hidden) return;
@@ -635,8 +637,10 @@
     tipDismissBound = true;
     document.addEventListener("pointerdown", (e) => {
       const inPlot = e.target.closest ? e.target.closest(".chart-plot") : null;
+      const keep = new Set(inPlot ? [inPlot] : []);
+      if (inPlot) Object.values(CHART_SYNC).forEach((g) => { if (g.includes(inPlot)) g.forEach((x) => keep.add(x)); });
       document.querySelectorAll(".chart-plot").forEach((p) => {
-        if (p !== inPlot) hideChartTip(p);
+        if (!keep.has(p)) hideChartTip(p);
       });
     });
   }
@@ -800,15 +804,10 @@
     const cDot = svg.querySelector(".ch-dot");
     const tip = el.querySelector(".ch-tip");
 
-    const show = (clientX) => {
+    // 같은 sync 그룹의 차트끼리는 한쪽에 커서를 올리면 다른 쪽도 같은 날짜를 짚는다.
+    const showIdx = (best, fromSync) => {
       const r = svg.getBoundingClientRect();
       if (!r.width) return;
-      const vx = ((clientX - r.left) / r.width) * W;
-      let best = 0, bd = Infinity;
-      for (let i = 0; i < pts.length; i++) {
-        const dx = Math.abs(X(pts[i].t) - vx);
-        if (dx < bd) { bd = dx; best = i; }
-      }
       const p = pts[best], px = X(p.t), py = Y(p.v);
 
       cLine.setAttribute("x1", px.toFixed(1));
@@ -818,8 +817,10 @@
       cDot.setAttribute("cy", py.toFixed(1));
       cDot.style.opacity = 1;
 
-      tip.innerHTML = `<span class="ch-tip-d">${fullDate(p.t)}</span>` +
-        `<span class="ch-tip-v">${opts.fmt(p.v)}</span>`;
+      const rows = opts.tipRows ? opts.tipRows(p) : null;
+      tip.innerHTML = `<span class="ch-tip-d">${fullDate(p.t)}</span>` + (rows
+        ? rows.map(([k, v, cls]) => `<span class="ch-tip-r${cls ? " " + cls : ""}"><span class="ch-tip-k">${esc(k)}</span><span class="ch-tip-v">${esc(v)}</span></span>`).join("")
+        : `<span class="ch-tip-v">${opts.fmt(p.v)}</span>`);
       tip.hidden = false;
 
       // 컨테이너 기준 좌표로 옮기고, 좌우 끝에서 잘리지 않게 민다.
@@ -828,6 +829,39 @@
       const half = tip.offsetWidth / 2;
       tip.style.left = clamp((px / W) * r.width + offX, half + 2, box.width - half - 2) + "px";
       tip.style.top = ((py / H) * r.height + offY) + "px";
+      if (opts.sync && !fromSync) {
+        (CHART_SYNC[opts.sync] || []).forEach((other) => {
+          if (other !== el && other._showT) other._showT(p.t);
+        });
+      }
+    };
+    const show = (clientX) => {
+      const r = svg.getBoundingClientRect();
+      if (!r.width) return;
+      const vx = ((clientX - r.left) / r.width) * W;
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = Math.abs(X(pts[i].t) - vx);
+        if (dx < bd) { bd = dx; best = i; }
+      }
+      showIdx(best, false);
+    };
+    // 다른 차트에서 넘어온 날짜(t)와 가장 가까운 점을 짚는다.
+    el._showT = (t) => {
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const d = Math.abs(pts[i].t - t);
+        if (d < bd) { bd = d; best = i; }
+      }
+      showIdx(best, true);
+    };
+    if (opts.sync) {
+      const g = (CHART_SYNC[opts.sync] = CHART_SYNC[opts.sync] || []);
+      if (!g.includes(el)) g.push(el);
+    }
+    const hideGroup = () => {
+      hideChartTip(el);
+      if (opts.sync) (CHART_SYNC[opts.sync] || []).forEach((o) => hideChartTip(o));
     };
 
     svg.addEventListener("pointermove", (e) => show(e.clientX));
@@ -835,7 +869,7 @@
     // 터치는 손을 떼는 순간 pointerleave 가 따라오므로 마우스일 때만 닫는다.
     // 터치 기기에서는 차트 밖을 탭할 때 bindTipDismiss 가 닫는다.
     svg.addEventListener("pointerleave", (e) => {
-      if (e.pointerType !== "touch") hideChartTip(el);
+      if (e.pointerType !== "touch") hideGroup();
     });
     bindTipDismiss();
   }
@@ -1320,8 +1354,11 @@
   }
 
   // ── 김치프리미엄 ────────────────────────────────────────
+  let PREM_HIST = null; // 실시간 갱신(liveTick)은 이력 없이 부르므로 마지막 이력을 기억해 둔다
   function renderPremium(p, hist) {
     if (!p || !p.assets || !p.assets.length) return;
+    const redraw = !!hist; // 실시간 갱신 때는 차트를 다시 그리지 않는다(커서 위치 유지)
+    if (hist) PREM_HIST = hist; else hist = PREM_HIST;
     $("#premium-sec").hidden = false;
     $("#premium-empty").hidden = true;
 
@@ -1389,22 +1426,104 @@
       el.className = "fig-v t-" + (a.grade || gradeOf(a.premium_pct, false));
     });
 
-    const btcPts = (hist && (hist.points_btc || hist.points)) || null;
-    if (btcPts && btcPts.length > 1) {
-      const pts = btcPts.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
-      lineChart($("#chart-premium"), pts, {
-        color: "var(--petrol)", label: "BTC 프리미엄 추이", zero: true,
-        fmt: (v) => v.toFixed(1) + "%",
+    // 두 차트 모두 커서를 올리면 그날의 USDT·BTC 프리미엄과 둘 사이 스프레드를 함께 보여 준다.
+    // 스프레드(BTC − USDT, %p)는 원화로 산 USDT 를 기준으로 잰 BTC 프리미엄에 가깝다
+    // (정확히는 (1+BTC)/(1+USDT)−1 이지만 몇 % 범위에서는 차이가 0.1%p 미만).
+    const toT = (d) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 1000);
+    const btcPts = (hist && (hist.points_btc || hist.points)) || [];
+    const usdtPts = (hist && hist.points_usdt) || [];
+    const byDay = {};
+    btcPts.forEach((d) => { (byDay[d.date] = byDay[d.date] || {}).btc = d.premium_pct; });
+    usdtPts.forEach((d) => { (byDay[d.date] = byDay[d.date] || {}).usdt = d.premium_pct; });
+    const pct2 = (v) => (v == null ? "—" : signed(v, 2, "%"));
+    const tipRows = (first) => (p) => {
+      const day = byDay[isoDate(p.t)] || {};
+      const spread = day.btc != null && day.usdt != null ? day.btc - day.usdt : null;
+      const rows = [["USDT 프리미엄", pct2(day.usdt), first === "usdt" ? "is-main" : ""],
+                    ["BTC 프리미엄", pct2(day.btc), first === "btc" ? "is-main" : ""]];
+      if (first === "btc") rows.reverse();
+      rows.push(["스프레드(BTC−USDT)", spread == null ? "—" : signed(spread, 2, "%p"), "is-spread"]);
+      return rows;
+    };
+    // 기간이 같은 두 시계열의 평균 스프레드 — 핵심 문장 보강용
+    const both = Object.values(byDay).filter((d) => d.btc != null && d.usdt != null);
+    const lastDay = btcPts.length ? byDay[btcPts[btcPts.length - 1].date] : null;
+    // 지금 값은 위 카드와 같은 실시간 수치로 계산한다(없으면 이력의 마지막 날).
+    const liveB = byAsset.BTC && byAsset.BTC.premium_pct, liveU = byAsset.USDT && byAsset.USDT.premium_pct;
+    const spreadNow = liveB != null && liveU != null ? liveB - liveU
+      : lastDay && lastDay.btc != null && lastDay.usdt != null ? lastDay.btc - lastDay.usdt : null;
+    const spreadAvg = both.length ? both.reduce((a, d) => a + (d.btc - d.usdt), 0) / both.length : null;
+    const spEl = $("#pm-spread");
+    if (spEl) {
+      spEl.textContent = spreadNow == null ? "—" : signed(spreadNow, 2, "%p");
+      $("#pm-spread-s").textContent = spreadAvg == null ? "BTC − USDT" : `BTC − USDT · ${both.length}일 평균 ${signed(spreadAvg, 2, "%p")}`;
+    }
+
+    if (redraw && btcPts.length > 1) {
+      lineChart($("#chart-premium"), btcPts.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
+        color: "var(--petrol)", label: "BTC 프리미엄 추이", zero: true, interactive: true, sync: "premium",
+        fmt: (v) => v.toFixed(1) + "%", tipRows: tipRows("btc"),
       });
     }
-    const usdtPts = hist && hist.points_usdt;
     const usdtChart = $("#chart-premium-usdt");
-    if (usdtChart && usdtPts && usdtPts.length > 1) {
-      const pts = usdtPts.map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.premium_pct }));
-      lineChart(usdtChart, pts, {
-        color: "var(--accent)", label: "USDT 프리미엄 추이", zero: true,
-        fmt: (v) => v.toFixed(2) + "%",
+    if (redraw && usdtChart && usdtPts.length > 1) {
+      lineChart(usdtChart, usdtPts.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
+        color: "var(--accent)", label: "USDT 프리미엄 추이", zero: true, interactive: true, sync: "premium",
+        fmt: (v) => v.toFixed(2) + "%", tipRows: tipRows("usdt"),
       });
+    }
+  }
+
+  // ── 원화마켓 스테이블코인 거래대금 ─────────────────────────
+  // 조 단위는 "1.6조", 억 단위는 "1,634억" — 국내 독자가 읽는 단위로.
+  const krwK = (v) => v == null ? "—" : v >= 1e12 ? (v / 1e12).toFixed(2) + "조" : Math.round(v / 1e8).toLocaleString("ko-KR") + "억";
+  function renderKrwVolume(k, fxKrw) {
+    if (!k || !k.daily || !k.daily.length) return;
+    const sec = $("#krv-sec");
+    if (!sec) return;
+    sec.hidden = false;
+    const s = k.summary || {};
+    const exName = {};
+    (k.meta.exchanges || []).forEach((e) => { exName[e.id] = e.name; });
+    $("#kv-last").textContent = "₩" + krwK(s.last_full_krw);
+    $("#kv-last-s").textContent = s.last_full_date ? `${s.last_full_date} 하루` : "";
+    $("#kv-avg").textContent = "₩" + krwK(s.avg30_krw);
+    $("#kv-avg-s").textContent = s.chg30_pct != null ? `직전 30일 대비 ${signed(s.chg30_pct, 1, "%")}` : "직전 30일 비교 불가";
+    const sh = Object.entries(s.share30_pct || {}).sort((a, b) => b[1] - a[1]);
+    $("#kv-share").textContent = sh.map(([id, v]) => `${exName[id] || id} ${v.toFixed(0)}%`).join(" · ") || "—";
+    const us = (s.asset_share30_pct || {}).USDT;
+    $("#kv-usdt").textContent = us != null ? us.toFixed(1) + "%" : "—";
+
+    const full = k.daily.filter((d) => !d.partial);
+    const toT = (d) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 1000);
+    const byDate = {};
+    full.forEach((d) => { byDate[d.date] = d; });
+    lineChart($("#chart-krv"), full.map((d) => ({ t: toT(d.date), v: d.total_krw })), {
+      color: "var(--accent)", label: "원화마켓 스테이블코인 일별 거래대금", interactive: true, fillGradient: true,
+      fmt: (v) => krwK(v),
+      tipRows: (p) => {
+        const d = byDate[isoDate(p.t)];
+        if (!d) return [["합계", krwK(p.v), "is-main"]];
+        const rows = [["합계", "₩" + krwK(d.total_krw), "is-main"]];
+        Object.keys(exName).forEach((id) => {
+          const b = d.by[id];
+          if (!b) return;
+          rows.push([exName[id], `USDT ${krwK(b.USDT || 0)} · USDC ${krwK(b.USDC || 0)}`, ""]);
+        });
+        return rows;
+      },
+    });
+
+    const fails = Object.entries(k.meta.status || {}).flatMap(([ex, st]) =>
+      Object.entries(st).filter(([, v]) => v !== "ok").map(([a]) => `${exName[ex] || ex} ${a}`));
+    $("#kv-foot").textContent = `출처: ${k.meta.source} · 갱신 ${fmtTime(k.meta.generated_at)}`
+      + (fails.length ? ` · 이번 수집 실패: ${fails.join(", ")}(해당 거래소가 빠진 날은 표시하지 않음)` : "")
+      + ". 디지털엑스(옛 코빗)·고팍스는 거래대금이 작아 뺐습니다. 진행 중인 오늘은 그래프에서 제외합니다.";
+
+    if (s.avg30_krw) {
+      const usdAmt = s.avg30_krw / (fxKrw || 1350); // 문장용 어림(기준환율) — 정확한 값은 위 수치
+      setLead("krv", `최근 30일 국내 원화마켓에서 USDT·USDC 가 하루 평균 ${bold("₩" + krwK(s.avg30_krw))}(약 $${usdR(usdAmt)}) 거래됐습니다`
+        + (s.chg30_pct != null ? ` — 직전 30일보다 ${bold(signed(s.chg30_pct, 1, "%"))}.` : "."));
     }
   }
 
@@ -1466,7 +1585,15 @@
       <td class="num">${usd(e.amount)}</td>
     </tr>`).join("");
 
-    $("#fl-coverage").innerHTML = [
+    // 0건일 때는 빈 차트·표 대신 원인 진단을 앞세운다(2026-10-07 점검 결과).
+    const diag = none ? [
+      "<b>왜 0건인가 — 2026-10-07 점검</b>: 지정한 업비트 지갑 4개 중 3개(업비트 1·3·콜드)는 USDT·USDC 이체 기록이 아예 없고, 업비트 2 는 약 7년간 495건뿐이며, 빗썸 핫월렛은 금액 0인 이체만 있습니다. 공개 라벨이 붙은 지갑이 실제 스테이블코인 입출금 지갑이 아니라는 뜻입니다.",
+      "또 국내 거래소에서 나간 돈은 해외 거래소 핫월렛으로 바로 가지 않고, 이용자 개인별 입금주소를 거쳐 모입니다(점검 표본에서 업비트 2 의 출금 상대 다수가 Binance 핫월렛으로 다시 보냄). 직접 이체만 세는 지금 방식으로는 구조적으로 잡히지 않습니다.",
+      "그래서 이 탭 위쪽에 원화마켓 스테이블코인 거래대금을 대신 둡니다. 실제 입출금 지갑 목록을 확보하면 2단계(입금주소 경유) 추적으로 다시 살릴 수 있습니다.",
+    ] : [];
+    ["#chart-flow2"].forEach((id) => { const fig = $(id) && $(id).closest("figure"); if (fig) fig.hidden = none; });
+    document.querySelectorAll("#flow-sec .fz-cols3, #flow-sec .fz-recent").forEach((n) => { n.hidden = none; });
+    $("#fl-coverage").innerHTML = diag.map((h) => `<li class="fl-diag">${h}</li>`).join("") + [
       "이더리움 메인넷의 USDT·USDC 이체만 봅니다. 트론·XRP 통로는 포함되지 않습니다.",
       "업비트·빗썸의 태그된 지갑만 봅니다. 코인원은 이용자별 입금주소가 개별 태그되어 있어 단일 지갑으로 묶을 수 없습니다.",
       "해외 비교군은 Binance·OKX·Bybit 각각 잔액이 가장 큰 핫월렛 하나씩입니다. 같은 거래소가 굴리는 다른 지갑들은 빠져 있습니다.",
@@ -1475,31 +1602,66 @@
   }
 
   // ── 어테스테이션 시차 ────────────────────────────────────
+  const GAP_KO = { pending: "확인 대기", unverified: "미검증", none: "보고서 없음", other: "다른 방식" };
   function renderAttestation(a) {
     if (!a || !a.entries || !a.entries.length) return;
+    // 옛 형식 데이터(공표 주기 필드 없음)는 월간 기준(주의 45일·경보 75일)으로 본다.
+    a.entries.forEach((e) => {
+      if (e.watch_days == null) e.watch_days = (a.meta.thresholds && a.meta.thresholds.watch_days) || 45;
+      if (e.breach_days == null) e.breach_days = (a.meta.thresholds && a.meta.thresholds.breach_days) || 75;
+    });
     $("#attest-sec").hidden = false;
     $("#attest-empty").hidden = true;
-    $("#attest-tbl tbody").innerHTML = a.entries.map((e) => `<tr>
-      <td>${e.issuer} <span class="tname">${e.symbol}</span></td>
-      <td>${e.as_of_date}</td>
-      <td class="num t-${e.grade}">${e.days_since}일</td>
-      <td class="num">${e.reported_circulating != null ? usd(e.reported_circulating) : "—"}</td>
-      <td class="num">${e.current_circulating != null ? usd(e.current_circulating) : "—"}</td>
-      <td class="num t-${e.grade}">${e.drift_pct != null ? signed(e.drift_pct, 2, "%") : "—"}</td>
-      <td><span class="pill is-${e.grade} t-${e.grade}">${GRADE_KO[e.grade] || e.grade}</span></td>
-    </tr>`).join("");
-    $("#attest-note").textContent = a.meta.maintenance_note || "";
-    const worstA = a.entries.slice().sort((x, y) => (y.days_since || 0) - (x.days_since || 0))[0];
-    if (worstA && worstA.days_since != null) {
-      setLead("attest",
-        `${esc(worstA.issuer)} ${esc(worstA.symbol)} 준비금 보고서 기준일(${esc(worstA.as_of_date)})이 ${bold(worstA.days_since + "일")} 지났고, `
-        + (worstA.drift_pct != null
-          ? `그 뒤 발행량이 ${bold(signed(worstA.drift_pct, 1, "%"))} ${worstA.drift_pct >= 0 ? "늘었습니다" : "줄었습니다"}.` : "발행량 변화는 계산되지 않았습니다."));
-      putSignals("attest", a.entries.filter((e) => e.grade === "breach" || e.grade === "watch").map((e) => ({
-        sev: e.grade, tab: "attest", label: "어테스테이션",
-        html: `${bold(e.symbol)} 준비금 보고서 ${bold(e.days_since + "일")} 경과 <span class="sig-dim">· 기준일 ${esc(e.as_of_date)}</span>`,
-      })));
+    const num = (v) => (v == null ? "—" : Math.round(v).toLocaleString("en-US"));
+    // 표에는 줄인 값(73.32B), 커서를 올리면 보고서 그대로의 정확한 개수
+    const cmp = (v) => v == null ? "—" : v >= 1e9 ? (v / 1e9).toFixed(2) + "B" : v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : num(v);
+    // 정렬: 등급 나쁜 순 → 경과일 긴 순
+    const rows = a.entries.slice().sort((x, y) =>
+      (GRADE_RANK[y.grade] || 0) - (GRADE_RANK[x.grade] || 0) || (y.days_since || 0) - (x.days_since || 0));
+    $("#attest-tbl tbody").innerHTML = rows.map((e) => {
+      const ratio = e.reserves_total != null && e.reported_circulating ? e.reserves_total / e.reported_circulating * 100 : null;
+      const why = e.days_since >= e.breach_days ? "경과일 경보" : e.days_since >= e.watch_days ? "경과일 주의"
+        : e.grade !== "sound" ? "드리프트" : "";
+      const cur = e.reserves_currency === "EUR" ? "€" : "$";
+      return `<tr>
+      <td><a class="tsym att-link" href="${esc(e.source_url)}" rel="noopener" title="원문 보고서 열기">${esc(e.symbol)}</a><span class="tname">${esc(e.issuer)}</span>${e.note ? `<span class="att-sub att-note">${esc(e.note)}</span>` : ""}</td>
+      <td class="att-firm"${e.attestor_note ? ` title="${esc(e.attestor_note)}"` : ""}><span>${esc(e.attestor || "—")}</span>${e.report_type ? `<span class="att-sub">${esc(e.report_type)}</span>` : ""}</td>
+      <td>${esc(e.as_of_date)}${e.cadence ? `<span class="att-sub">${esc(e.cadence)} 공표</span>` : ""}</td>
+      <td class="num t-${e.days_since >= e.breach_days ? "breach" : e.days_since >= e.watch_days ? "watch" : "sound"}"
+        title="주의 ${e.watch_days}일 · 경보 ${e.breach_days}일(공표 주기 ${e.cadence_days || 30}일 기준)">${e.days_since}일</td>
+      <td class="num" title="${esc(num(e.reported_circulating) + (e.verify ? " — " + e.verify : ""))}">${cmp(e.reported_circulating)}${e.verified ? "" : (e.reported_circulating == null ? "" : "*")}</td>
+      <td class="num" title="${esc(num(e.current_circulating))} (DefiLlama)">${cmp(e.current_circulating)}</td>
+      <td class="num t-${e.drift_pct == null ? "unknown" : Math.abs(e.drift_pct) >= 8 ? "breach" : Math.abs(e.drift_pct) >= 3 ? "watch" : "sound"}">${e.drift_pct != null ? signed(e.drift_pct, 1, "%") : "—"}</td>
+      <td class="num"${e.reserves_total != null ? ` title="준비금 ${cur}${num(e.reserves_total)}"` : ""}>${ratio != null ? ratio.toFixed(2) + "%" : "—"}</td>
+      <td><span class="pill is-${e.grade} t-${e.grade}"${why ? ` title="${why}"` : ""}>${GRADE_KO[e.grade] || e.grade}</span></td>
+    </tr>`;
+    }).join("");
+    $("#attest-note").textContent = "종목명을 누르면 원문 보고서가 열립니다. 발행량은 토큰 개수(EURC 는 유로)이고, 보고 시점 발행량은 보고서 표의 기준일 값을 그대로 옮겼습니다. "
+      + "보고서는 특정 시점의 준비금 확인이지 회계감사가 아닙니다. 드리프트는 보고 이후 성장도 포함하므로 그 자체로 부실을 뜻하지 않습니다. " + (a.meta.maintenance_note || "");
+
+    const gaps = a.not_covered || [];
+    const gw = $("#attest-gaps-wrap");
+    if (gw) {
+      gw.hidden = !gaps.length;
+      $("#attest-gaps").innerHTML = gaps.map((g) => `<li>
+        <span class="att-gap-k gap--${esc(g.kind)}">${esc(GAP_KO[g.kind] || g.kind)}</span>
+        <span><b class="tsym">${esc(g.symbol)}</b> <span class="tname">${esc(g.issuer || "")}</span> — ${esc(g.reason || "")}
+        ${g.source_url ? ` <a href="${esc(g.source_url)}" rel="noopener">공시 보기</a>` : ""}</span></li>`).join("");
     }
+
+    const fresh = a.entries.filter((e) => e.days_since < e.watch_days).length;
+    const stale = a.entries.filter((e) => e.days_since >= e.watch_days);
+    const big = a.entries.filter((e) => e.drift_pct != null && Math.abs(e.drift_pct) >= 8);
+    setLead("attest",
+      (fresh === a.entries.length
+        ? `준비금 보고서를 확인한 ${bold(a.entries.length + "종")} 모두 공표 주기 안의 최신 보고서입니다`
+        : `준비금 보고서를 확인한 ${bold(a.entries.length + "종")} 가운데 ${bold(fresh + "종")}이 공표 주기 안의 최신 보고서입니다`)
+      + (stale.length ? `, ${stale.map((e) => bold(e.symbol)).join("·")}는 다음 보고서가 늦어지고 있습니다` : "")
+      + (big.length ? `. 보고 이후 발행량이 8% 이상 달라진 종목은 ${big.map((e) => bold(e.symbol) + `(${signed(e.drift_pct, 1, "%")})`).join("·")}입니다.` : "."));
+    putSignals("attest", a.entries.filter((e) => e.days_since >= e.watch_days).map((e) => ({
+      sev: e.days_since >= e.breach_days ? "breach" : "watch", tab: "attest", label: "어테스테이션",
+      html: `${bold(e.symbol)} 준비금 보고서 ${bold(e.days_since + "일")} 경과 <span class="sig-dim">· ${esc(e.cadence || "월간")} 공표 · 기준일 ${esc(e.as_of_date)}</span>`,
+    })));
   }
 
   // ── XRP 코너 자금흐름 ────────────────────────────────────
@@ -1867,6 +2029,14 @@
       if (r.ok) renderFlowXRP(await r.json());
     } catch (e) {
       console.info("flow_xrp.json 없음 — XRP 자금흐름 섹션 생략");
+    }
+
+    // 원화마켓 스테이블코인 거래대금
+    try {
+      const r = await fetch("data/krw_volume.json", { cache: "no-cache" });
+      if (r.ok) renderKrwVolume(await r.json(), snap.watchlist && snap.watchlist.meta && snap.watchlist.meta.fx_rates && snap.watchlist.meta.fx_rates.KRW);
+    } catch (e) {
+      console.info("krw_volume.json 없음 — 원화 거래대금 생략");
     }
 
     // 국내 거래소 거래지원 현황
