@@ -30,6 +30,8 @@ _DEFAULTS = {
     "risk_weight_price_quality": 0.10,
     "risk_watch": 35,
     "risk_breach": 60,
+    # 시스템 등급·합성점수의 페그·상환 요소에 넣을 최소 시장 비중(%).
+    "systemic_share_pct": 1.0,
 }
 
 
@@ -53,6 +55,7 @@ def load_thresholds(path: Path | str | None = None) -> dict:
     disp = raw.get("display") or {}
     pq = raw.get("price_quality") or {}
     prem = raw.get("premium") or {}
+    systemic = raw.get("systemic") or {}
     risk = raw.get("risk_score") or {}
     weights = risk.get("weights") or {}
 
@@ -80,6 +83,7 @@ def load_thresholds(path: Path | str | None = None) -> dict:
     out["risk_weight_price_quality"] = f(weights, "price_quality", out["risk_weight_price_quality"])
     out["risk_watch"] = f(risk, "watch", out["risk_watch"])
     out["risk_breach"] = f(risk, "breach", out["risk_breach"])
+    out["systemic_share_pct"] = f(systemic, "share_pct", out["systemic_share_pct"])
     return out
 
 
@@ -96,4 +100,5 @@ def thresholds_for_meta(thr: dict) -> dict:
         "source_disagreement_bp": thr["source_disagreement_bp"],
         "risk_watch": thr["risk_watch"],
         "risk_breach": thr["risk_breach"],
+        "systemic_share_pct": thr["systemic_share_pct"],
     }

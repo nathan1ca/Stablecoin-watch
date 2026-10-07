@@ -3,10 +3,13 @@ name: 수집 및 배포
 on:
   schedule:
     # GitHub Actions는 짧은 간격 스케줄을 부하 시 지연·스킵하는 경우가 잦다.
-    # */15 로는 낮 시간대에 실제로 자주 밀려서, 매시 정각으로 낮춰 안정적으로
-    # 돈다. 진짜 1분 단위가 필요하면 etl/live_loop.py 를 로컬/서버에서 계속
-    # 돌려라.
-    - cron: "0 * * * *"
+    # */15 로는 낮 시간대에 실제로 자주 밀려서 매시 정각("0 * * * *")으로 낮췄으나,
+    # 2026-09-25~10-07 실측 예약 실행 60회는 하루 3~6회, 간격 중앙값 약 5시간(최대 9.6시간)이었다.
+    # GitHub 문서: "High load times include the start of every hour. ... some queued
+    # jobs may be dropped. To decrease the chance of delay, schedule your workflow to
+    # run at a different time of the hour." → 정각을 피해 매시 37분으로 옮긴다
+    # (2026-10-08). 진짜 1분 단위가 필요하면 etl/live_loop.py 를 로컬/서버에서 돌려라.
+    - cron: "37 * * * *"
   workflow_dispatch:
   push:
     branches: [main]

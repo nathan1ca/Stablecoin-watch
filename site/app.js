@@ -132,11 +132,22 @@
     $("#verdict-label").textContent = "시스템 " + (GRADE_KO[g] || g);
     $("#verdict-label").className = "verdict-label t-" + g;
 
+    // 시스템 등급은 시장 비중 기준 이상 종목(시장 영향 종목)의 경보로만 '경보'가 된다.
+    // 구버전 snapshot 에는 systemic_breach_count 가 없으므로 그때는 예전 문구를 쓴다.
+    const sysShare = (m.thresholds || {}).systemic_share_pct;
+    const sysBreach = t.systemic_breach_count;
+    const smallBreach = sysBreach != null ? t.breach_count - sysBreach : 0;
     const notes = {
-      breach: `${t.breach_count}개 종목이 경보 구간에 있습니다.`,
-      watch: t.watch_count
-        ? `${t.watch_count}개 종목이 주의 구간이거나 구조 지표가 관측선을 넘었습니다.`
-        : "구조 지표가 관측선을 넘었습니다.",
+      breach: sysBreach == null
+        ? `${t.breach_count}개 종목이 경보 구간에 있습니다.`
+        : sysBreach
+          ? `시장 비중 ${sysShare}% 이상 종목 ${sysBreach}개가 경보 구간에 있습니다.`
+          : "합성 위험점수가 경보선을 넘었습니다.",
+      watch: smallBreach > 0
+        ? `경보 ${smallBreach}종은 시장 비중 ${sysShare}% 미만이라 개별 종목 문제로 보고, 시스템은 주의로 둡니다.`
+        : t.watch_count
+          ? `${t.watch_count}개 종목이 주의 구간이거나 구조 지표가 관측선을 넘었습니다.`
+          : "구조 지표가 관측선을 넘었습니다.",
       sound: "관측 대상 전 종목이 허용 구간 안에 있습니다.",
     };
     $("#verdict-note").textContent = notes[g] || "";
@@ -157,8 +168,10 @@
       const thrR = m.thresholds || {};
       const rsNote = $("#f-risk-s");
       if (rsNote) {
+        const rk = d.risk || {};
         rsNote.textContent = rs != null
           ? `주의 ${thrR.risk_watch ?? 35} · 경보 ${thrR.risk_breach ?? 60}` +
+            (rk.systemic_count ? ` · 비중 ${rk.systemic_share_pct}%↑ ${rk.systemic_count}종 기준` : "") +
             (t.price_degraded_count ? ` · 가격품질 저하 ${t.price_degraded_count}종` : "")
           : "0–100 · 페그·상환·집중·알고·가격품질";
       }
@@ -188,12 +201,17 @@
 
     // 주요 신호 — 종목 경보·주의와 구조 지표
     const sig = [];
+    const sysThr = (m.thresholds || {}).systemic_share_pct;
     (d.alerts || []).filter((a) => a.grade === "breach").slice(0, 3).forEach((a) => {
       const why = a.grade_peg === "breach"
         ? `페그 ${signed(a.dev_bp, 1)}bp 이탈`
         : a.grade_redemption === "breach" ? `30일 발행잔액 ${signed(a.chg_30d, 1, "%")}` : "경보 구간";
+      // 시장 비중이 기준 미만이면 '개별 종목'으로 밝힌다(시스템 등급에는 주의로만 반영).
+      const sh = t.circulating_usd ? a.mcap_usd / t.circulating_usd * 100 : null;
+      const small = sysThr != null && sh != null && sh < sysThr;
       sig.push({ sev: "breach", tab: "issuance", target: "gauge", label: a.symbol,
-        html: `${bold(a.symbol)} ${esc(why)} <span class="sig-dim">· 발행잔액 $${esc(usd(a.mcap_usd))}</span>` });
+        html: `${bold(a.symbol)} ${esc(why)} <span class="sig-dim">· 발행잔액 $${esc(usd(a.mcap_usd))}`
+          + (small ? ` · 비중 ${sh < 0.01 ? "0.01% 미만" : sh.toFixed(2) + "%"}, 개별 종목` : "") + "</span>" });
     });
     // alerts 는 상위 12건만 실려 오므로 건수는 totals 에서 읽는다.
     const watchN = d.totals.watch_count || 0;
@@ -1281,6 +1299,8 @@
       ["발행사 집중도", `HHI ${t.hhi_concentrated.toLocaleString()} 초과 시 고집중`],
       ["알고리즘형 비중", `${t.algo_share_watch}% 초과 시 주의`],
       ["관측 하한", `발행잔액 $${usdR(t.min_mcap_usd)} 이상`],
+      ...(t.systemic_share_pct != null ? [["시장 영향 종목",
+        `전체 발행잔액의 ${t.systemic_share_pct}% 이상 — 시스템 ‘경보’와 합성점수 페그·상환 요소는 이 종목들로만 판단(작은 종목 경보는 시스템 ‘주의’)`]] : []),
     ];
     $("#thr-list").innerHTML = items
       .map(([k, v]) => `<li><span class="thr-k">${k}</span> — <span class="thr-v">${v}</span></li>`).join("");
