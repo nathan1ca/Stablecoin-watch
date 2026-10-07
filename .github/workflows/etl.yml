@@ -58,10 +58,10 @@ jobs:
       # 입출금 지갑이 아니어서 0건만 나왔다(docs/IMPROVEMENT_LOG.md (7)·(11) 참고).
       # 코드(etl/fetch_flow.py)는 남겨 두었다 — 검증된 지갑 목록이 생기면 되살린다.
 
-      # 키 없이 항상 실행된다.
-      - name: 국경 간 코너 자금흐름 수집 (XRP)
-        run: python etl/fetch_flow_xrp.py --days 180
-        continue-on-error: true
+      # 국경 간 코너 자금흐름(XRP)도 2026-10-08 중단했다. 거래소 핫월렛 거래가 많아
+      # 조회 한도 안에서 몇 시간치만 잡혔고(180일 표시는 오표시), XRP 이체라
+      # 스테이블코인 흐름도 아니다. 국내외 자금 이동 압력은 원화 거래대금·김치프리미엄
+      # 탭이 대신한다. 코드(etl/fetch_flow_xrp.py)는 남겨 두었다.
 
       # etl/attestations.json 을 손으로 갱신해야 값이 바뀐다. 계산만 자동화되어 있다.
       - name: 어테스테이션 시차 계산

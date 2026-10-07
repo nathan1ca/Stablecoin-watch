@@ -84,7 +84,6 @@
       <button type="button" class="tab-btn" role="tab" id="tab-freeze" aria-controls="panel-freeze" aria-selected="false" tabindex="-1">동결 조치</button>
       <button type="button" class="tab-btn" role="tab" id="tab-premium" aria-controls="panel-premium" aria-selected="false" tabindex="-1">김치프리미엄</button>
       <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">원화 거래대금</button>
-      <button type="button" class="tab-btn" role="tab" id="tab-flowxrp" aria-controls="panel-flowxrp" aria-selected="false" tabindex="-1">코너 흐름 · XRP</button>
       <button type="button" class="tab-btn" role="tab" id="tab-attest" aria-controls="panel-attest" aria-selected="false" tabindex="-1">어테스테이션</button>
       <button type="button" class="tab-btn" role="tab" id="tab-method" aria-controls="panel-method" aria-selected="false" tabindex="-1">방법론</button>
     </div>
@@ -92,6 +91,46 @@
 </nav>
 
 <div class="tabpanel" id="panel-issuance" role="tabpanel" aria-labelledby="tab-issuance" tabindex="0">
+
+<section class="wrap block" aria-labelledby="h-table">
+  <div class="block-head">
+    <h2 id="h-table">종목별 현황</h2>
+    <p class="lead-stat" id="lead-table" hidden></p>
+    <p>머리글을 누르면 그 열로 정렬합니다. 등급은 페그 편차와 30일 순증감률 중 나쁜 쪽을 따릅니다.</p>
+  </div>
+  <div class="tbl-tools" role="search">
+    <label class="sr" for="tbl-q">종목 검색</label>
+    <input type="search" id="tbl-q" class="tbl-q" placeholder="종목·이름 검색" autocomplete="off" spellcheck="false">
+    <div class="chips" role="group" aria-label="표 거르기">
+      <button type="button" class="chip" data-f="all" aria-pressed="true">전체</button>
+      <button type="button" class="chip" data-f="alert" aria-pressed="false">경보·주의</button>
+      <button type="button" class="chip" data-f="fiat-backed" aria-pressed="false">법정화폐 담보</button>
+      <button type="button" class="chip" data-f="crypto-backed" aria-pressed="false">가상자산 담보</button>
+      <button type="button" class="chip" data-f="algorithmic" aria-pressed="false">알고리즘형</button>
+      <button type="button" class="chip" data-f="kr" aria-pressed="false" hidden>국내 거래지원</button>
+    </div>
+    <span class="tbl-count" id="tbl-count" aria-live="polite"></span>
+  </div>
+  <div class="tablewrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th scope="col">종목</th><th scope="col" class="th-ex"><abbr title="국내 원화마켓 거래소 5곳(업비트·빗썸·코인원·디지털엑스·고팍스) 가운데 거래지원 중인 곳">국내 거래소</abbr></th><th scope="col">담보</th><th scope="col">페그</th>
+          <th scope="col" class="num">발행잔액</th><th scope="col" class="num">점유율</th>
+          <th scope="col" class="num">편차 bp</th><th scope="col" class="num">7일</th>
+          <th scope="col" class="num">30일</th><th scope="col">등급</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tbody id="tbl-watch" class="tgroup-body" hidden></tbody>
+    </table>
+  </div>
+  <div class="tbl-more" id="tbl-more-wrap" hidden><button type="button" class="pill-btn" id="tbl-more"></button></div>
+  <p class="foot"><span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 계기판과 같은 발행사 개요가 열립니다.</span>
+    맨 아래 감시목록 행의 편차는 자기 통화(엔·원) 기준입니다.</p>
+  <p class="foot ex-legend" id="ex-legend" hidden>국내 거래소: 거래지원 중인 곳의 아이콘. 오른쪽 위 글자는 마켓 —
+    <b>원</b> 원화(KRW) · <b>B</b> 비트코인(BTC) · <b>T</b> 테더(USDT). 테두리가 주황이면 투자유의 지정, 흐리면 이번 수집 실패로 직전 값입니다. 아이콘은 각 거래소 공식 아이콘의 사본입니다.</p>
+</section>
 
 <section class="wrap block" id="gauge" aria-labelledby="h-gauge">
   <div class="block-head">
@@ -219,51 +258,11 @@
   </div>
 </section>
 
-<section class="wrap block" aria-labelledby="h-table">
-  <div class="block-head">
-    <h2 id="h-table">종목별 현황</h2>
-    <p class="lead-stat" id="lead-table" hidden></p>
-    <p>머리글을 누르면 그 열로 정렬합니다. 등급은 페그 편차와 30일 순증감률 중 나쁜 쪽을 따릅니다.</p>
-  </div>
-  <div class="tbl-tools" role="search">
-    <label class="sr" for="tbl-q">종목 검색</label>
-    <input type="search" id="tbl-q" class="tbl-q" placeholder="종목·이름 검색" autocomplete="off" spellcheck="false">
-    <div class="chips" role="group" aria-label="표 거르기">
-      <button type="button" class="chip" data-f="all" aria-pressed="true">전체</button>
-      <button type="button" class="chip" data-f="alert" aria-pressed="false">경보·주의</button>
-      <button type="button" class="chip" data-f="fiat-backed" aria-pressed="false">법정화폐 담보</button>
-      <button type="button" class="chip" data-f="crypto-backed" aria-pressed="false">가상자산 담보</button>
-      <button type="button" class="chip" data-f="algorithmic" aria-pressed="false">알고리즘형</button>
-      <button type="button" class="chip" data-f="kr" aria-pressed="false" hidden>국내 거래지원</button>
-    </div>
-    <span class="tbl-count" id="tbl-count" aria-live="polite"></span>
-  </div>
-  <div class="tablewrap">
-    <table id="tbl">
-      <thead>
-        <tr>
-          <th scope="col">종목</th><th scope="col" class="th-ex"><abbr title="국내 원화마켓 거래소 5곳(업비트·빗썸·코인원·디지털엑스·고팍스) 가운데 거래지원 중인 곳">국내 거래소</abbr></th><th scope="col">담보</th><th scope="col">페그</th>
-          <th scope="col" class="num">발행잔액</th><th scope="col" class="num">점유율</th>
-          <th scope="col" class="num">편차 bp</th><th scope="col" class="num">7일</th>
-          <th scope="col" class="num">30일</th><th scope="col">등급</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-      <tbody id="tbl-watch" class="tgroup-body" hidden></tbody>
-    </table>
-  </div>
-  <div class="tbl-more" id="tbl-more-wrap" hidden><button type="button" class="pill-btn" id="tbl-more"></button></div>
-  <p class="foot"><span class="gauge-hint">종목명에 커서를 올리면(터치 기기는 탭하면) 계기판과 같은 발행사 개요가 열립니다.</span>
-    맨 아래 감시목록 행의 편차는 자기 통화(엔·원) 기준입니다.</p>
-  <p class="foot ex-legend" id="ex-legend" hidden>국내 거래소: 거래지원 중인 곳의 아이콘. 오른쪽 위 글자는 마켓 —
-    <b>원</b> 원화(KRW) · <b>B</b> 비트코인(BTC) · <b>T</b> 테더(USDT). 테두리가 주황이면 투자유의 지정, 흐리면 이번 수집 실패로 직전 값입니다. 아이콘은 각 거래소 공식 아이콘의 사본입니다.</p>
-</section>
-
 <section class="wrap block" id="kr-sec" aria-labelledby="h-kr" hidden>
   <div class="block-head">
     <h2 id="h-kr">국내 거래소 거래지원</h2>
     <p class="lead-stat" id="lead-kr" hidden></p>
-    <p>어떤 스테이블코인을 국내 원화마켓 거래소에서 사고팔 수 있는가. 거래소별 마켓은 위 종목별 현황의 ‘국내 거래소’ 열에 있습니다. 거래소 공개 마켓 목록을 매시 받아 대조하며, 거래지원 여부는 해당 종목에 대한 평가나 권유가 아닙니다.</p>
+    <p>어떤 스테이블코인을 국내 원화마켓 거래소에서 사고팔 수 있는가. 거래소별 마켓은 맨 위 종목별 현황의 ‘국내 거래소’ 열에 있습니다. 거래소 공개 마켓 목록을 매시 받아 대조하며, 거래지원 여부는 해당 종목에 대한 평가나 권유가 아닙니다.</p>
   </div>
   <ul class="ex-sum" id="ex-sum"></ul>
   <p class="foot" id="kr-basis"></p>
@@ -505,54 +504,6 @@
 
 </div>
 
-<div class="tabpanel" id="panel-flowxrp" role="tabpanel" aria-labelledby="tab-flowxrp" tabindex="0" hidden>
-
-<section class="wrap block" id="flowxrp-sec" aria-labelledby="h-flowxrp" hidden>
-  <div class="block-head">
-    <h2 id="h-flowxrp">온체인 코너 자금흐름 (XRP Ledger, 하한선 참고 지표)</h2>
-    <p class="lead-stat" id="lead-flowxrp" hidden></p>
-    <p>업비트·빗썸의 xrpscan 라벨 계정과 Binance·OKX·Bybit 사이의 네이티브 XRP 결제만 집계합니다. XRPL은 거래소당 지갑이 보통 하나뿐이라 지갑 이름표로도 상당 부분이 잡히지만, 공개 이름표(xrpscan)에 기대므로 전체가 아닌 하한선으로만 읽으십시오. 같은 방식의 이더리움 코너는 이름표 지갑이 실제 입출금 지갑이 아니어서 2026-10-07 중단했습니다.</p>
-  </div>
-  <div class="figs">
-    <div class="fig"><p class="fig-k">순유출</p><p class="fig-v" id="fx-net">—</p><p class="fig-s" id="fx-window">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">유입</p><p class="fig-v" id="fx-in">—</p><p class="fig-s">해외→국내</p></div>
-    <div class="fig"><p class="fig-k">유출</p><p class="fig-v" id="fx-out">—</p><p class="fig-s">국내→해외</p></div>
-    <div class="fig"><p class="fig-k">이벤트</p><p class="fig-v" id="fx-count">—</p><p class="fig-s">코너 통과 결제 건수</p></div>
-  </div>
-  <figure class="chart chart-wide">
-    <figcaption>일별 순유출(+) · 순유입(−) <span class="unit">XRP</span></figcaption>
-    <div id="chart-flowxrp"></div>
-  </figure>
-  <div class="cols fz-cols">
-    <div class="panel fz-recent">
-      <h3>최근 결제</h3>
-      <div class="tablewrap tw-inner">
-        <table id="fx-tbl">
-          <thead><tr>
-            <th scope="col">일자</th><th scope="col">방향</th><th scope="col">한국 계정</th>
-            <th scope="col">해외 계정</th><th scope="col" class="num">XRP</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="panel">
-      <h3>커버리지 한계</h3>
-      <ul class="plain" id="fx-coverage"></ul>
-    </div>
-  </div>
-</section>
-
-<div class="wrap empty-state" id="flowxrp-empty">
-  <div class="empty-box">
-    <h3>아직 표시할 데이터가 없습니다</h3>
-    <p>이 데이터는 시크릿 없이 자동으로 생성됩니다.</p>
-    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “국경 간 코너 자금흐름 수집 (XRP)” 단계 로그 (외부 API 일시 장애일 수 있습니다)</p>
-  </div>
-</div>
-
-</div>
-
 <div class="tabpanel" id="panel-attest" role="tabpanel" aria-labelledby="tab-attest" tabindex="0" hidden>
 
 <section class="wrap block" id="attest-sec" aria-labelledby="h-attest" hidden>
@@ -611,6 +562,7 @@
         <li>브릿지된 잔액이 원본과 이중 계상될 여지가 있어 소형 체인 수치는 보수적으로 보아야 합니다.</li>
         <li>집중도 지수는 발행잔액 기준이며, 결제량이나 실사용자 수 기준과는 다른 그림을 줄 수 있습니다.</li>
         <li><strong>감시목록</strong>(<code>etl/watchlist.json</code>): 원화·엔화 스테이블코인처럼 규모는 작아도 국내 논의에 직접 걸리는 종목은 발행잔액 하한과 무관하게 따로 표시합니다. 표시 규칙일 뿐이라 총 발행잔액·HHI(발행사 쏠림 지수)는 원래대로 전 종목 기준이고, 하한 미만 종목은 경보 건수·합성 위험점수에 넣지 않습니다.</li>
+        <li><strong>국경 간 코너 자금흐름(이더리움·XRP) 중단</strong>: 국내·해외 거래소의 공개 이름표 지갑 사이 이체를 세던 지표는 내렸습니다. 이더리움은 이름표 지갑이 실제 입출금 지갑이 아니어서 0건만 잡혔고(2026-10-07), XRP는 거래소 지갑 거래가 너무 많아 조회 한도 안에서 몇 시간치만 잡혔으며 스테이블코인이 아닌 XRP 이체였습니다(2026-10-08). 국내외 자금 이동 압력은 원화 거래대금과 김치프리미엄 탭으로 봅니다.</li>
         <li><strong>시장 영향 종목</strong>: 시스템 등급의 ‘경보’와 합성 위험점수의 페그·상환 요소는 전체 발행잔액의 1% 이상인 종목만으로 판단합니다(<code>etl/thresholds.json</code> 의 <code>systemic</code>). 규모는 시장가가 아니라 액면가로, 지금과 30일 전 발행량 중 큰 값으로 잽니다 — 붕괴 중인 큰 종목이 가격·발행량이 줄었다는 이유로 판단 대상에서 빠지지 않게 하려는 것입니다. 발행잔액이 수천만 달러인 종목 하나의 이탈이 시장 전체를 ‘경보’로 만들지 않게 하려는 것입니다. 작은 종목의 경보는 종목 경보로 그대로 보이고 시스템 등급은 ‘주의’로 올라갑니다. 1%는 EU MiCA의 ‘중요 토큰’ 규모 기준(50억 유로)이나 미국 GENIUS Act의 주(州) 감독 선택 상한(발행잔액 $100억 미만)보다 훨씬 낮게 잡은 값이며, 2022년 UST·2023년 USDC 같은 과거 시스템 사건은 모두 이 기준을 크게 넘습니다.</li>
         <li><strong>이자부 상품 제외</strong>: 이자가 토큰 가격에 쌓이도록 설계된 상품(USYC·USDY·reUSD 등)은 $1에서 멀어지는 것이 정상이라 페그 편차를 재지 않습니다. DefiLlama 응답의 이자부 표시를 먼저 쓰고, 표시가 없는 종목은 발행사 문서로 확인해 <code>etl/yield_bearing.json</code> 에 종목 ID와 함께 적습니다(같은 심볼의 다른 종목은 그대로 잽니다).</li>
         <li>비달러 페그 종목은 가격(USD)에 환율(Frankfurter, 중앙은행 기준환율)을 곱해 자기 통화 기준으로 편차를 잽니다. $1 기준으로 재면 1엔짜리 토큰이 −9,900bp 이탈처럼 보이는 오류가 생기기 때문입니다. 가격도 환율도 없는 종목(예: 루블 페그)은 USD 환산과 총계에서 빼고 이름만 따로 밝힙니다.</li>
@@ -638,7 +590,6 @@
       <div><dt>김치프리미엄</dt><dd>국내 거래소 가격이 해외보다 비싼 비율. 클수록 해외에서 사서 국내로 들여올 유인(재정거래)이 큽니다.</dd></div>
       <div><dt>프리미엄 스프레드</dt><dd>BTC 프리미엄에서 USDT 프리미엄을 뺀 값(%p). 원화로 산 테더를 기준으로 잰 BTC 프리미엄에 가까워, 테더를 들여와 코인을 파는 재정거래의 실제 마진을 보여 줍니다.</dd></div>
       <div><dt>원화 거래대금</dt><dd>국내 거래소에서 원화로 USDT·USDC 를 사고판 금액. 원화와 달러 스테이블코인 사이 전환 규모의 지표이며, 해외 송금액(순유출)과는 다릅니다.</dd></div>
-      <div><dt>코너 흐름</dt><dd>국내 거래소와 해외 거래소 지갑 사이를 직접 오간 자금(XRP). 공개 지갑 이름표에 기대므로 전체가 아닌 하한선으로 읽습니다.</dd></div>
       <div><dt>어테스테이션</dt><dd>회계법인이 “이 시점에 준비금이 이만큼 있다”고 확인해 주는 보고서. 기준일이 오래될수록 지금 상태와 멀어집니다.</dd></div>
       <div><dt>거래지원</dt><dd>거래소가 그 종목의 매매를 열어 둔 상태(상장). ‘원화(KRW) 마켓’은 원화로, ‘BTC·USDT 마켓’은 비트코인·테더로 사고파는 시장입니다. 투자유의종목은 거래소가 위험을 경고해 거래지원 종료를 검토하는 종목입니다.</dd></div>
       <div><dt>감시목록</dt><dd>규모가 작아도 국내 논의에 중요해 항상 따로 보여 주는 종목(원화·엔화 스테이블코인 등).</dd></div>
