@@ -944,7 +944,7 @@
 
     const height = chartHeight();
     const box = { height, hMin: 200, hMax: Math.round(height * 1.5) };
-    document.querySelectorAll(".range-btn").forEach((btn) =>
+    document.querySelectorAll("#trend-range .range-btn").forEach((btn) =>
       btn.setAttribute("aria-pressed", String(Number(btn.dataset.days) === TREND.days)));
     lineChart($("#chart-total"), inRange(o.total), {
       ...box, color: TREND_COLOR, label: `${o.short} 발행잔액 추이`, interactive: true,
@@ -998,7 +998,9 @@
   // data: URL 을 쓰는 이유는 캔버스 오염(tainted canvas) 없이 확실히
   // toBlob() 까지 가기 위해서다.
   function downloadTrendPng() {
-    const host = TREND.metric === "flow" ? $("#chart-flow") : $("#chart-total");
+    exportChartPng(TREND.metric === "flow" ? $("#chart-flow") : $("#chart-total"), trendFileName("png"));
+  }
+  function exportChartPng(host, filename) {
     const svg = host && host.querySelector("svg");
     if (!svg) return;
     const vb = svg.viewBox.baseVal;
@@ -1024,7 +1026,7 @@
       ctx.fillStyle = (cs.getPropertyValue("--card") || "#fff").trim();
       ctx.fillRect(0, 0, cv.width, cv.height);
       ctx.drawImage(img, 0, 0, cv.width, cv.height);
-      cv.toBlob((b) => { if (b) saveBlob(b, trendFileName("png")); });
+      cv.toBlob((b) => { if (b) saveBlob(b, filename); });
     };
     img.onerror = () => console.warn("PNG 변환 실패 — 차트를 이미지로 굽지 못했습니다.");
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
@@ -1079,7 +1081,7 @@
     $("#png-dl").addEventListener("click", downloadTrendPng);
 
     // 표시 기간 (1M·3M·6M·1Y·전체)
-    document.querySelectorAll(".range-btn").forEach((btn) => {
+    document.querySelectorAll("#trend-range .range-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         TREND.days = Number(btn.dataset.days) || 0;
         renderTrend();
@@ -1087,7 +1089,7 @@
     });
 
     // 세그먼트 토글 — 발행잔액 ↔ 30일 순증감률
-    document.querySelectorAll(".seg-btn").forEach((b) => {
+    document.querySelectorAll("#trend-seg .seg-btn").forEach((b) => {
       b.addEventListener("click", () => {
         const m = b.dataset.metric;
         if (m === TREND.metric) return;
@@ -1442,8 +1444,8 @@
       const rows = [["USDT 프리미엄", pct2(day.usdt), first === "usdt" ? "is-main" : ""],
                     ["BTC 프리미엄", pct2(day.btc), first === "btc" ? "is-main" : ""]];
       if (first === "btc") rows.reverse();
-      rows.push(["스프레드(BTC−USDT)", spread == null ? "—" : signed(spread, 2, "%p"), "is-spread"]);
-      return rows;
+      const sp = ["스프레드(BTC−USDT)", spread == null ? "—" : signed(spread, 2, "%p"), first === "spread" ? "is-main" : "is-spread"];
+      return first === "spread" ? [sp, ...rows] : [...rows, sp];
     };
     // 기간이 같은 두 시계열의 평균 스프레드 — 핵심 문장 보강용
     const both = Object.values(byDay).filter((d) => d.btc != null && d.usdt != null);
@@ -1459,19 +1461,95 @@
       $("#pm-spread-s").textContent = spreadAvg == null ? "BTC − USDT" : `BTC − USDT · ${both.length}일 평균 ${signed(spreadAvg, 2, "%p")}`;
     }
 
-    if (redraw && btcPts.length > 1) {
-      lineChart($("#chart-premium"), btcPts.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
-        color: "var(--petrol)", label: "BTC 프리미엄 추이", zero: true, interactive: true, sync: "premium",
-        fmt: (v) => v.toFixed(1) + "%", tipRows: tipRows("btc"),
+    PREM_VIEW.byDay = byDay; PREM_VIEW.btcPts = btcPts; PREM_VIEW.usdtPts = usdtPts; PREM_VIEW.tipRows = tipRows;
+    if (redraw) { bindPremTools(); drawPremCharts(); }
+  }
+
+  // 김치프리미엄 카드 — 발행 현황 '발행잔액·순증감률' 카드와 같은 구성:
+  // 지표 토글(USDT·BTC·스프레드) · 기간(1M·3M·6M, 이력이 180일) · CSV · PNG · 커서 툴팁.
+  const PREM_VIEW = { days: 180, metric: "usdt", byDay: {}, btcPts: [], usdtPts: [], tipRows: null, bound: false };
+  const PREM_METRIC = {
+    usdt: { label: "USDT 프리미엄", host: "#chart-premium-usdt", fig: "#pm-fig-usdt", color: "var(--accent)", unit: "%", d: 2 },
+    btc: { label: "BTC 프리미엄", host: "#chart-premium", fig: "#pm-fig-btc", color: "var(--petrol)", unit: "%", d: 2 },
+    spread: { label: "프리미엄 스프레드 (BTC − USDT)", host: "#chart-premium-spread", fig: "#pm-fig-spread", color: "var(--watch)", unit: "%p", d: 2 },
+  };
+  function premSeries(metric) {
+    const v = PREM_VIEW;
+    if (metric === "usdt") return v.usdtPts.map((d) => ({ date: d.date, v: d.premium_pct }));
+    if (metric === "btc") return v.btcPts.map((d) => ({ date: d.date, v: d.premium_pct }));
+    return Object.keys(v.byDay).sort()
+      .filter((d) => v.byDay[d].btc != null && v.byDay[d].usdt != null)
+      .map((d) => ({ date: d, v: Math.round((v.byDay[d].btc - v.byDay[d].usdt) * 1000) / 1000 }));
+  }
+  function drawPremCharts() {
+    const v = PREM_VIEW;
+    const toT = (d) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 1000);
+    const cut = (arr) => {
+      if (!v.days || !arr.length) return arr;
+      const last = toT(arr[arr.length - 1].date);
+      return arr.filter((d) => toT(d.date) > last - v.days * 86400);
+    };
+    document.querySelectorAll("#pm-range .range-btn").forEach((btn) =>
+      btn.setAttribute("aria-pressed", String((Number(btn.dataset.days) || 0) === v.days)));
+    document.querySelectorAll("#pm-seg .seg-btn").forEach((btn) =>
+      btn.setAttribute("aria-pressed", String(btn.dataset.metric === v.metric)));
+    Object.entries(PREM_METRIC).forEach(([k, m]) => { const f = $(m.fig); if (f) f.hidden = k !== v.metric; });
+
+    // 상단 값: 고른 지표의 최근 관측값(일별 종가 기준)
+    const m = PREM_METRIC[v.metric];
+    const full = premSeries(v.metric);
+    const last = full[full.length - 1];
+    $("#pm-tk-label").textContent = m.label;
+    $("#pm-tk-value").textContent = last ? signed(last.v, m.d, m.unit) : "—";
+    const shown = cut(full);
+    const avg = shown.length ? shown.reduce((a, p) => a + p.v, 0) / shown.length : null;
+    $("#pm-tk-sub").textContent = last
+      ? `최근 관측 ${last.date} · ${shown.length}일 평균 ${signed(avg, m.d, m.unit)} · 일별 종가 기준` : "시계열 없음";
+
+    const height = chartHeight();
+    const box = { height, hMin: 200, hMax: Math.round(height * 1.5) };
+    Object.entries(PREM_METRIC).forEach(([k, mm]) => {
+      const host = $(mm.host);
+      const pts = cut(premSeries(k)).map((p) => ({ t: toT(p.date), v: p.v }));
+      if (!host || pts.length < 2) return;
+      lineChart(host, pts, {
+        ...box, color: mm.color, label: mm.label + " 추이", zero: true, interactive: true, fillGradient: true,
+        fmt: (x) => x.toFixed(mm.d) + (mm.unit === "%p" ? "%p" : "%"),
+        tipRows: v.tipRows(k),
       });
-    }
-    const usdtChart = $("#chart-premium-usdt");
-    if (redraw && usdtChart && usdtPts.length > 1) {
-      lineChart(usdtChart, usdtPts.map((d) => ({ t: toT(d.date), v: d.premium_pct })), {
-        color: "var(--accent)", label: "USDT 프리미엄 추이", zero: true, interactive: true, sync: "premium",
-        fmt: (v) => v.toFixed(2) + "%", tipRows: tipRows("usdt"),
+    });
+  }
+  function downloadPremCsv() {
+    const days = Object.keys(PREM_VIEW.byDay).sort();
+    if (!days.length) return;
+    const n = (x) => (x == null ? "" : x);
+    const lines = ["날짜,USDT 프리미엄(%),BTC 프리미엄(%),스프레드 BTC-USDT(%p)"];
+    days.forEach((d) => {
+      const r = PREM_VIEW.byDay[d];
+      const sp = r.btc != null && r.usdt != null ? Math.round((r.btc - r.usdt) * 1000) / 1000 : null;
+      lines.push(`${d},${n(r.usdt)},${n(r.btc)},${n(sp)}`);
+    });
+    // BOM 을 붙여야 엑셀에서 한글 머리글이 깨지지 않는다.
+    saveBlob(new Blob(["\ufeff" + lines.join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" }),
+      `stablecoin-monitor_kimchi-premium_${isoDate(Math.floor(Date.now() / 1000))}.csv`);
+  }
+  function bindPremTools() {
+    if (PREM_VIEW.bound) return;
+    PREM_VIEW.bound = true;
+    document.querySelectorAll("#pm-range .range-btn").forEach((btn) => {
+      btn.addEventListener("click", () => { PREM_VIEW.days = Number(btn.dataset.days) || 0; drawPremCharts(); });
+    });
+    document.querySelectorAll("#pm-seg .seg-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.metric === PREM_VIEW.metric) return;
+        PREM_VIEW.metric = btn.dataset.metric; drawPremCharts();
       });
-    }
+    });
+    const dl = $("#pm-csv-dl");
+    if (dl) dl.addEventListener("click", downloadPremCsv);
+    const png = $("#pm-png-dl");
+    if (png) png.addEventListener("click", () => exportChartPng($(PREM_METRIC[PREM_VIEW.metric].host),
+      `stablecoin-monitor_kimchi-premium_${PREM_VIEW.metric}_${isoDate(Math.floor(Date.now() / 1000))}.png`));
   }
 
   // ── 원화마켓 스테이블코인 거래대금 ─────────────────────────

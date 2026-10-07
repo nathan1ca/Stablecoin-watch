@@ -144,7 +144,7 @@
         <p class="tk-sub" id="tk-sub">&nbsp;</p>
       </div>
       <div class="tcard-actions">
-        <div class="seg" role="group" aria-label="차트에 표시할 지표">
+        <div class="seg" id="trend-seg" role="group" aria-label="차트에 표시할 지표">
           <button type="button" class="seg-btn" id="seg-total" data-metric="total"
             aria-pressed="true" aria-controls="fig-total">발행잔액</button>
           <button type="button" class="seg-btn" id="seg-flow" data-metric="flow"
@@ -169,7 +169,7 @@
         <option value="__all__">전체 시장</option>
       </select>
       <span class="ct-hint" id="series-hint"></span>
-      <div class="range" role="group" aria-label="표시 기간">
+      <div class="range" id="trend-range" role="group" aria-label="표시 기간">
         <button type="button" class="range-btn" data-days="30" aria-pressed="false">1M</button>
         <button type="button" class="range-btn" data-days="90" aria-pressed="false">3M</button>
         <button type="button" class="range-btn" data-days="180" aria-pressed="false">6M</button>
@@ -355,17 +355,61 @@
     <div class="fig"><p class="fig-k">XRP</p><p class="fig-v" id="pm-xrp">—</p><p class="fig-s">국내 재정거래 최다 이용 이력</p></div>
     <div class="fig"><p class="fig-k"><abbr title="BTC 프리미엄에서 USDT 프리미엄을 뺀 값. 원화로 산 USDT 를 기준으로 잰 BTC 프리미엄에 가깝습니다.">프리미엄 스프레드</abbr></p><p class="fig-v" id="pm-spread">—</p><p class="fig-s" id="pm-spread-s">BTC − USDT</p></div>
   </div>
-  <figure class="chart chart-wide">
-    <figcaption>USDT 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
-    <div id="chart-premium-usdt" class="chart-plot"></div>
-  </figure>
-  <figure class="chart chart-wide">
-    <figcaption>BTC 기준 프리미엄 추이 <span class="unit">%, 180일</span></figcaption>
-    <div id="chart-premium" class="chart-plot"></div>
-  </figure>
+  <div class="tcard pm-card">
+    <div class="tcard-head">
+      <div class="tcard-kpi">
+        <p class="tk-label" id="pm-tk-label">USDT 프리미엄</p>
+        <p class="tk-value" id="pm-tk-value">—</p>
+        <p class="tk-sub" id="pm-tk-sub">&nbsp;</p>
+      </div>
+      <div class="tcard-actions">
+        <div class="seg" id="pm-seg" role="group" aria-label="차트에 표시할 지표">
+          <button type="button" class="seg-btn" data-metric="usdt" aria-pressed="true" aria-controls="pm-fig-usdt">USDT 프리미엄</button>
+          <button type="button" class="seg-btn" data-metric="btc" aria-pressed="false" aria-controls="pm-fig-btc">BTC 프리미엄</button>
+          <button type="button" class="seg-btn" data-metric="spread" aria-pressed="false" aria-controls="pm-fig-spread">스프레드</button>
+        </div>
+        <div class="tcard-export">
+          <button type="button" class="pill-btn" id="pm-csv-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1.5v8m0 0L4.8 6.3M8 9.5l3.2-3.2M2.5 11.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"
+              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV</button>
+          <button type="button" class="pill-btn" id="pm-png-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6"
+              fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.9" cy="6.4" r="1.15" fill="currentColor"/><path
+              d="M2.2 11.4 5.8 8.2l2.5 2.2 2.4-2 3.1 2.8" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/></svg>PNG</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-tools">
+      <span class="ct-label">표시 기간</span>
+      <div class="range" id="pm-range" role="group" aria-label="표시 기간">
+        <button type="button" class="range-btn" data-days="30" aria-pressed="false">1M</button>
+        <button type="button" class="range-btn" data-days="90" aria-pressed="false">3M</button>
+        <button type="button" class="range-btn" data-days="180" aria-pressed="true">6M</button>
+      </div>
+    </div>
+
+    <div class="charts">
+      <figure class="chart" id="pm-fig-usdt">
+        <figcaption>USDT 프리미엄 <span class="unit">%</span></figcaption>
+        <div id="chart-premium-usdt" class="chart-plot"></div>
+      </figure>
+      <figure class="chart" id="pm-fig-btc" hidden>
+        <figcaption>BTC 기준 프리미엄 <span class="unit">%</span></figcaption>
+        <div id="chart-premium" class="chart-plot"></div>
+      </figure>
+      <figure class="chart" id="pm-fig-spread" hidden>
+        <figcaption>프리미엄 스프레드 (BTC − USDT) <span class="unit">%p</span></figcaption>
+        <div id="chart-premium-spread" class="chart-plot"></div>
+      </figure>
+    </div>
+  </div>
+  <p class="foot">위 알약형 토글로 USDT 프리미엄 · BTC 프리미엄 · 스프레드를 번갈아 봅니다.
+    차트 위에 커서를 올리면(터치 기기는 탭하면) 해당 날짜의 USDT·BTC 프리미엄과 스프레드가 함께 표시됩니다.
+    CSV 열은 날짜 · USDT 프리미엄(%) · BTC 프리미엄(%) · 스프레드(%p) 이고(전체 180일), PNG 는 지금 보이는 차트를 그대로 내려받습니다.</p>
   <p class="foot">스테이블 프리미엄은 업비트 KRW 가격 ÷ 환율을 $1과 비교합니다(임계 0.5%/1.5%).
-    암호화폐 프리미엄은 해외 CEX 대비입니다. 두 차트에 커서를 올리면(터치 기기는 탭) 같은 날짜의 USDT·BTC 프리미엄과
-    스프레드(BTC − USDT, %p)가 함께 뜹니다. 스프레드가 크면 달러(USDT) 자체보다 코인에 원화 수요가 더 몰렸다는 뜻이고, USDT 로 들여와 BTC 로 파는 재정거래의 실제 마진에 가깝습니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
+    암호화폐 프리미엄은 해외 CEX 대비입니다. 스프레드(BTC − USDT, %p)가 크면 달러(USDT) 자체보다 코인에 원화 수요가 더 몰렸다는 뜻이고, USDT 로 들여와 BTC 로 파는 재정거래의 실제 마진에 가깝습니다. 환율은 Frankfurter(ECB 등 취합) 기준입니다.</p>
 </section>
 
 <div class="wrap empty-state" id="premium-empty">
