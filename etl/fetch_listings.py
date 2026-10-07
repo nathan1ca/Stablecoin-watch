@@ -313,10 +313,40 @@ def fetch_bytes(url: str, timeout: int = 15, limit: int = ICON_MAX_BYTES) -> byt
     return data
 
 
+def appstore_icon_urls(ex: dict, log: list | None = None) -> list[str]:
+    """애플 앱스토어 검색 API(무인증)에서 거래소 공식 앱 아이콘 주소를 찾는다.
+    판매자(sellerName)가 appstore_seller 중 하나를 포함할 때만 쓴다(동명 앱 오인 방지)."""
+    term, sellers = ex.get("appstore_term"), [x.lower() for x in ex.get("appstore_seller") or []]
+    if not term or not sellers:
+        return []
+    from urllib.parse import quote
+    try:
+        r = get_json(f"https://itunes.apple.com/search?term={quote(term)}&country=kr&entity=software&limit=10",
+                     retries=2, timeout=15)
+    except RuntimeError as e:
+        if log is not None:
+            log.append(f"앱스토어 검색 실패({e})")
+        return []
+    out = []
+    for app in (r or {}).get("results") or []:
+        seller = str(app.get("sellerName") or app.get("artistName") or "")
+        hit = any(sv in seller.lower() for sv in sellers)
+        if log is not None:
+            log.append(f"앱스토어 후보: {app.get('trackName')} / {seller}{' ← 채택' if hit else ''}")
+        if hit:
+            u = app.get("artworkUrl100") or app.get("artworkUrl60")
+            if u:
+                out.append(u)
+            break
+    return out
+
+
 def icon_candidates(ex: dict, log: list | None = None) -> list[str]:
     base = str(ex.get("url") or "").rstrip("/") + "/"
     cands = list(ex.get("icon_urls") or [])
-    if ex.get("url"):
+    if ex.get("icon_source") == "appstore":
+        cands += appstore_icon_urls(ex, log)
+    elif ex.get("url"):
         try:
             html = fetch_bytes(base, limit=1_500_000).decode("utf-8", "replace")
             cands += find_icon_links(html, base)

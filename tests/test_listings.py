@@ -153,6 +153,22 @@ class TestIcons(unittest.TestCase):
             self.assertEqual((out / "ex-icons" / "gopax.png").read_bytes(), png)
 
 
+class TestAppStoreIcon(unittest.TestCase):
+    EX = {"id": "bithumb", "icon_source": "appstore", "appstore_term": "빗썸", "appstore_seller": ["bithumb"]}
+
+    def test_seller_must_match(self):
+        r = {"results": [{"trackName": "빗썸 따라하기", "sellerName": "Someone", "artworkUrl100": "https://x/fake.png"},
+                         {"trackName": "빗썸", "sellerName": "Bithumb Korea Co., Ltd.", "artworkUrl100": "https://x/real.png"}]}
+        with mock.patch.object(fl, "get_json", return_value=r):
+            self.assertEqual(fl.icon_candidates(self.EX), ["https://x/real.png"])
+
+    def test_no_match_no_homepage(self):
+        with mock.patch.object(fl, "get_json", return_value={"results": [{"sellerName": "Other"}]}), \
+             mock.patch.object(fl, "fetch_bytes") as fb:
+            self.assertEqual(fl.icon_candidates(self.EX), [])
+            fb.assert_not_called()   # 앱스토어 지정 거래소는 홈페이지를 두드리지 않는다
+
+
 class TestConfig(unittest.TestCase):
     def test_repo_config(self):
         cfg = fl.load_config()
