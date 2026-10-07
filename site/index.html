@@ -83,7 +83,7 @@
       <button type="button" class="tab-btn" role="tab" id="tab-issuance" aria-controls="panel-issuance" aria-selected="true">발행 현황</button>
       <button type="button" class="tab-btn" role="tab" id="tab-freeze" aria-controls="panel-freeze" aria-selected="false" tabindex="-1">동결 조치</button>
       <button type="button" class="tab-btn" role="tab" id="tab-premium" aria-controls="panel-premium" aria-selected="false" tabindex="-1">김치프리미엄</button>
-      <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">원화 거래대금 · ETH</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-flow" aria-controls="panel-flow" aria-selected="false" tabindex="-1">원화 거래대금</button>
       <button type="button" class="tab-btn" role="tab" id="tab-flowxrp" aria-controls="panel-flowxrp" aria-selected="false" tabindex="-1">코너 흐름 · XRP</button>
       <button type="button" class="tab-btn" role="tab" id="tab-attest" aria-controls="panel-attest" aria-selected="false" tabindex="-1">어테스테이션</button>
       <button type="button" class="tab-btn" role="tab" id="tab-method" aria-controls="panel-method" aria-selected="false" tabindex="-1">방법론</button>
@@ -430,70 +430,76 @@
     <p class="lead-stat" id="lead-krv" hidden></p>
     <p>국내 거래소에서 원화로 USDT·USDC 를 사고판 금액입니다. 원화와 달러 스테이블코인 사이의 전환(온·오프램프) 규모를 보여 주며, 해외로 실어 나르기 전 단계의 수요를 가장 넓게 잡는 공개 지표입니다. 매수와 매도를 합친 회전량이라 순유출입(해외 송금액)은 아닙니다.</p>
   </div>
-  <div class="figs">
-    <div class="fig"><p class="fig-k">최근 거래대금</p><p class="fig-v" id="kv-last">—</p><p class="fig-s" id="kv-last-s">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">30일 일평균</p><p class="fig-v" id="kv-avg">—</p><p class="fig-s" id="kv-avg-s">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">거래소 비중</p><p class="fig-v fig-v-sm" id="kv-share">—</p><p class="fig-s">최근 30일</p></div>
-    <div class="fig"><p class="fig-k">USDT 비중</p><p class="fig-v" id="kv-usdt">—</p><p class="fig-s" id="kv-usdt-s">최근 30일, 나머지 USDC</p></div>
+  <div class="tcard kv-card">
+    <div class="tcard-head">
+      <div class="tcard-kpi">
+        <p class="tk-label" id="kv-tk-label">국내 5곳 · USDT+USDC 거래대금</p>
+        <p class="tk-value" id="kv-tk-value">—</p>
+        <p class="tk-sub" id="kv-tk-sub">&nbsp;</p>
+      </div>
+      <div class="tcard-actions">
+        <div class="seg" id="kv-seg" role="group" aria-label="차트에 표시할 자산">
+          <button type="button" class="seg-btn" data-metric="all" aria-pressed="true">USDT+USDC</button>
+          <button type="button" class="seg-btn" data-metric="USDT" aria-pressed="false">USDT</button>
+          <button type="button" class="seg-btn" data-metric="USDC" aria-pressed="false">USDC</button>
+        </div>
+        <div class="tcard-export">
+          <button type="button" class="pill-btn" id="kv-csv-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 1.5v8m0 0L4.8 6.3M8 9.5l3.2-3.2M2.5 11.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"
+              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>CSV</button>
+          <button type="button" class="pill-btn" id="kv-png-dl">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6"
+              fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.9" cy="6.4" r="1.15" fill="currentColor"/><path
+              d="M2.2 11.4 5.8 8.2l2.5 2.2 2.4-2 3.1 2.8" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/></svg>PNG</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-tools">
+      <label class="ct-label" for="kv-pick">표시 대상</label>
+      <select id="kv-pick" class="ct-select">
+        <option value="__all__">국내 5곳 합계</option>
+      </select>
+      <span class="ct-hint" id="kv-hint"></span>
+      <div class="range" id="kv-range" role="group" aria-label="표시 기간">
+        <button type="button" class="range-btn" data-days="30" aria-pressed="false">1M</button>
+        <button type="button" class="range-btn" data-days="90" aria-pressed="false">3M</button>
+        <button type="button" class="range-btn" data-days="180" aria-pressed="false">6M</button>
+        <button type="button" class="range-btn" data-days="0" aria-pressed="true">전체</button>
+      </div>
+    </div>
+
+    <div class="charts">
+      <figure class="chart">
+        <figcaption><span id="kv-cap">일별 거래대금</span> <span class="unit">원</span></figcaption>
+        <div id="chart-krv" class="chart-plot"></div>
+      </figure>
+    </div>
   </div>
-  <figure class="chart chart-wide">
-    <figcaption>일별 거래대금 <span class="unit">원, 국내 원화마켓 5곳 USDT+USDC</span></figcaption>
-    <div id="chart-krv" class="chart-plot"></div>
-  </figure>
+  <p class="foot">위 알약형 토글로 USDT+USDC·USDT·USDC 를, ‘표시 대상’으로 거래소를 고릅니다. 차트에 커서를 올리면(터치 기기는 탭하면)
+    그날의 거래소별 금액과 같은 날 USDT 김치프리미엄이 함께 표시됩니다.
+    CSV 는 날짜별 합계와 거래소·자산별 원 단위 금액 전체(약 200일)를, PNG 는 지금 보이는 차트를 내려받습니다.</p>
+
+  <div class="cols kv-cols">
+    <div class="panel">
+      <h3>거래소별 비중 <span class="unit" id="kv-share-unit">최근 30일</span></h3>
+      <div id="kv-share-bars" class="bars"></div>
+      <p class="foot" id="kv-share-note"></p>
+    </div>
+    <div class="panel">
+      <h3>요일·급증 점검</h3>
+      <ul class="plain kv-facts" id="kv-facts"></ul>
+    </div>
+  </div>
   <p class="foot" id="kv-foot"></p>
 </section>
 
-<section class="wrap block" id="flow-sec" aria-labelledby="h-flow" hidden>
-  <div class="block-head">
-    <h2 id="h-flow">온체인 코너 자금흐름 (이더리움 USDT·USDC, 좁은 대리지표)</h2>
-    <p class="lead-stat" id="lead-flow" hidden></p>
-    <p>업비트·빗썸의 태그된 지갑과 Binance·OKX·Bybit 각각의 최대 핫월렛 사이를 직접 오간 USDT·USDC만 집계합니다. 트론·XRP 통로와 코인원·코빗·고팍스, 그리고 각 거래소의 다른 지갑들은 빠져 있어 실제 순유출의 극히 일부만 보여줍니다 — 하한선으로만 읽으십시오.</p>
-  </div>
-  <div class="figs">
-    <div class="fig"><p class="fig-k">순유출</p><p class="fig-v" id="fl-net">—</p><p class="fig-s" id="fl-window">&nbsp;</p></div>
-    <div class="fig"><p class="fig-k">유입</p><p class="fig-v" id="fl-in">—</p><p class="fig-s">해외→국내</p></div>
-    <div class="fig"><p class="fig-k">유출</p><p class="fig-v" id="fl-out">—</p><p class="fig-s">국내→해외</p></div>
-    <div class="fig"><p class="fig-k">이벤트</p><p class="fig-v" id="fl-count">—</p><p class="fig-s">코너 통과 이체 건수</p></div>
-  </div>
-  <figure class="chart chart-wide">
-    <figcaption>일별 순유출(+) · 순유입(−) <span class="unit">USD, USDT+USDC 합산</span></figcaption>
-    <div id="chart-flow2"></div>
-  </figure>
-  <div class="cols fz-cols3">
-    <div class="panel">
-      <h3>자산별</h3>
-      <div id="fl-asset-bars" class="bars"></div>
-    </div>
-    <div class="panel">
-      <h3>해외 거래소별</h3>
-      <div id="fl-exchange-bars" class="bars"></div>
-    </div>
-  </div>
-  <div class="cols fz-cols">
-    <div class="panel fz-recent">
-      <h3>최근 이체</h3>
-      <div class="tablewrap tw-inner">
-        <table id="fl-tbl">
-          <thead><tr>
-            <th scope="col">일자</th><th scope="col">자산</th><th scope="col">방향</th><th scope="col">한국 지갑</th>
-            <th scope="col">해외 지갑</th><th scope="col" class="num">금액</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="panel">
-      <h3>커버리지 한계</h3>
-      <ul class="plain" id="fl-coverage"></ul>
-    </div>
-  </div>
-</section>
-
-<div class="wrap empty-state" id="flow-empty">
+<div class="wrap empty-state" id="krv-empty">
   <div class="empty-box">
     <h3>아직 표시할 데이터가 없습니다</h3>
-    <p>이더리움 코너 자금흐름은 온체인 이체 로그에서 수집합니다.</p>
-    <p class="empty-reason">필요 시크릿: <code>ETHERSCAN_API_KEY</code> · 확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “국경 간 코너 자금흐름 수집 (이더리움)” 단계 로그</p>
+    <p>이 데이터는 시크릿 없이 자동으로 생성됩니다.</p>
+    <p class="empty-reason">확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “국내 원화마켓 스테이블코인 거래대금 수집” 단계 로그</p>
   </div>
 </div>
 
@@ -503,9 +509,9 @@
 
 <section class="wrap block" id="flowxrp-sec" aria-labelledby="h-flowxrp" hidden>
   <div class="block-head">
-    <h2 id="h-flowxrp">온체인 코너 자금흐름 (XRP Ledger)</h2>
+    <h2 id="h-flowxrp">온체인 코너 자금흐름 (XRP Ledger, 하한선 참고 지표)</h2>
     <p class="lead-stat" id="lead-flowxrp" hidden></p>
-    <p>업비트·빗썸의 xrpscan 라벨 계정과 Binance·OKX·Bybit 사이의 네이티브 XRP 결제만 집계합니다. XRPL은 거래소당 지갑이 보통 하나뿐이라 이더리움 코너보다 커버리지가 넓지만, 여전히 하한선입니다.</p>
+    <p>업비트·빗썸의 xrpscan 라벨 계정과 Binance·OKX·Bybit 사이의 네이티브 XRP 결제만 집계합니다. XRPL은 거래소당 지갑이 보통 하나뿐이라 지갑 이름표로도 상당 부분이 잡히지만, 공개 이름표(xrpscan)에 기대므로 전체가 아닌 하한선으로만 읽으십시오. 같은 방식의 이더리움 코너는 이름표 지갑이 실제 입출금 지갑이 아니어서 2026-10-07 중단했습니다.</p>
   </div>
   <div class="figs">
     <div class="fig"><p class="fig-k">순유출</p><p class="fig-v" id="fx-net">—</p><p class="fig-s" id="fx-window">&nbsp;</p></div>
@@ -629,7 +635,7 @@
       <div><dt>김치프리미엄</dt><dd>국내 거래소 가격이 해외보다 비싼 비율. 클수록 해외에서 사서 국내로 들여올 유인(재정거래)이 큽니다.</dd></div>
       <div><dt>프리미엄 스프레드</dt><dd>BTC 프리미엄에서 USDT 프리미엄을 뺀 값(%p). 원화로 산 테더를 기준으로 잰 BTC 프리미엄에 가까워, 테더를 들여와 코인을 파는 재정거래의 실제 마진을 보여 줍니다.</dd></div>
       <div><dt>원화 거래대금</dt><dd>국내 거래소에서 원화로 USDT·USDC 를 사고판 금액. 원화와 달러 스테이블코인 사이 전환 규모의 지표이며, 해외 송금액(순유출)과는 다릅니다.</dd></div>
-      <div><dt>코너 흐름</dt><dd>국내 거래소와 해외 거래소 지갑 사이를 직접 오간 자금. 국경 간 자금 이동의 대리지표입니다.</dd></div>
+      <div><dt>코너 흐름</dt><dd>국내 거래소와 해외 거래소 지갑 사이를 직접 오간 자금(XRP). 공개 지갑 이름표에 기대므로 전체가 아닌 하한선으로 읽습니다.</dd></div>
       <div><dt>어테스테이션</dt><dd>회계법인이 “이 시점에 준비금이 이만큼 있다”고 확인해 주는 보고서. 기준일이 오래될수록 지금 상태와 멀어집니다.</dd></div>
       <div><dt>거래지원</dt><dd>거래소가 그 종목의 매매를 열어 둔 상태(상장). ‘원화(KRW) 마켓’은 원화로, ‘BTC·USDT 마켓’은 비트코인·테더로 사고파는 시장입니다. 투자유의종목은 거래소가 위험을 경고해 거래지원 종료를 검토하는 종목입니다.</dd></div>
       <div><dt>감시목록</dt><dd>규모가 작아도 국내 논의에 중요해 항상 따로 보여 주는 종목(원화·엔화 스테이블코인 등).</dd></div>

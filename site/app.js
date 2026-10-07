@@ -1556,128 +1556,217 @@
   // 조 단위는 "1.6조", 억 단위는 "1,634억" — 국내 독자가 읽는 단위로.
   const krwK = (v) => v == null ? "—" : v >= 1e12 ? (v / 1e12).toFixed(2) + "조"
     : v > 0 && v < 1e8 ? "<1억" : Math.round(v / 1e8).toLocaleString("ko-KR") + "억";
+  // 원화 거래대금 카드 — 발행 현황 '발행잔액·순증감률' 카드와 같은 구성:
+  // 자산 토글(USDT+USDC·USDT·USDC) · 표시 대상(합계·거래소별) · 기간(1M·3M·6M) · CSV · PNG.
+  const KV = { data: null, metric: "all", pick: "__all__", days: 0, fx: null, exName: {}, bound: false };
+  const KV_ASSETS = ["USDT", "USDC"];
+  // 2026-08-24 디지털엑스 원화마켓 거래수수료 1년 무료 시행(뉴시스 2026-08-23 보도) — 비중 비교 기준일
+  const KV_EVENT = { date: "2026-08-24", ex: "digitalx", label: "디지털엑스 수수료 무료 시행" };
+
+  // 하루치 행에서 (거래소, 자산) 선택에 맞는 금액
+  function kvVal(row, pick, metric) {
+    const exs = pick === "__all__" ? Object.keys(row.by) : [pick];
+    let v = 0;
+    exs.forEach((ex) => {
+      const b = row.by[ex] || {};
+      (metric === "all" ? KV_ASSETS : [metric]).forEach((a) => { v += b[a] || 0; });
+    });
+    return v;
+  }
+  const kvFull = () => (KV.data ? KV.data.daily.filter((d) => !d.partial) : []);
+  const kvToT = (d) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 1000);
+
   function renderKrwVolume(k, fxKrw) {
     if (!k || !k.daily || !k.daily.length) return;
     const sec = $("#krv-sec");
     if (!sec) return;
     sec.hidden = false;
+    const empty = $("#krv-empty");
+    if (empty) empty.hidden = true;
+    KV.data = k; KV.fx = fxKrw || null;
+    KV.exName = {};
+    (k.meta.exchanges || []).forEach((e) => { KV.exName[e.id] = e.name; });
+
+    // 표시 대상 목록
+    const sel = $("#kv-pick");
+    if (sel && !KV.bound) {
+      sel.innerHTML = `<option value="__all__">국내 ${(k.meta.exchanges || []).length}곳 합계</option>`
+        + (k.meta.exchanges || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("");
+    }
+    bindKvTools();
+    drawKv();
+    renderKvShare();
+    renderKvFacts();
+
     const s = k.summary || {};
-    const exName = {};
-    (k.meta.exchanges || []).forEach((e) => { exName[e.id] = e.name; });
-    $("#kv-last").textContent = "₩" + krwK(s.last_full_krw);
-    $("#kv-last-s").textContent = s.last_full_date ? `${s.last_full_date} 하루` : "";
-    $("#kv-avg").textContent = "₩" + krwK(s.avg30_krw);
-    $("#kv-avg-s").textContent = s.chg30_pct != null ? `직전 30일 대비 ${signed(s.chg30_pct, 1, "%")}` : "직전 30일 비교 불가";
-    const sh = Object.entries(s.share30_pct || {}).sort((a, b) => b[1] - a[1]);
-    $("#kv-share").textContent = sh.map(([id, v]) => `${exName[id] || id} ${v >= 1 ? v.toFixed(0) : "<1"}%`).join(" · ") || "—";
-    const us = (s.asset_share30_pct || {}).USDT;
-    $("#kv-usdt").textContent = us != null ? us.toFixed(1) + "%" : "—";
-
-    const full = k.daily.filter((d) => !d.partial);
-    const toT = (d) => Math.floor(new Date(d + "T00:00:00Z").getTime() / 1000);
-    const byDate = {};
-    full.forEach((d) => { byDate[d.date] = d; });
-    lineChart($("#chart-krv"), full.map((d) => ({ t: toT(d.date), v: d.total_krw })), {
-      color: "var(--accent)", label: "원화마켓 스테이블코인 일별 거래대금", interactive: true, fillGradient: true,
-      fmt: (v) => krwK(v),
-      tipRows: (p) => {
-        const d = byDate[isoDate(p.t)];
-        if (!d) return [["합계", krwK(p.v), "is-main"]];
-        const rows = [["합계", "₩" + krwK(d.total_krw), "is-main"]];
-        Object.keys(exName).forEach((id) => {
-          const b = d.by[id];
-          if (!b) return;
-          rows.push([exName[id], `USDT ${krwK(b.USDT || 0)} · USDC ${krwK(b.USDC || 0)}`, ""]);
-        });
-        return rows;
-      },
-    });
-
     const fails = Object.entries(k.meta.status || {}).flatMap(([ex, st]) =>
-      Object.entries(st).filter(([, v]) => v !== "ok").map(([a]) => `${exName[ex] || ex} ${a}`));
+      Object.entries(st).filter(([, v]) => v !== "ok").map(([a]) => `${KV.exName[ex] || ex} ${a}`));
     $("#kv-foot").textContent = `출처: ${k.meta.source} · 갱신 ${fmtTime(k.meta.generated_at)}`
       + (fails.length ? ` · 이번 수집 실패: ${fails.join(", ")}(해당 거래소가 빠진 날은 표시하지 않음)` : "")
-      + ". 디지털엑스(옛 코빗)·고팍스는 일봉에 원화 거래대금이 없어 거래량 × 종가로 어림했고, 고팍스 일봉은 한국시간 오전 9시 기준입니다. 진행 중인 오늘은 그래프에서 제외합니다.";
-
+      + ". 디지털엑스(옛 코빗)·고팍스는 일봉에 원화 거래대금이 없어 거래량 × 종가로 어림했고, 고팍스 일봉은 한국시간 오전 9시 기준입니다. 진행 중인 오늘은 제외합니다.";
     if (s.avg30_krw) {
-      const usdAmt = s.avg30_krw / (fxKrw || 1350); // 문장용 어림(기준환율) — 정확한 값은 위 수치
+      const usdAmt = s.avg30_krw / (KV.fx || 1350); // 문장용 어림(기준환율) — 정확한 값은 카드 수치
       setLead("krv", `최근 30일 국내 원화마켓에서 USDT·USDC 가 하루 평균 ${bold("₩" + krwK(s.avg30_krw))}(약 $${usdR(usdAmt)}) 거래됐습니다`
         + (s.chg30_pct != null ? ` — 직전 30일보다 ${bold(signed(s.chg30_pct, 1, "%"))}.` : "."));
     }
+
+    // 주요 신호: 최근 완결일 거래대금이 30일 평균의 2배 이상이면 '참고'
+    const full = kvFull();
+    const last = full[full.length - 1];
+    const prev30 = full.slice(-31, -1);
+    const avgPrev = prev30.length ? prev30.reduce((a, d) => a + d.total_krw, 0) / prev30.length : null;
+    putSignals("krv", last && avgPrev && last.total_krw >= 2 * avgPrev ? [{
+      sev: "info", tab: "flow", target: "krv-sec", label: "원화 거래대금 급증",
+      html: `원화마켓 스테이블코인 거래대금 ${bold("₩" + krwK(last.total_krw))} — 직전 30일 평균의 ${bold((last.total_krw / avgPrev).toFixed(1) + "배")} <span class="sig-dim">· ${esc(last.date)}</span>`,
+    }] : []);
   }
 
-  // ── 온체인 코너 자금흐름 ─────────────────────────────────
-  function renderFlow(f) {
-    if (!f || !f.totals) return;
-    $("#flow-sec").hidden = false;
-    $("#flow-empty").hidden = true;
+  function drawKv() {
+    const full = kvFull();
+    if (!full.length) return;
+    const series = full.map((d) => ({ date: d.date, v: kvVal(d, KV.pick, KV.metric), row: d }));
+    const cut = KV.days ? series.slice(-KV.days) : series;
+    const who = KV.pick === "__all__" ? `국내 ${Object.keys(KV.exName).length}곳` : (KV.exName[KV.pick] || KV.pick);
+    const what = KV.metric === "all" ? "USDT+USDC" : KV.metric;
+    document.querySelectorAll("#kv-range .range-btn").forEach((b) =>
+      b.setAttribute("aria-pressed", String((Number(b.dataset.days) || 0) === KV.days)));
+    document.querySelectorAll("#kv-seg .seg-btn").forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.metric === KV.metric)));
 
-    const t = f.totals;
-    $("#fl-net").textContent = (t.net_outflow_usd >= 0 ? "+$" : "−$") + usd(Math.abs(t.net_outflow_usd));
-    $("#fl-net").className = "fig-v" + (t.net_outflow_usd > 0 ? " t-watch" : "");
-    $("#fl-window").textContent = `최근 ${f.meta.lookback_days}일 · ${f.meta.chain} · ${f.meta.assets.join("+")}`;
-    $("#fl-in").textContent = "$" + usd(t.inflow_usd);
-    $("#fl-out").textContent = "$" + usd(t.outflow_usd);
-    $("#fl-count").textContent = t.event_count.toLocaleString();
-    setLead("flow", !t.event_count
-      ? `최근 ${f.meta.lookback_days}일 동안 집계 범위 안에서 관측된 이체가 ${bold("없습니다")}. 좁은 대리지표라 실제 흐름이 없다는 뜻은 아닙니다.`
-      : `최근 ${f.meta.lookback_days}일 ${t.net_outflow_usd >= 0 ? "국내 → 해외 순유출" : "해외 → 국내 순유입"} ${bold("$" + usd(Math.abs(t.net_outflow_usd)))} (${t.event_count.toLocaleString()}건).`);
+    // 상단 값: 최근 완결일 · 표시 기간 일평균 · 그 앞 같은 길이 기간 대비
+    const last = cut[cut.length - 1];
+    const avg = cut.reduce((a, p) => a + p.v, 0) / cut.length;
+    const before = series.slice(-cut.length * 2, -cut.length);
+    const avgB = before.length === cut.length ? before.reduce((a, p) => a + p.v, 0) / before.length : null;
+    $("#kv-tk-label").textContent = `${who} · ${what} 거래대금`;
+    $("#kv-tk-value").textContent = "₩" + krwK(last.v);
+    $("#kv-tk-sub").textContent = `${last.date} 하루 · ${cut.length}일 일평균 ₩${krwK(avg)}`
+      + (avgB ? ` · 직전 ${cut.length}일 대비 ${signed((avg / avgB - 1) * 100, 1, "%")}` : "");
+    $("#kv-cap").textContent = `${who} ${what} 일별 거래대금`;
+    $("#kv-hint").textContent = KV.pick === "digitalx" || KV.pick === "gopax" ? "거래량 × 종가 어림" : "";
 
-    const none = !t.event_count;
-    const emptyMsg = `최근 ${f.meta.lookback_days}일 동안 집계 범위(지정 지갑 사이 직접 이체) 안에서 관측된 이체가 없습니다.`;
-    const pts = (f.daily || []).map((d) => ({ t: Math.floor(new Date(d.date).getTime() / 1000), v: d.net_outflow_usd }));
-    lineChart($("#chart-flow2"), none ? [] : pts, {
-      color: "var(--breach)", label: "일별 순유출입", zero: true, empty: emptyMsg,
-      fmt: (v) => (v >= 0 ? "+$" : "−$") + usdC(Math.abs(v)),
+    const height = chartHeight();
+    const box = { height, hMin: 200, hMax: Math.round(height * 1.5) };
+    lineChart($("#chart-krv"), cut.map((p) => ({ t: kvToT(p.date), v: p.v })), {
+      ...box, color: "var(--accent)", label: `${who} ${what} 일별 거래대금`, interactive: true, fillGradient: true,
+      fmt: (x) => krwK(x),
+      tipRows: (p) => {
+        const d = KV.data.daily.find((r) => r.date === isoDate(p.t));
+        if (!d) return [["거래대금", "₩" + krwK(p.v), "is-main"]];
+        const rows = [[`${who} ${what}`, "₩" + krwK(p.v), "is-main"]];
+        const exs = KV.pick === "__all__" ? Object.keys(KV.exName) : [KV.pick];
+        exs.forEach((id) => {
+          const b = d.by[id];
+          if (!b) return;
+          rows.push([KV.exName[id], `USDT ${krwK(b.USDT || 0)} · USDC ${krwK(b.USDC || 0)}`, ""]);
+        });
+        // 같은 날 USDT 김치프리미엄(김치프리미엄 탭의 일별 이력)
+        const ph = PREM_HIST && (PREM_HIST.points_usdt || []).find((q) => q.date === d.date);
+        if (ph) rows.push(["USDT 프리미엄", signed(ph.premium_pct, 2, "%"), "is-spread"]);
+        return rows;
+      },
     });
+  }
 
-    const flowMax = Math.max(1, ...(f.by_asset || []).map((r) => Math.max(r.inflow, r.outflow)),
-                             ...(f.by_exchange || []).map((r) => Math.max(r.inflow, r.outflow)));
-    const flowBars = (el, items) => {
-      if (!items.length || items.every((r) => !r.inflow && !r.outflow)) {
-        el.innerHTML = '<p class="bars-empty">관측된 이체가 없습니다.</p>';
-        return;
-      }
-      el.innerHTML = items.map((r) => `<div class="bar-r">
-        <span class="bar-l">${r.label}</span>
-        <span class="bar-n t-${r.net >= 0 ? "watch" : "sound"}">${r.net >= 0 ? "+" : "−"}$${usd(Math.abs(r.net))}
-          <span style="color:var(--dim)"> · 유입 $${usd(r.inflow)} · 유출 $${usd(r.outflow)}</span></span>
-        <span class="bar-t"><span class="bar-f" style="width:${(Math.max(r.inflow, r.outflow) / flowMax * 100).toFixed(1)}%"></span></span>
-      </div>`).join("");
+  function downloadKvCsv() {
+    if (!KV.data) return;
+    const ids = Object.keys(KV.exName);
+    const head = ["날짜", "합계(원)", ...ids.flatMap((id) => KV_ASSETS.map((a) => `${KV.exName[id]} ${a}(원)`)), "어림 포함", "진행 중"];
+    const lines = [head.join(",")];
+    KV.data.daily.forEach((d) => {
+      lines.push([d.date, d.total_krw, ...ids.flatMap((id) => KV_ASSETS.map((a) => (d.by[id] || {})[a] ?? "")),
+        ids.some((id) => (id === "digitalx" || id === "gopax") && d.by[id]) ? "디지털엑스·고팍스=거래량×종가" : "",
+        d.partial ? "예" : ""].join(","));
+    });
+    // BOM 을 붙여야 엑셀에서 한글 머리글이 깨지지 않는다.
+    saveBlob(new Blob(["\ufeff" + lines.join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" }),
+      `stablecoin-monitor_krw-volume_${isoDate(Math.floor(Date.now() / 1000))}.csv`);
+  }
+
+  function bindKvTools() {
+    if (KV.bound) return;
+    KV.bound = true;
+    document.querySelectorAll("#kv-range .range-btn").forEach((b) =>
+      b.addEventListener("click", () => { KV.days = Number(b.dataset.days) || 0; drawKv(); }));
+    document.querySelectorAll("#kv-seg .seg-btn").forEach((b) =>
+      b.addEventListener("click", () => { if (b.dataset.metric !== KV.metric) { KV.metric = b.dataset.metric; drawKv(); } }));
+    const sel = $("#kv-pick");
+    if (sel) sel.addEventListener("change", () => { KV.pick = sel.value; drawKv(); });
+    const csv = $("#kv-csv-dl");
+    if (csv) csv.addEventListener("click", downloadKvCsv);
+    const png = $("#kv-png-dl");
+    if (png) png.addEventListener("click", () => exportChartPng($("#chart-krv"),
+      `stablecoin-monitor_krw-volume_${KV.pick === "__all__" ? "all" : KV.pick}_${KV.metric}_${isoDate(Math.floor(Date.now() / 1000))}.png`));
+  }
+
+  // 거래소별 비중: 최근 30일과 직전 30일 비교(%p)
+  function renderKvShare() {
+    const el = $("#kv-share-bars");
+    if (!el) return;
+    const full = kvFull();
+    const shareOf = (rows) => {
+      const tot = rows.reduce((a, d) => a + d.total_krw, 0) || 1;
+      const o = {};
+      Object.keys(KV.exName).forEach((id) => {
+        o[id] = rows.reduce((a, d) => a + KV_ASSETS.reduce((x, s) => x + ((d.by[id] || {})[s] || 0), 0), 0) / tot * 100;
+      });
+      return o;
     };
-    flowBars($("#fl-asset-bars"), (f.by_asset || []).map((r) => ({
-      label: r.asset, inflow: r.inflow, outflow: r.outflow, net: r.net_outflow,
-    })));
-    flowBars($("#fl-exchange-bars"), (f.by_exchange || []).map((r) => ({
-      label: r.exchange, inflow: r.inflow, outflow: r.outflow, net: r.net_outflow,
-    })));
+    const now = shareOf(full.slice(-30)), prev = full.length >= 60 ? shareOf(full.slice(-60, -30)) : null;
+    const items = Object.keys(KV.exName).map((id) => ({ id, v: now[id], d: prev ? now[id] - prev[id] : null }))
+      .sort((a, b) => b.v - a.v);
+    const max = Math.max(...items.map((x) => x.v), 1);
+    el.innerHTML = items.map((x) => `<div class="bar-r">
+      <span class="bar-l">${esc(KV.exName[x.id])}</span>
+      <span class="bar-n">${x.v >= 1 ? x.v.toFixed(1) : "<1"}%${x.d != null ? `<span style="color:var(--dim)"> · 직전 30일 대비 ${signed(x.d, 1, "%p")}</span>` : ""}</span>
+      <span class="bar-t"><span class="bar-f" style="width:${(x.v / max * 100).toFixed(1)}%"></span></span>
+    </div>`).join("");
+    // 디지털엑스 수수료 무료 시행 전후 30일 비중
+    const ev = KV_EVENT;
+    const before = full.filter((d) => d.date < ev.date).slice(-30), after = full.filter((d) => d.date >= ev.date).slice(0, 30);
+    $("#kv-share-note").textContent = before.length >= 20 && after.length >= 20 && KV.exName[ev.ex]
+      ? `${KV.exName[ev.ex]} 비중: ${ev.label}(${ev.date}) 이전 30일 ${shareOf(before)[ev.ex].toFixed(1)}% → 이후 30일 ${shareOf(after)[ev.ex].toFixed(1)}%.`
+      : "";
+  }
 
-    const dirKo = { outflow: "유출", inflow: "유입" };
-    $("#fl-tbl tbody").innerHTML = !(f.events || []).length
-      ? `<tr class="empty-row"><td colspan="6">${esc(emptyMsg)}</td></tr>`
-      : (f.events || []).slice(0, 60).map((e) => `<tr>
-      <td>${new Date(e.t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</td>
-      <td class="tsym">${e.asset}</td>
-      <td class="kind-${e.direction === "outflow" ? "seize" : "freeze"}">${dirKo[e.direction]}</td>
-      <td>${e.kr_wallet}</td>
-      <td>${e.global_wallet}</td>
-      <td class="num">${usd(e.amount)}</td>
-    </tr>`).join("");
-
-    // 0건일 때는 빈 차트·표 대신 원인 진단을 앞세운다(2026-10-07 점검 결과).
-    const diag = none ? [
-      "<b>왜 0건인가 — 2026-10-07 점검</b>: 지정한 업비트 지갑 4개 중 3개(업비트 1·3·콜드)는 USDT·USDC 이체 기록이 아예 없고, 업비트 2 는 약 7년간 495건뿐이며, 빗썸 핫월렛은 금액 0인 이체만 있습니다. 공개 라벨이 붙은 지갑이 실제 스테이블코인 입출금 지갑이 아니라는 뜻입니다.",
-      "또 국내 거래소에서 나간 돈은 해외 거래소 핫월렛으로 바로 가지 않고, 이용자 개인별 입금주소를 거쳐 모입니다(점검 표본에서 업비트 2 의 출금 상대 다수가 Binance 핫월렛으로 다시 보냄). 직접 이체만 세는 지금 방식으로는 구조적으로 잡히지 않습니다.",
-      "그래서 이 탭 위쪽에 원화마켓 스테이블코인 거래대금을 대신 둡니다. 실제 입출금 지갑 목록을 확보하면 2단계(입금주소 경유) 추적으로 다시 살릴 수 있습니다.",
-    ] : [];
-    ["#chart-flow2"].forEach((id) => { const fig = $(id) && $(id).closest("figure"); if (fig) fig.hidden = none; });
-    document.querySelectorAll("#flow-sec .fz-cols3, #flow-sec .fz-recent").forEach((n) => { n.hidden = none; });
-    $("#fl-coverage").innerHTML = diag.map((h) => `<li class="fl-diag">${h}</li>`).join("") + [
-      "이더리움 메인넷의 USDT·USDC 이체만 봅니다. 트론·XRP 통로는 포함되지 않습니다.",
-      "업비트·빗썸의 태그된 지갑만 봅니다. 코인원은 이용자별 입금주소가 개별 태그되어 있어 단일 지갑으로 묶을 수 없습니다.",
-      "해외 비교군은 Binance·OKX·Bybit 각각 잔액이 가장 큰 핫월렛 하나씩입니다. 같은 거래소가 굴리는 다른 지갑들은 빠져 있습니다.",
-      "그래서 이 숫자는 실제 순유출의 하한선이지 전체가 아닙니다.",
-    ].map((s) => `<li>${s}</li>`).join("");
+  // 요일·급증·프리미엄 관계를 데이터에서 계산해 몇 줄로 보여 준다
+  function renderKvFacts() {
+    const el = $("#kv-facts");
+    if (!el) return;
+    const full = kvFull();
+    const facts = [];
+    // 급증일: 직전 30일 평균의 2배 이상
+    const spikes = [];
+    for (let i = 30; i < full.length; i++) {
+      const avg = full.slice(i - 30, i).reduce((a, d) => a + d.total_krw, 0) / 30;
+      if (full[i].total_krw >= 2 * avg) spikes.push({ d: full[i], x: full[i].total_krw / avg });
+    }
+    const top = full.slice().sort((a, b) => b.total_krw - a.total_krw)[0];
+    if (top) facts.push(`관측 기간(${full.length}일) 최대는 <b>${esc(top.date)}</b> ₩${krwK(top.total_krw)}입니다.`);
+    facts.push(spikes.length
+      ? `직전 30일 평균의 2배를 넘은 날이 <b>${spikes.length}일</b> 있었고, 가장 최근은 ${esc(spikes[spikes.length - 1].d.date)}(${spikes[spikes.length - 1].x.toFixed(1)}배)입니다.`
+      : "직전 30일 평균의 2배를 넘은 날은 없었습니다.");
+    // 주말 대 평일(한국시간 일자 기준)
+    const dow = (d) => new Date(d + "T00:00:00Z").getUTCDay();
+    const wk = full.filter((d) => dow(d.date) % 6 !== 0), we = full.filter((d) => dow(d.date) % 6 === 0);
+    if (wk.length && we.length) {
+      const a = wk.reduce((x, d) => x + d.total_krw, 0) / wk.length, b = we.reduce((x, d) => x + d.total_krw, 0) / we.length;
+      facts.push(`주말 하루 평균은 평일의 <b>${(b / a * 100).toFixed(0)}%</b> 수준입니다(평일 ₩${krwK(a)} · 주말 ₩${krwK(b)}).`);
+    }
+    // USDT 김치프리미엄(절댓값)과의 상관
+    const ph = (PREM_HIST && PREM_HIST.points_usdt) || [];
+    const pm = {};
+    ph.forEach((q) => { pm[q.date] = Math.abs(q.premium_pct); });
+    const pairs = full.filter((d) => pm[d.date] != null).map((d) => [d.total_krw, pm[d.date]]);
+    if (pairs.length >= 60) {
+      const n = pairs.length, mx = pairs.reduce((a, p) => a + p[0], 0) / n, my = pairs.reduce((a, p) => a + p[1], 0) / n;
+      let sxy = 0, sxx = 0, syy = 0;
+      pairs.forEach(([x, y]) => { sxy += (x - mx) * (y - my); sxx += (x - mx) ** 2; syy += (y - my) ** 2; });
+      const r = sxy / Math.sqrt(sxx * syy);
+      const word = Math.abs(r) >= 0.5 ? "뚜렷한" : Math.abs(r) >= 0.3 ? "약한" : "거의 없는";
+      facts.push(`거래대금과 USDT 프리미엄 크기(절댓값)의 상관계수는 <b>${r.toFixed(2)}</b>(${n}일)로 ${word} 관계입니다. 프리미엄이 벌어질 때 원화↔테더 전환이 늘어나는지 보는 참고치이며 인과는 아닙니다.`);
+    }
+    el.innerHTML = facts.map((f) => `<li>${f}</li>`).join("");
   }
 
   // ── 어테스테이션 시차 ────────────────────────────────────
@@ -2094,13 +2183,6 @@
       console.info("premium.json 없음 — 프리미엄 섹션 생략");
     }
 
-    // 코너 자금흐름도 Etherscan 키가 필요하다.
-    try {
-      const r = await fetch("data/flow.json", { cache: "no-cache" });
-      if (r.ok) renderFlow(await r.json());
-    } catch (e) {
-      console.info("flow.json 없음 — 자금흐름 섹션 생략");
-    }
 
     // XRP 코너는 키가 필요 없다.
     try {
