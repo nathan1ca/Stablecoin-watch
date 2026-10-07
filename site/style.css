@@ -1185,8 +1185,5 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
   .ex-sum-i:nth-child(even){border-left:1px solid var(--rule-soft)}
 }
 
-/* 김치프리미엄 차트 도구줄 */
-.pm-tools{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin:1.2rem 0 .7rem}
-.pm-tools .range{margin-left:0}
-.pm-tools .pill-btn{margin-left:auto}
-@media (max-width:560px){ .pm-tools .pill-btn{margin-left:0;width:100%} }
+/* 김치프리미엄 카드: 발행 현황 카드(.tcard)와 같은 구성 */
+.pm-card{margin-top:1.4rem}
