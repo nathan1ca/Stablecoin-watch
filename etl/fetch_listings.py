@@ -46,7 +46,8 @@ def _pairs_from_upbit_style(rows) -> list[tuple[str, str, dict]]:
         quote, base = code.split("-", 1)
         ev = m.get("market_event") or {}
         warning = bool(ev.get("warning")) or str(m.get("market_warning") or "").upper() == "CAUTION"
-        out.append((base.upper(), quote.upper(), {"warning": warning}))
+        name = m.get("korean_name") or m.get("english_name") or ""
+        out.append((base.upper(), quote.upper(), {"warning": warning, "name": str(name)}))
     return out
 
 
@@ -296,9 +297,15 @@ def main() -> None:
         for eid, got in raw.items():
             if isinstance(got, Exception):
                 continue
-            cands = sorted({b for b, q, _ in got if any(h in b for h in hint)})
+            cands = sorted({f"{b}({x.get('name')})" if x.get("name") else b
+                            for b, q, x in got if any(h in b for h in hint)})
             print(f"  [{eid}] 스테이블코인 후보 티커: {', '.join(cands) or '없음'}")
-        print(json.dumps({k: res[k] for k in ("meta", "assets")}, ensure_ascii=False, indent=1)[:5000])
+        for e in res["meta"]["exchanges"]:
+            print(f"  {e['name']}: {e['status']} 마켓 {e.get('market_count', '-')} · 대상 매칭 {e.get('stable_markets', '-')}"
+                  + (f" · {e.get('error')}" if e.get("error") else ""))
+        for sym, a in res["assets"].items():
+            cells = "  ".join(f"{k}={'/'.join(v['markets'])}{'!' if v.get('warning') else ''}" for k, v in a["exchanges"].items())
+            print(f"  {sym:<8} {a['count']}곳  {cells}")
         return
 
     out.mkdir(parents=True, exist_ok=True)

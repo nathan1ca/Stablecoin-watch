@@ -28,8 +28,8 @@ class TestParsers(unittest.TestCase):
             {"market": "broken"},
         ]
         self.assertEqual(fl._pairs_from_upbit_style(rows), [
-            ("USDT", "KRW", {"warning": False}),
-            ("USDC", "BTC", {"warning": True}),
+            ("USDT", "KRW", {"warning": False, "name": ""}),
+            ("USDC", "BTC", {"warning": True, "name": ""}),
         ])
 
     def test_bithumb_fallback(self):
