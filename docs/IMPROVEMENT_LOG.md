@@ -21,7 +21,7 @@
 7. 감시목록 후보(JPYSC·KRW1·GYEN), 원화·엔화 직접 호가 페그.
 8. USDT 3분기 어테스테이션(10월 말 예상) 반영.
 
-**보고서**: (드라이브 업로드 후 링크 추가)
+**보고서**: [2026-10-08 스테이블코인 대시보드 보완 보고서](https://docs.google.com/document/d/1tjesrOXCOqfDLn6yWggHb9vC8KnyvGTeuzK-i04g7xU/edit) · PR #21(머지) · PR #22
 
 ## 2026-10-07 (11) 원화 거래대금 탭 개편, ETH 코너 흐름 중단 (auto/2026-10-07-11)
 
