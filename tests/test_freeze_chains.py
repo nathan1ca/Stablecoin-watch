@@ -171,6 +171,35 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(sum(c[0] for c in day), 2)   # 동결 2(해제 제외)
         self.assertEqual(sum(c[1] for c in day), 1)   # 소각 1
 
+    def test_spikes(self):
+        # USDT: 평소 하루 10건 × 30일, 하루만 60건(트론 50 + 이더리움 10) → 집중일
+        # USDC: 평소 0건, 같은 날 25건 → 집중일 + 같은 날 공동 표시. 19건인 날은 기준(20) 미만.
+        day = 86400
+        base = NOW - 40 * day
+        ev = []
+        def add(n, t, sym, chain="Tron", kind="freeze"):
+            for i in range(n):
+                ev.append({"t": t, "chain": chain, "issuer": "X", "symbol": sym, "kind": kind,
+                           "addr": f"{sym}{t}{i}", "units": 5.0 if kind == "seize" else None, "tx": f"{t}{i}"})
+        for k in range(30):
+            add(10, base + k * day, "USDT")
+        spike_t = base + 31 * day
+        add(48, spike_t, "USDT"); add(2, spike_t, "USDT", kind="seize"); add(10, spike_t, "USDT", "Ethereum")
+        add(5, spike_t, "USDT", kind="unfreeze")  # 해제는 세지 않는다
+        add(25, spike_t, "USDC", "Ethereum")
+        add(19, base + 5 * day, "USDC", "Ethereum")
+        sp = fetch_freeze.spikes(ev, 40)
+        self.assertEqual([(s["symbol"], s["n"]) for s in sp], [("USDT", 60), ("USDC", 25)])
+        u = sp[0]
+        self.assertEqual(u["median"], 10)
+        self.assertEqual(u["chains"], {"Tron": 50, "Ethereum": 10})
+        self.assertEqual((u["freeze"], u["seize"], u["units"]), (58, 2, 10.0))
+        self.assertEqual(u["joint"], ["USDC"])
+        self.assertEqual(sp[1]["joint"], ["USDT"])
+        d = fetch_freeze.summarize(ev, [], 40, [])
+        self.assertEqual(len(d["spikes"]), 2)
+        self.assertEqual(d["spike_rule"], {"min": 20, "mult": 5})
+
     def test_paid_chains_skipped_without_calls(self):
         calls = []
         old = fetch_freeze.call
