@@ -1285,3 +1285,7 @@ html[data-theme="dark"]{--r-cash:#7FB2D6;--r-tbill:#5B95C4;--r-repo:#3E6E99;--r-
 .gkr{font-family:var(--sans);font-size:.62rem;color:var(--petrol);border:1px solid currentColor;border-radius:3px;
   padding:0 .25rem;margin-left:.35rem;line-height:1.4;white-space:nowrap}
 
+/* 온체인 이체 건수 — 일별 추이 미니 그래프 */
+.otx-spark{width:120px;height:24px;display:block}
+.otx-spark polyline{fill:none;stroke:var(--accent);stroke-width:1.4;vector-effect:non-scaling-stroke}
+
