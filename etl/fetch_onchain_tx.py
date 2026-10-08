@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,7 @@ from urllib.parse import urlencode
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.http import get_json  # noqa: E402
+import onchain_eth_counts  # noqa: E402
 
 API = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
 METRICS = ("TxTfrCnt", "AdrActCnt")   # 이체 건수, 활동 주소 수(없으면 이체 건수만)
@@ -51,6 +53,45 @@ ASSETS = [
     ("tusd_trx", "TUSD", "Tron"),
 ]
 RAW: dict[str, str] = {}
+SNAPSHOT = Path(__file__).resolve().parents[1] / "site" / "data" / "snapshot.json"
+# DefiLlama 체인 이름 ↔ 이 표의 체인 이름
+LLAMA_CHAIN = {"Ethereum": "Ethereum", "Tron": "Tron", "Avalanche": "Avalanche"}
+
+
+def chain_shares(snapshot_path: Path = SNAPSHOT) -> dict[str, dict]:
+    """종목별 {체인: 발행량 비중 %, '_total': 발행잔액 USD}. 스냅숏이 없으면 빈 dict."""
+    try:
+        snap = json.loads(Path(snapshot_path).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    out: dict[str, dict] = {}
+    for a in snap.get("assets") or []:
+        chains = a.get("chains") or []
+        if not isinstance(chains, list) or not chains:
+            continue
+        # 스냅숏에는 상위 6개 체인만 실려 온다 — 비중의 분모는 전체 유통량으로 잡는다.
+        tot = a.get("circulating") or sum(c.get("amount") or 0 for c in chains)
+        if not tot:
+            continue
+        sym = str(a.get("symbol") or "").upper()
+        if sym in out:          # 같은 심볼이 여럿이면 큰 것(목록이 발행잔액 순)
+            continue
+        out[sym] = {c["chain"]: round((c.get("amount") or 0) / tot * 100, 1) for c in chains if c.get("chain")}
+        out[sym]["_top"] = [c["chain"] for c in sorted(chains, key=lambda c: -(c.get("amount") or 0))[:4]]
+        out[sym]["_min"] = min(v for k, v in out[sym].items() if not k.startswith("_"))
+        out[sym]["_partial_list"] = (a.get("chain_count") or len(chains)) > len(chains)
+    return out
+
+
+def annotate(rows: list[dict], shares: dict[str, dict]) -> None:
+    """각 줄에 '이 체인이 발행량에서 차지하는 비중'과 빠진 체인 메모를 붙인다(한계 표시)."""
+    for r in rows:
+        sh = shares.get(r["symbol"].upper()) or {}
+        r["chain_share_pct"] = sh.get(LLAMA_CHAIN.get(r["chain"], r["chain"]))
+        # 상위 6개 체인 목록에 없으면 비중은 그 목록의 가장 작은 값보다 작다
+        r["chain_share_lt"] = sh.get("_min") if r["chain_share_pct"] is None and sh.get("_partial_list") else None
+        others = [c for c in sh.get("_top", []) if c != LLAMA_CHAIN.get(r["chain"], r["chain"]) and not c.startswith("_")]
+        r["other_chains"] = [f"{c} {sh.get(c)}%" for c in others if sh.get(c)]
 
 
 def fetch_asset(code: str, start: str) -> list[dict]:
@@ -106,7 +147,9 @@ def summarize(code: str, sym: str, chain: str, daily: list[dict], days: int = DA
     }
 
 
-def build(results: dict[str, list[dict] | Exception], days: int = DAYS) -> dict:
+def build(results: dict[str, list[dict] | Exception], days: int = DAYS,
+          extra_rows: list[dict] | None = None, extra_status: dict | None = None,
+          shares: dict[str, dict] | None = None) -> dict:
     rows, status = [], {}
     for code, sym, chain in ASSETS:
         got = results.get(code)
@@ -118,7 +161,15 @@ def build(results: dict[str, list[dict] | Exception], days: int = DAYS) -> dict:
             status[code] = "데이터 없음"
             continue
         status[code] = "ok"
-        rows.append(summarize(code, sym, chain, daily, days))
+        row = summarize(code, sym, chain, daily, days)
+        row["source"] = "Coin Metrics"
+        row["complete"] = True
+        rows.append(row)
+    for r in extra_rows or []:
+        rows.append(dict(r, code=f"etherscan:{r['symbol']}"))
+    for k, v in (extra_status or {}).items():
+        status[f"etherscan:{k}"] = v
+    annotate(rows, shares or {})
     rows.sort(key=lambda r: -r["tx_30d"])
     by_sym: dict[str, int] = {}
     for r in rows:
@@ -128,19 +179,27 @@ def build(results: dict[str, list[dict] | Exception], days: int = DAYS) -> dict:
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "is_sample": False,
             "window_days": days,
-            "source": "Coin Metrics Community API (TxTfrCnt·AdrActCnt, 일 단위 UTC)",
+            "source": "Coin Metrics Community API (TxTfrCnt·AdrActCnt, 일 단위 UTC) · "
+                      "Etherscan getLogs 직접 집계(USDS·USD1·USDG·RLUSD 이더리움 몫)",
             "chains_covered": sorted({r["chain"] for r in rows}),
             "chains_missing": ["Solana", "BNB Chain", "Base", "Arbitrum", "Polygon", "Optimism"],
             "status": status,
             "note": "이체 건수는 토큰 Transfer 기록 수다. 트랜잭션 1건에 이체가 여럿일 수 있고 봇·차익거래·"
-                    "자기 지갑 간 이동도 포함된다. 커뮤니티 무료 범위라 이더리움·트론·아발란체만 센다.",
+                    "자기 지갑 간 이동도 포함된다. 무료 출처 범위라 이더리움·트론·아발란체만 센다.",
+            "not_covered": [
+                {"symbol": "USD1", "missing": "솔라나·BNB 체인 등(발행량의 약 3분의 2)"},
+                {"symbol": "USDG", "missing": "X Layer·Robinhood Chain·솔라나 등(발행량의 약 90%)"},
+                {"symbol": "RLUSD", "missing": "XRP 원장(발행량의 약 절반)"},
+                {"symbol": "USDS", "missing": "아비트럼·솔라나·베이스(발행량의 1% 남짓)"},
+                {"symbol": "USDT·USDC", "missing": "솔라나·BNB 체인·베이스·아비트럼·폴리곤 등"},
+            ],
         },
         "totals": {"tx_30d": sum(r["tx_30d"] for r in rows), "by_symbol": by_sym},
         "rows": rows,
     }
 
 
-def collect(days: int = DAYS) -> dict:
+def collect(days: int = DAYS, eth_state: Path | None = None) -> dict:
     start = (datetime.now(timezone.utc) - timedelta(days=2 * days + 3)).strftime("%Y-%m-%d")
     res: dict[str, list[dict] | Exception] = {}
     for code, sym, chain in ASSETS:
@@ -148,7 +207,13 @@ def collect(days: int = DAYS) -> dict:
             res[code] = fetch_asset(code, start)
         except Exception as e:  # 한 자산 실패가 나머지를 막지 않게
             res[code] = e
-    return build(res, days)
+    # Coin Metrics 무료 범위 밖 종목(USDS·USD1·USDG·RLUSD)의 이더리움 몫 — Etherscan 직접 집계
+    try:
+        eth_rows, eth_status = onchain_eth_counts.collect(
+            os.environ.get("ETHERSCAN_API_KEY"), eth_state or onchain_eth_counts.STATE)
+    except Exception as e:
+        eth_rows, eth_status = [], {"전체": f"실패: {str(e)[:120]}"}
+    return build(res, days, eth_rows, eth_status, chain_shares())
 
 
 def main() -> None:
@@ -156,10 +221,13 @@ def main() -> None:
     ap.add_argument("--out", default="site/data")
     ap.add_argument("--probe", action="store_true")
     args = ap.parse_args()
-    res = collect()
+    # --probe 는 저장소 상태 파일을 건드리지 않게 임시 경로를 쓴다.
+    eth_state = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "onchain_eth_state_probe.json" if args.probe else None
+    res = collect(eth_state=eth_state)
     for r in res["rows"]:
         print(f"  {r['symbol']:6s} {r['chain']:10s} 30일 {r['tx_30d']:>12,}건 · 일평균 {r['tx_avg']:>10,} · "
-              f"전 30일 대비 {r['chg_pct']}% · 활동 주소 {r['active_avg']}")
+              f"전 30일 대비 {r['chg_pct']}% · 활동 주소 {r['active_avg']} · 이 체인 비중 {r.get('chain_share_pct')}%"
+              f" · {r['days']}일{'' if r.get('complete') else '(채우는 중)'} · {r.get('source')}")
     bad = {k: v for k, v in res["meta"]["status"].items() if v != "ok"}
     if bad:
         print(f"  실패·없음: {bad}", file=sys.stderr)

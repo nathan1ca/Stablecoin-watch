@@ -89,7 +89,12 @@ jobs:
 
       # 키 없이 항상 실행된다. 종목·체인별 최근 30일 토큰 이체 건수(Coin Metrics 커뮤니티 API,
       # 이더리움·트론·아발란체). 일 단위 지표라 하루 한 번만 바뀌지만 호출이 14회뿐이라 매시 돈다.
+      # USDS·USD1·USDG·RLUSD 는 Coin Metrics 무료 범위 밖이라 이더리움 몫만 Etherscan 로그로 직접 센다
+      # (상태: site/data/onchain_eth_state.json, 회차당 120초 상한 — 처음 30일치는 몇 회차에 걸쳐 채움).
       - name: 최근 30일 온체인 이체 건수 수집
+        timeout-minutes: 6
+        env:
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
         run: python etl/fetch_onchain_tx.py
         continue-on-error: true
 
