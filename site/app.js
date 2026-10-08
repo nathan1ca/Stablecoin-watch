@@ -2210,7 +2210,25 @@
     // 거래소 순서를 고정해(빈 자리 유지) 행끼리 같은 거래소가 세로로 맞도록 한다.
     const ids = Object.keys(EX);
     return `<span class="exl" role="list">${ids.map((id) => k.exchanges[id]
-      ? exBadge(EX[id], k.exchanges[id]) : '<span class="ex ex--empty" aria-hidden="true"></span>').join("")}</span>`;
+      ? exBadge(EX[id], k.exchanges[id]) : '<span class="ex ex--empty" aria-hidden="true"></span>').join("")}</span>`
+      + krShareSub(sym);
+  }
+  // 국내 거래 비중(24시간) — 국내 5개 거래소 원화마켓 거래대금 ÷ 전 세계 거래대금(CoinGecko)
+  let KRW_SHARE = null;
+  function krShareSub(sym) {
+    const a = KRW_SHARE && KRW_SHARE.assets && KRW_SHARE.assets[String(sym || "").toUpperCase()];
+    if (!a || !a.krw_24h) return "";
+    const pctTxt = a.share_pct == null ? "비중 —" : a.share_pct >= 10 ? a.share_pct.toFixed(0) + "%"
+      : a.share_pct >= 0.1 ? a.share_pct.toFixed(1) + "%" : a.share_pct > 0 ? "<0.1%" : "0%";
+    const by = Object.entries(a.by || {}).sort((x, y) => y[1] - x[1])
+      .map(([ex, v]) => `${EX_NAME[ex] || ex} ${krwWon(v)}`).join(" · ");
+    const tip = `국내 원화마켓 24시간 거래대금 ${krwWon(a.krw_24h)}`
+      + (a.usd_24h != null ? ` (약 $${usd(a.usd_24h)})` : "")
+      + `\n전 세계 24시간 거래대금 ${a.global_usd_24h != null ? "$" + usd(a.global_usd_24h) + " (CoinGecko)" : "— (CoinGecko 값 없음)"}`
+      + (a.share_pct != null ? `\n국내 비중 ${a.share_pct}%` : "")
+      + (by ? `\n거래소별: ${by}` : "")
+      + "\n전 세계 값은 이 종목이 들어간 모든 거래쌍 합계라, 결제 통화로 많이 쓰이는 USDT·USDC 는 비중이 작게 나옵니다. 보유량이 아니라 거래 회전량입니다.";
+    return `<span class="kr-share" tabindex="0" data-tip="${esc(tip)}">24h ${krwWon(a.krw_24h)} · ${pctTxt}</span>`;
   }
   // 아이콘 사본을 못 읽으면 머리글자 배지가 드러나게 이미지만 숨긴다(error 는 버블링하지 않아 캡처로 받는다).
   document.addEventListener("error", (ev) => {
@@ -2429,7 +2447,11 @@
     // 원화마켓 스테이블코인 거래대금
     try {
       const r = await fetch("data/krw_volume.json", { cache: "no-cache" });
-      if (r.ok) renderKrwVolume(await r.json(), snap.watchlist && snap.watchlist.meta && snap.watchlist.meta.fx_rates && snap.watchlist.meta.fx_rates.KRW);
+      if (r.ok) {
+        const kvj = await r.json();
+        KRW_SHARE = kvj.share24h || null; // 표의 '국내 거래소' 칸은 아래 거래지원 목록을 읽은 뒤 다시 그린다
+        renderKrwVolume(kvj, snap.watchlist && snap.watchlist.meta && snap.watchlist.meta.fx_rates && snap.watchlist.meta.fx_rates.KRW);
+      }
     } catch (e) {
       console.info("krw_volume.json 없음 — 원화 거래대금 생략");
     }

@@ -196,6 +196,150 @@ def build(raw: dict[tuple[str, str], dict | Exception], today: str | None = None
     }
 
 
+# ── 국내 거래 비중(24시간) ────────────────────────────────────────────
+# 종목별로 국내 5개 거래소 원화마켓의 최근 24시간 거래대금을 모아, 같은 종목의
+# 전 세계 24시간 거래대금(CoinGecko, 그 종목이 들어간 모든 거래쌍 합계)과 비교한다.
+# 양쪽 모두 '지금부터 24시간 전까지'라 기간이 맞는다. 거래소 보유량은 지갑 주소가
+# 공개되지 않아 정확히 알 수 없으므로 거래대금으로 대신한다(2026-10-08 네이선 확인).
+LISTINGS_PATH = Path(__file__).resolve().parents[1] / "site" / "data" / "listings.json"
+SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / "site" / "data" / "snapshot.json"
+CG_MARKETS = ("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd"
+              "&category=stablecoins&order=market_cap_desc&per_page=250&page=1")
+
+
+def _num(*vals):
+    for v in vals:
+        try:
+            if v is not None and v != "":
+                return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def parse_ticker(ex: str, r) -> float | None:
+    """거래소 24시간 시세 응답 → 원화 거래대금. 형식이 다르면 None."""
+    if ex in ("upbit", "bithumb"):           # [{"acc_trade_price_24h": ...}]
+        row = r[0] if isinstance(r, list) and r else r if isinstance(r, dict) else {}
+        return _num(row.get("acc_trade_price_24h"))
+    if ex == "coinone":                       # {"tickers":[{"quote_volume": "..."}]}
+        t = (r or {}).get("tickers") or []
+        return _num(t[0].get("quote_volume")) if t else None
+    if ex == "digitalx":                      # {"success":true,"data":[{"quoteVolume": "..."}]}
+        d = (r or {}).get("data")
+        row = d[0] if isinstance(d, list) and d else d if isinstance(d, dict) else {}
+        return _num(row.get("quoteVolume"), row.get("quote_volume"))
+    if ex == "gopax":                         # {"volume": 코인 수량, "close": 원}
+        vol, close = _num((r or {}).get("volume")), _num((r or {}).get("close"))
+        return vol * close if vol is not None and close is not None else None
+    return None
+
+
+def fetch_ticker(ex: str, sym: str) -> float | None:
+    if ex == "upbit":
+        r = get_json(f"https://api.upbit.com/v1/ticker?markets=KRW-{sym}", timeout=20)
+    elif ex == "bithumb":
+        r = get_json(f"https://api.bithumb.com/v1/ticker?markets=KRW-{sym}", timeout=20)
+    elif ex == "coinone":
+        r = get_json(f"https://api.coinone.co.kr/public/v2/ticker_new/KRW/{sym}?additional_data=false", timeout=20)
+    elif ex == "digitalx":
+        r = get_json(f"https://api.korbit.co.kr/v2/tickers?symbol={sym.lower()}_krw", timeout=20)
+    elif ex == "gopax":
+        r = get_json(f"https://api.gopax.co.kr/trading-pairs/{sym}-KRW/stats", timeout=20)
+    else:
+        raise ValueError(ex)
+    RAW_SAMPLE[f"시세 {ex} {sym}"] = json.dumps(r, ensure_ascii=False)[:300]
+    return parse_ticker(ex, r)
+
+
+def krw_pairs(listings: dict) -> list[tuple[str, str]]:
+    """listings.json 에서 원화마켓이 있는 (거래소, 종목) 쌍."""
+    out = []
+    for sym, a in (listings.get("assets") or {}).items():
+        for ex, v in (a.get("exchanges") or {}).items():
+            if "KRW" in (v.get("markets") or []):
+                out.append((ex, sym.upper()))
+    return sorted(out)
+
+
+def global_volumes(markets: list) -> dict[str, dict]:
+    """CoinGecko 스테이블코인 시장 목록 → 심볼별(시가총액 가장 큰 것) 24시간 거래대금."""
+    best: dict[str, dict] = {}
+    for m in markets or []:
+        sym = str(m.get("symbol") or "").upper()
+        if not sym or m.get("total_volume") is None:
+            continue
+        if sym not in best or (m.get("market_cap") or 0) > (best[sym].get("market_cap") or 0):
+            best[sym] = m
+    return {s: {"usd": float(m["total_volume"]), "cg_id": m.get("id")} for s, m in best.items()}
+
+
+def build_share(local: dict[tuple[str, str], float | Exception | None], glob: dict[str, dict] | Exception,
+                fx_usdkrw: float | None) -> dict:
+    """종목별 국내 24시간 원화 거래대금, 달러 환산, 전 세계 대비 비중."""
+    status = {}
+    assets: dict[str, dict] = {}
+    for (ex, sym), v in local.items():
+        if isinstance(v, Exception) or v is None:
+            status[f"{ex}:{sym}"] = "실패" + (f": {str(v)[:80]}" if isinstance(v, Exception) else " — 응답 형식")
+            continue
+        status[f"{ex}:{sym}"] = "ok"
+        a = assets.setdefault(sym, {"krw_24h": 0.0, "by": {}})
+        a["by"][ex] = round(v)
+        a["krw_24h"] += v
+    gl_ok = not isinstance(glob, Exception)
+    for sym, a in assets.items():
+        a["krw_24h"] = round(a["krw_24h"])
+        a["usd_24h"] = round(a["krw_24h"] / fx_usdkrw) if fx_usdkrw else None
+        g = glob.get(sym) if gl_ok else None
+        a["global_usd_24h"] = round(g["usd"]) if g else None
+        a["cg_id"] = g["cg_id"] if g else None
+        a["share_pct"] = (round(a["usd_24h"] / g["usd"] * 100, 3)
+                          if g and g["usd"] and a["usd_24h"] is not None else None)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "window": "최근 24시간(거래소 24시간 시세 기준)",
+        "fx_usdkrw": fx_usdkrw,
+        "assets": assets,
+        "status": status,
+        "global_status": "ok" if gl_ok else f"실패: {str(glob)[:120]}",
+        "source": "국내: 업비트·빗썸·코인원·디지털엑스·고팍스 24시간 시세 API · 전 세계: CoinGecko(스테이블코인 분류)",
+        "note": "전 세계 거래대금은 그 종목이 들어간 모든 거래쌍(예: BTC/USDT 처럼 결제 통화로 쓰인 거래 포함)의 합계라 "
+                "USDT·USDC 처럼 결제 통화로 많이 쓰이는 종목은 비중이 작게 나온다. 거래소 보유량이 아니라 거래 회전량이다.",
+    }
+
+
+def collect_share() -> dict:
+    try:
+        listings = json.loads(LISTINGS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"  listings.json 없음({e}) — 국내 거래 비중 생략", file=sys.stderr)
+        return {}
+    fx = None
+    try:
+        snap = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        fx = ((snap.get("watchlist") or {}).get("meta") or {}).get("fx_rates", {}).get("KRW")
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    local = {}
+    for ex, sym in krw_pairs(listings):
+        try:
+            local[(ex, sym)] = fetch_ticker(ex, sym)
+        except Exception as e:  # 한 곳 장애가 나머지를 막지 않게
+            local[(ex, sym)] = e
+    try:
+        glob = global_volumes(get_json(CG_MARKETS, timeout=30))
+    except Exception as e:
+        glob = e
+    res = build_share(local, glob, fx)
+    for sym, a in sorted(res["assets"].items(), key=lambda kv: -kv[1]["krw_24h"]):
+        print(f"  국내 24시간 {sym}: ₩{a['krw_24h']:,.0f} · 전 세계 ${a['global_usd_24h'] or 0:,.0f} · 비중 {a['share_pct']}%")
+    bad = [k for k, v in res["status"].items() if v != "ok"]
+    if bad:
+        print(f"  국내 시세 실패 {len(bad)}건: {', '.join(bad)}", file=sys.stderr)
+    return res
+
+
 def collect() -> dict:
     raw = {}
     for ex in EXCHANGES:
@@ -215,6 +359,9 @@ def main() -> None:
     ap.add_argument("--probe", action="store_true")
     args = ap.parse_args()
     res = build(collect())
+    share = collect_share()
+    if share:
+        res["share24h"] = share
     s = res["summary"]
     print(f"일수 {len(res['daily'])} · 최근 완결일 {s['last_full_date']} ₩{(s['last_full_krw'] or 0):,.0f} · "
           f"30일 평균 ₩{(s['avg30_krw'] or 0):,.0f} ({s['chg30_pct']}%) · 점유 {s['share30_pct']} · 자산 {s['asset_share30_pct']}")
