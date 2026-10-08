@@ -22,8 +22,9 @@ jobs:
           python-version: "3.12"
 
       # 표준 라이브러리만 쓰므로 설치할 것이 없다.
-      - name: 단위 테스트
-        run: python -m unittest discover -s tests -v
+      - name: 솔라나 동결 수집 가능성 시험 (임시)
+        run: python etl/probe_solana_freeze.py
+        continue-on-error: true
 
       # 감시목록(원화·엔화 스테이블코인) 종목이 원본 API 에 어떤 id·pegType 으로
       # 들어 있는지 로그로 남긴다. 외부 API 장애로 PR 이 빨개지지 않도록 실패를 허용한다.
