@@ -90,7 +90,21 @@ FX_LAG_TOLERANCE_BP_DEFAULT = 50
 MIN_RELIABLE_MCAP_USD_DEFAULT = 1_000_000
 
 # 종목별 시계열을 따로 받아올 개수 (발행잔액 상위). 화면 드롭다운 항목 수와 같다.
-SERIES_ASSET_COUNT = 12
+# 종목별 시계열(발행잔액 차트의 '표시 대상' 목록). 2026-10-08 네이선: "왜 14종만 나오냐" —
+# 상위 12종 + 감시목록이었다. 상위 30종 + 국내 원화마켓 상장 종목 + 감시목록으로 넓힌다.
+# 종목당 DefiLlama 호출 1회, history.json 은 종목당 약 23KB.
+SERIES_ASSET_COUNT = 30
+LISTINGS_PATH = Path(__file__).resolve().parents[1] / "site" / "data" / "listings.json"
+
+
+def krw_listed_symbols(path: Path = LISTINGS_PATH) -> set[str]:
+    """국내 원화마켓에 상장된 스테이블코인 심볼(대문자). 파일이 없으면 빈 집합."""
+    try:
+        d = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return set()
+    return {str(sym).upper() for sym, a in (d.get("assets") or {}).items()
+            if any("KRW" in (v.get("markets") or []) for v in (a.get("exchanges") or {}).values())}
 
 # ── 종목 아이콘 ────────────────────────────────────────────────────────────
 # DefiLlama 가 자기 사이트에서 쓰는 아이콘 CDN. 슬러그 하나만 끼워 넣으면 된다.
@@ -1201,12 +1215,16 @@ def main():
     # 슬러그 필드를 잘못 골랐으면 여기서 걸러진다. 표본이 전부 404 면 비우고 간다.
     verify_icons(snap)
 
-    print(f"5/5 종목별 시계열 수집… (상위 {SERIES_ASSET_COUNT}종 + 감시목록)")
+    print(f"5/5 종목별 시계열 수집… (상위 {SERIES_ASSET_COUNT}종 + 국내 원화마켓 상장 + 감시목록)")
     series = fetch_asset_series(snap["assets"])
-    # 감시목록 중 상위 목록에 없는 종목도 드롭다운에서 고를 수 있게 시계열을 받는다.
+    # 상위 목록에 없는 국내 상장 종목·감시목록 종목도 드롭다운에서 고를 수 있게 받는다.
     have = {s["id"] for s in series}
-    extra = [r for r in snap["watchlist"]["rows"]
-             if r.get("status") == "ok" and r.get("id") and str(r["id"]) not in have]
+    kr = krw_listed_symbols()
+    extra = [r for r in snap["assets"][SERIES_ASSET_COUNT:]
+             if str(r.get("symbol") or "").upper() in kr and r.get("id") and str(r["id"]) not in have]
+    have |= {str(r["id"]) for r in extra}
+    extra += [r for r in snap["watchlist"]["rows"]
+              if r.get("status") == "ok" and r.get("id") and str(r["id"]) not in have]
     series += fetch_asset_series(extra, count=len(extra))
     print(f"    {len(series)}종 확보")
 
