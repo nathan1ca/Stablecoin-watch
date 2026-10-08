@@ -127,6 +127,27 @@ class TestEthCounts(unittest.TestCase):
         self.assertFalse(r["complete"])
         self.assertEqual(r["days"], 7)
 
+    def test_budget_shared_across_tokens(self):
+        # 첫 종목이 아무리 바빠도 나머지 종목도 회차마다 조금씩 센다
+        start = int(_dt(2026, 9, 7, tzinfo=_tz.utc).timestamp()) // 12
+        tip = int(_dt(2026, 10, 8, 12, tzinfo=_tz.utc).timestamp()) // 12
+        fake = FakeEtherscan({b: 1 for b in range(start, tip, 50)}, tip)
+        t = [0.0]
+        def clock():
+            t[0] += 0.5
+            return t[0]
+        old_b, old_t = ec.TIME_BUDGET, ec.TOKENS
+        ec.TIME_BUDGET = 40
+        ec.TOKENS = [{"symbol": s, "address": "0x" + s} for s in ("A", "B", "C", "D")]
+        try:
+            with _tempfile.TemporaryDirectory() as d:
+                p = Path(d) / "st.json"
+                ec.collect("k", p, call=fake, clock=clock)
+                st = _json.loads(p.read_text())
+        finally:
+            ec.TIME_BUDGET, ec.TOKENS = old_b, old_t
+        self.assertTrue(all(st[s].get("daily") for s in ("A", "B", "C", "D")))
+
     def test_collect_without_key(self):
         rows, st = ec.collect(None)
         self.assertEqual(rows, [])

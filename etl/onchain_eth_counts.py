@@ -174,13 +174,16 @@ def collect(key: str | None, state_path: Path = STATE, call=_call, clock=time.mo
     except RuntimeError as e:
         return [], {t["symbol"]: f"실패: {e}" for t in TOKENS}
     deadline = clock() + TIME_BUDGET
-    for tok in TOKENS:
+    for i, tok in enumerate(TOKENS):
+        # 남은 시간을 남은 종목 수로 나눠 준다 — 이체가 많은 USDS 가 상한을 다 써서 나머지가
+        # 한 건도 못 세는 일을 막는다(2026-10-08 시험: USDS 혼자 120초에 15일치). 남는 시간은 다음 종목으로.
+        tok_deadline = clock() + max(0.0, deadline - clock()) / (len(TOKENS) - i)
         st = state.setdefault(tok["symbol"], {})
         if st.get("address") and st["address"].lower() != tok["address"].lower():
             st.clear()
         st["address"] = tok["address"]
         try:
-            collect_token(tok, st, key, tip, deadline, call, clock)
+            collect_token(tok, st, key, tip, tok_deadline, call, clock)
             status[tok["symbol"]] = "ok" if st.get("caught_up") else "채우는 중(시간 상한 — 다음 회차에 이어 셈)"
         except RuntimeError as e:
             status[tok["symbol"]] = f"실패: {str(e)[:120]}"
