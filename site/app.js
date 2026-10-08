@@ -1852,8 +1852,8 @@
     })));
   }
 
-  // ── 오늘의 뉴스 요약(사람 검토 후 게시) ─────────────────────
-  // site/digest/news_digest.json — 매일 점검이 쓰고 PR 검토를 거쳐 들어온다.
+  // ── 오늘의 뉴스 요약 ─────────────────────
+  // site/digest/news_digest.json — 매일 점검이 써서 PR 로 들어온다.
   function renderDigest(g) {
     if (!g || !Array.isArray(g.sections)) return;
     $("#digest-sec").hidden = false;
@@ -1861,7 +1861,7 @@
     const ageH = (Date.now() - new Date(g.written_at).getTime()) / 3600000;
     $("#digest-headline").textContent = g.headline || "";
     $("#digest-meta").innerHTML = `${esc(fmtTime(g.written_at))} 작성 · 대상 ${esc(fmtTime(g.window.from))} ~ ${esc(fmtTime(g.window.to))} · ${esc(g.author || "")}`
-      + (ageH > 36 ? ` <span class="stamp-age is-stale">${Math.floor(ageH / 24)}일 전 요약 — 새 요약 검토 대기</span>` : "");
+      + (ageH > 36 ? ` <span class="stamp-age is-stale">${Math.floor(ageH / 24)}일 전 요약 — 최신 요약 아님</span>` : "");
     const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "#");
     $("#digest-body").innerHTML = g.sections.map((sct) => `<div class="dg-sec">
       <h3>${esc(sct.label || sct.category)}</h3>
@@ -2250,7 +2250,7 @@
       console.info("listings.json 없음 — 국내 거래지원 표시 생략");
     }
 
-    // 오늘의 뉴스 요약(사람 검토 후 게시)
+    // 오늘의 뉴스 요약
     try {
       const r = await fetch("digest/news_digest.json", { cache: "no-cache" });
       if (r.ok) renderDigest(await r.json());
