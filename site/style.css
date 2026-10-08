@@ -1274,3 +1274,10 @@ html[data-theme="dark"]{--r-cash:#7FB2D6;--r-tbill:#5B95C4;--r-repo:#3E6E99;--r-
 /* 국내 거래 비중(24시간) — '국내 거래소' 칸 아래 줄 */
 .kr-share{display:block;margin-top:.2rem;font-size:.7rem;color:var(--dim);font-family:var(--mono);white-space:nowrap;cursor:help}
 
+/* 종목별 현황 표가 1100px 안에 들어가게(2026-10-08: 34px 넘쳐 등급 칸이 잘림)
+   — 긴 종목 이름은 줄임표로, 칸 좌우 여백을 조금 줄인다. */
+#tbl th,#tbl td{padding-left:.7rem;padding-right:.7rem}
+@media (min-width:761px){
+  #tbl .tname{display:inline-block;max-width:8.5rem;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+}
+
