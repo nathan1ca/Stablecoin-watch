@@ -44,8 +44,23 @@ jobs:
         continue-on-error: true
 
       # 발행사 동결 조치(이더리움 계열·트론·솔라나)를 임시 폴더로 시험 수집한다(저장소 쓰기 없음).
-      # 기간은 짧게(30일) 잡아 시간을 아끼고, 체인별 응답·건수만 로그로 본다.
+      # 솔라나는 거래를 하나씩 열어야 해 10분 넘게 걸린다(2026-10-08 실측 11분 — 검증 전체 시간의 대부분).
+      # 그래서 동결 수집 코드가 바뀐 브랜치에서만 돌린다. 수동 실행(workflow_dispatch)은 항상 돈다.
+      - name: 동결 수집 코드 변경 여부
+        id: changed
+        run: |
+          git fetch --quiet --depth=1 origin main
+          if git diff --name-only FETCH_HEAD HEAD | grep -qE '^etl/(fetch_freeze|freeze_)'; then
+            echo "freeze=true" >> "$GITHUB_OUTPUT"
+            echo "동결 수집 코드 변경 있음 → 시험 수집 실행"
+          else
+            echo "동결 수집 코드 변경 없음 → 시험 수집 건너뜀"
+          fi
+        continue-on-error: true
+
       - name: 동결 조치 다중 체인 시험 수집 (읽기 전용)
+        if: steps.changed.outputs.freeze == 'true' || github.event_name == 'workflow_dispatch'
+        timeout-minutes: 15
         env:
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
         run: python etl/fetch_freeze.py --days 30 --out "$RUNNER_TEMP/scw-dryrun"
