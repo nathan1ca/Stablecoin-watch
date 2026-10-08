@@ -1233,7 +1233,7 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
 /* 설명 말풍선(title 대체) */
 #tip{position:fixed;z-index:60;max-width:min(340px,calc(100vw - 16px));padding:.55rem .7rem;
   background:var(--ink);color:var(--paper);font-size:.8rem;line-height:1.5;border-radius:6px;
-  box-shadow:0 6px 18px rgba(0,0,0,.18);pointer-events:none;white-space:normal;word-break:keep-all}
+  box-shadow:0 6px 18px rgba(0,0,0,.18);pointer-events:none;white-space:pre-line;word-break:keep-all}
 [data-tip]{cursor:help}
 abbr[data-tip]{text-decoration:underline dotted;text-underline-offset:2px}
 

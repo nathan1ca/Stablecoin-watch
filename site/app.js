@@ -1301,8 +1301,38 @@
       }>${a.dev_bp == null ? "—" : signed(a.dev_bp, 1)}</td>
       <td class="num">${signed(a.chg_7d, 1, "%")}</td>
       <td class="num t-${a.grade_redemption}">${signed(a.chg_30d, 1, "%")}</td>
-      <td><span class="pill is-${a.grade} t-${a.grade}">${GRADE_KO[a.grade]}</span></td>
+      <td><span class="pill is-${a.grade} t-${a.grade}" tabindex="0" data-tip="${esc(gradeWhy(a))}">${GRADE_KO[a.grade]}</span></td>
     </tr>`).join("");
+  }
+
+  // 등급 말풍선 — 왜 이 등급인지 한두 줄로. 기준값은 스냅숏의 임계값을 그대로 쓴다.
+  let GRADE_THR = {};
+  function gradeWhy(a) {
+    const t = GRADE_THR;
+    const bp = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + "bp";
+    const pc = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + "%";
+    const peg = a.dev_bp != null
+      ? `페그 편차 ${bp(a.dev_bp)} — 주의 ±${t.peg_watch_bp}bp · 경보 ±${t.peg_breach_bp}bp`
+      : isYieldBearing(a) ? "페그 편차: 이자가 쌓여 가격이 오르는 상품이라 계산하지 않음"
+      : a.peg_currency && a.peg_currency !== "USD" ? `페그 편차: ${a.peg_currency} 연동이라 달러 기준 편차를 재지 않음`
+      : "페그 편차: 시장 가격이 없어 잴 수 없음";
+    const red = a.chg_30d != null
+      ? `30일 발행량 ${pc(a.chg_30d)} — 주의 ${t.redemption_watch}% · 경보 ${t.redemption_breach}% 이하`
+      : "30일 발행량: 30일 전 수량이 없어 잴 수 없음";
+    const why = [];
+    if (a.grade_peg === "breach" || a.grade_peg === "watch")
+      why.push(`페그 편차가 ${a.grade_peg === "breach" ? "경보" : "주의"}선을 넘음`);
+    if (a.grade_redemption === "breach" || a.grade_redemption === "watch")
+      why.push(`30일 순감(상환)이 ${a.grade_redemption === "breach" ? "경보" : "주의"}선을 넘음`);
+    if (a.price_quality === "degraded")
+      why.push(`가격 출처끼리 ${a.price_spread_bp != null ? a.price_spread_bp + "bp" : ""} 어긋나 관측 신뢰도가 낮음(주의로 표시)`);
+    const head = a.grade === "unknown" ? "미측정 — 가격과 30일 전 수량이 모두 없어 판단할 수 없음"
+      : a.grade === "sound" ? "정상 — 두 기준 모두 주의선 안쪽"
+      : `${GRADE_KO[a.grade]} — ${why.join(", ") || "기준 초과"}`;
+    const lines = [head, "· " + peg, "· " + red];
+    if (a.grade === "breach" && t.systemic_share_pct != null && a.share < t.systemic_share_pct)
+      lines.push(`· 시장 비중 ${a.share.toFixed(2)}%로 ${t.systemic_share_pct}% 미만 — 시스템 등급에는 ‘주의’로만 반영`);
+    return lines.join("\n");
   }
 
   function renderThresholds(t, wm) {
@@ -2370,6 +2400,7 @@
       FX_EUR = (wm && wm.fx_rates && wm.fx_rates.EUR) || null;
     }
     initTips();
+    GRADE_THR = (snap.meta && snap.meta.thresholds) || {};
     renderStatus(snap);
     renderGauge(snap);
     renderTable(snap);
