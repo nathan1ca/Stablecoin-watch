@@ -1979,13 +1979,21 @@
     }).join("");
     $("#att-res-legend").innerHTML = RES_KIND.filter(([k]) => used.has(k))
       .map(([k, name, liq]) => `<span><i class="res-sw res-${k}"></i>${name}${liq ? "" : ""}</span>`).join("");
-    const miss = entries.filter((e) => !(e.reserves_breakdown || []).length).map((e) => e.symbol);
+    // 구성을 옮기지 못한 종목도 줄은 남기고, 이유와 원문 링크를 붙인다.
+    const missE = entries.filter((e) => !(e.reserves_breakdown || []).length);
+    const safe = (u) => (/^https:\/\//i.test(u || "") ? u : "#");
+    $("#att-res").insertAdjacentHTML("beforeend", missE.map((e) => `<li class="res-row res-miss">
+        <span class="res-sym"><b class="tsym">${esc(e.symbol)}</b><span class="att-sub">${esc(e.as_of_date)}${e.reserves_total ? ` · $${usd(e.reserves_total)}${wonOf(e.reserves_total) ? " · " + wonOf(e.reserves_total) : ""}` : ""}</span></span>
+        <span class="res-bar res-bar-empty"><span>구성 미입력 — ${esc(e.reserves_breakdown_basis || "원문을 아직 옮기지 못했습니다")}.</span></span>
+        <a class="res-liq res-open" href="${esc(safe(e.source_url))}" target="_blank" rel="noopener noreferrer">원문 보기 ↗</a>
+      </li>`).join(""));
+    const miss = missE.map((e) => e.symbol);
     $("#att-res-note").textContent =
       "미국 GENIUS Act 는 결제용 스테이블코인의 준비자산을 현금·요구불예금, 만기 93일 이하 미 국채, 국채 담보 리포, 이런 자산에만 투자하는 MMF 등으로 제한합니다. "
       + "금·비트코인·주식·담보대출은 가격이 움직이거나 회수에 시간이 걸려 대량 상환 때 바로 현금으로 바꾸기 어렵습니다. "
       + "오른쪽 비율 색은 현금성 99% 이상 초록, 90% 이상 주황, 그 아래 빨강입니다(화면 표시용, 등급에는 쓰지 않음). "
       + "USDC·AUSD 는 운용 펀드(Circle Reserve Fund 등)가 들고 있는 자산까지 풀어서 셌습니다. 결제 시차 순액은 막대에서 뺐습니다."
-      + (miss.length ? ` ${miss.join("·")} 는 아직 구성을 옮기지 못했습니다.` : "");
+      + (miss.length ? ` ${miss.join("·")} 는 아직 구성을 옮기지 못했습니다 — 줄 오른쪽 ‘원문 보기’로 발행사 보고서를 직접 확인하세요.` : "");
     tipify(wrap);
   }
 

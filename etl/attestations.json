@@ -196,7 +196,7 @@
       "verify": "원문 PDF 'Outstanding Stablecoin Units' 2026-08-31 열(08-17: 1,763,215,434)",
       "note": "Ripple 자회사 Standard Custody & Trust(NYDFS 인가) 발행.",
       "attestor_note": "보고서 본문에서 법인명 미판독",
-      "reserves_breakdown_basis": "구성 미입력 — 발행사 공시가 웹 화면 또는 자동 조회를 막는 PDF 라 원문 대조 전"
+      "reserves_breakdown_basis": "보고서 PDF 가 자동 조회를 막아 옮기지 못했습니다"
     },
     {
       "issuer": "First Digital (FD121)",
@@ -321,7 +321,7 @@
       "source_url": "https://www.paxos.com/pyusd-transparency",
       "verify": "2026년 8월 보고서 수치를 네이선이 원문에서 확인(2026-10-07): 발행량 2,886,948,845 · 준비금 $2,893,935,877",
       "note": "발행사 Paxos Trust Company(NYDFS). 투명성 페이지가 자바스크립트로 보고서 링크를 불러와 자동 판독이 안 된다 — 매월 손으로 갱신.",
-      "reserves_breakdown_basis": "구성 미입력 — 발행사 공시가 웹 화면 또는 자동 조회를 막는 PDF 라 원문 대조 전"
+      "reserves_breakdown_basis": "Paxos 투명성 페이지에서 월별 보고서를 직접 열어야 해 자동으로 옮기지 못했습니다"
     },
     {
       "issuer": "Paxos (Global Dollar)",
@@ -339,7 +339,7 @@
       "source_url": "https://www.paxos.com/usdg-transparency#usdg-attestations",
       "verify": "2026년 8월 보고서 수치를 네이선이 원문에서 확인(2026-10-07): 발행량 3,340,650,602 · 준비금 $3,350,462,467",
       "note": "Paxos 싱가포르 법인 발행(MAS 규제). 2026-02-27 이후 보고서는 KPMG. 매월 손으로 갱신.",
-      "reserves_breakdown_basis": "구성 미입력 — 발행사 공시가 웹 화면 또는 자동 조회를 막는 PDF 라 원문 대조 전"
+      "reserves_breakdown_basis": "Paxos 투명성 페이지에서 월별 보고서를 직접 열어야 해 자동으로 옮기지 못했습니다"
     }
   ],
   "not_covered": [

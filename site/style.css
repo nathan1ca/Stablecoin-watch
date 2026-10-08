@@ -1267,4 +1267,7 @@ html[data-theme="dark"]{--r-cash:#7FB2D6;--r-tbill:#5B95C4;--r-repo:#3E6E99;--r-
   .res-row{grid-template-columns:1fr 3.8rem;grid-template-areas:"s l" "b b";row-gap:.35rem}
   .res-sym{grid-area:s}.res-bar{grid-area:b}.res-liq{grid-area:l}
 }
+.res-bar-empty{height:auto;min-height:16px;background:none;border:1px dashed var(--rule);border-radius:3px;
+  padding:.2rem .5rem;font-size:.76rem;color:var(--dim);line-height:1.4;overflow:visible}
+.res-open{font-family:var(--sans);font-size:.8rem;white-space:nowrap}
 
