@@ -1317,7 +1317,11 @@
 
     const t = f.totals, days = f.meta.lookback_days;
     $("#fz-freeze").textContent = t.freeze.toLocaleString();
-    $("#fz-window").textContent = `최근 ${days}일 · 이더리움 메인넷`;
+    const chains = f.meta.chains || ["Ethereum"];
+    const CH_KO = { Ethereum: "이더리움", Tron: "트론", Solana: "솔라나", Arbitrum: "아비트럼", Polygon: "폴리곤",
+      Base: "베이스", Optimism: "옵티미즘", Avalanche: "아발란체" };
+    const chKo = (c) => CH_KO[c] || c;
+    $("#fz-window").textContent = `최근 ${days}일 · ${chains.length === 1 ? chKo(chains[0]) : chains.length + "개 체인"}`;
     $("#fz-unfreeze").textContent = t.unfreeze.toLocaleString();
     $("#fz-seize").textContent = t.seize.toLocaleString();
     $("#fz-seize").className = "fig-v" + (t.seize ? " t-breach" : "");
@@ -1325,7 +1329,7 @@
     {
       const topSeize = (f.issuers || []).slice().sort((x, y) => (y.seize || 0) - (x.seize || 0))[0];
       setLead("freeze",
-        `최근 ${days}일(${esc(f.meta.chain || "이더리움")}) 동결 ${bold(t.freeze.toLocaleString() + "건")}, 잔액 소각 ${bold(t.seize.toLocaleString() + "건")}이 있었습니다.`
+        `최근 ${days}일(${esc(chains.length === 1 ? chKo(chains[0]) : chains.map(chKo).join("·"))}) 동결 ${bold(t.freeze.toLocaleString() + "건")}, 잔액 소각 ${bold(t.seize.toLocaleString() + "건")}이 있었습니다.`
         + (topSeize && topSeize.seize && t.seize
           ? ` 소각의 ${Math.round(topSeize.seize / t.seize * 100)}%는 ${esc(topSeize.issuer)}가 했습니다.` : ""));
     }
@@ -1350,25 +1354,52 @@
       (byIssuer[e.issuer] = byIssuer[e.issuer] || []).push(e);
     });
     $("#fz-lanes").innerHTML = f.issuers.map((r) => {
-      const evs = byIssuer[r.issuer] || [];
-      const ticks = evs.map((e) =>
-        `<i class="fz-tick${e.kind === "seize" ? " seize" : ""}" style="left:${at(e.t).toFixed(2)}%"></i>`
-      ).join("");
+      // 일별 집계(daily)가 있으면 그것으로 — events 는 최근 500건만 실려 와 오래된 표식이 빠진다.
+      const dd = (f.daily || {})[r.symbol];
+      const ticks = dd
+        ? Object.entries(dd).map(([d, [fz, sz]]) => {
+            const ts = Date.parse(d + "T12:00:00Z") / 1000;
+            return `<i class="fz-tick${sz ? " seize" : ""}" style="left:${at(ts).toFixed(2)}%" title="${d} 동결 ${fz} · 소각 ${sz}"></i>`;
+          }).join("")
+        : (byIssuer[r.issuer] || []).map((e) =>
+            `<i class="fz-tick${e.kind === "seize" ? " seize" : ""}" style="left:${at(e.t).toFixed(2)}%"></i>`
+          ).join("");
       const n = r.freeze + r.seize;
-      return `<li class="grow">
+      const chs = Object.entries(r.chains || {}).filter(([, v]) => v).sort((a, b) => b[1] - a[1])
+        .map(([c, v]) => `${chKo(c)} ${v.toLocaleString()}`).join(" · ");
+      return `<li class="grow" title="${esc(chs)}">
         <span class="gsym">${r.symbol}</span>
         <span class="fz-lane" role="img" aria-label="${r.issuer} ${r.symbol} 조치 ${n}건">${ticks}</span>
         <span class="gval">${n.toLocaleString()}</span>
       </li>`;
     }).join("");
 
+    // 체인별 표 — 체인·종목마다 건수와 수집 상태
+    const bc = f.by_chain || [];
+    const wrap = $("#fz-chains-wrap");
+    if (wrap) {
+      wrap.hidden = !bc.length;
+      $("#fz-chains tbody").innerHTML = bc.map((r) => {
+        const state = !r.ok ? `<span class="t-watch">${/무료 키 미지원/.test(r.note || "") ? "제외" : "조회 실패"}</span>`
+          : !r.complete ? `<span class="t-watch">과거 기록 채우는 중</span>` : "정상";
+        return `<tr>
+          <td>${esc(chKo(r.chain))}</td><td>${esc(r.symbol)}</td>
+          <td class="num">${(r.freeze || 0).toLocaleString()}</td>
+          <td class="num">${(r.unfreeze || 0).toLocaleString()}</td>
+          <td class="num">${(r.seize || 0).toLocaleString()}</td>
+          <td>${state}${r.note && !/^과거 기록/.test(r.note) ? ` <span class="sig-dim">${esc(r.note.replace(/ — 제외$/, ""))}</span>` : ""}</td>
+        </tr>`;
+      }).join("");
+    }
+
     // 최근 조치
     const short = (a) => (a && a.length > 12 ? a.slice(0, 8) + "…" + a.slice(-4) : a || "—");
     $("#fz-tbl tbody").innerHTML = !(f.events || []).length
-      ? `<tr class="empty-row"><td colspan="5">최근 ${days}일 동안 관측된 조치가 없습니다.</td></tr>`
+      ? `<tr class="empty-row"><td colspan="6">최근 ${days}일 동안 관측된 조치가 없습니다.</td></tr>`
       : (f.events || []).slice(0, 60).map((e) => `<tr>
       <td>${new Date(e.t * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</td>
       <td>${e.issuer} <span class="tname">${e.symbol}</span></td>
+      <td>${esc(chKo(e.chain || "Ethereum"))}</td>
       <td class="kind-${e.kind}">${KIND_KO[e.kind]}</td>
       <td class="fz-addr">${short(e.addr)}</td>
       <td class="num">${e.units ? usd(e.units) : "—"}</td>

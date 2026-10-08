@@ -281,7 +281,7 @@
   <div class="block-head">
     <h2 id="h-freeze">발행사 동결 조치</h2>
     <p class="lead-stat" id="lead-freeze" hidden></p>
-    <p>페그 편차가 시장이 발행사를 어떻게 보는지의 지표라면, 동결 건수는 발행사가 실제로 통제권을 얼마나 행사하는지의 지표입니다. 블랙리스트 등재와 잔액 소각은 전부 이벤트 로그로 남습니다.</p>
+    <p>페그 편차가 시장이 발행사를 어떻게 보는지의 지표라면, 동결 건수는 발행사가 실제로 통제권을 얼마나 행사하는지의 지표입니다. 블랙리스트 등재와 잔액 소각은 전부 온체인 기록으로 남습니다.</p>
   </div>
   <div class="fz-figs">
     <div class="fig"><p class="fig-k">동결</p><p class="fig-v" id="fz-freeze">—</p><p class="fig-s" id="fz-window">&nbsp;</p></div>
@@ -294,7 +294,21 @@
     <span>발행사</span><span class="fz-axis" id="fz-axis"></span><span class="gunit">건수</span>
   </div>
   <ol class="gauge" id="fz-lanes"></ol>
-  <p class="foot">가로축은 조회 기간입니다. 진한 표식은 동결, 붉은 표식은 잔액 소각입니다. 해제는 표시하지 않습니다.</p>
+  <p class="foot">가로축은 조회 기간입니다. 진한 표식은 동결, 붉은 표식은 잔액 소각입니다. 해제는 표시하지 않습니다. 발행사 줄에 커서를 올리면 체인별 건수가 보입니다.</p>
+
+  <div class="panel fz-chain-panel" id="fz-chains-wrap" hidden>
+    <h3>체인별 조치</h3>
+    <div class="tablewrap tw-inner">
+      <table id="fz-chains">
+        <thead><tr>
+          <th scope="col">체인</th><th scope="col">종목</th><th scope="col" class="num">동결</th>
+          <th scope="col" class="num">해제</th><th scope="col" class="num">소각</th><th scope="col">수집 상태</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="foot">이더리움 계열(이더리움·아비트럼·폴리곤)은 블랙리스트 등재 이벤트, 트론은 USDT 블랙리스트 이벤트, 솔라나는 발행사의 동결 권한 주소가 실행한 계정 동결(FreezeAccount) 명령을 셉니다. 솔라나는 주소가 아니라 토큰 계정 단위라 한 사람이 여러 건으로 잡힐 수 있습니다. BNB 체인의 USDT·USDC 는 바이낸스가 발행한 브리지 토큰이라 제외하고, 베이스·옵티미즘·아발란체는 무료 조회 키로 막혀 있어 제외합니다. 솔라나 USDT 는 기록이 많아 과거분을 회차마다 나눠 채웁니다.</p>
+  </div>
 
   <div class="cols fz-cols">
     <div class="panel fz-recent">
@@ -302,7 +316,7 @@
       <div class="tablewrap tw-inner">
         <table id="fz-tbl">
           <thead><tr>
-            <th scope="col">일자</th><th scope="col">발행사</th><th scope="col">조치</th>
+            <th scope="col">일자</th><th scope="col">발행사</th><th scope="col">체인</th><th scope="col">조치</th>
             <th scope="col">대상 주소</th><th scope="col" class="num">규모</th>
           </tr></thead>
           <tbody></tbody>
@@ -315,7 +329,7 @@
         <li>동결은 발행사가 단독으로 실행합니다. 사법적 판단이 선행됐는지는 온체인에서 확인되지 않습니다.</li>
         <li>여기 남는 주소는 발행사가 공개적으로 등재한 대상입니다. 이 사이트는 발행사의 조치를 집계할 뿐 특정인을 추적하지 않습니다.</li>
         <li>소각은 동결보다 강한 조치입니다. 잔액이 사라지므로 되돌릴 수 없습니다.</li>
-        <li>이더리움 메인넷 기준입니다. 다른 체인의 조치는 포함되지 않습니다.</li>
+        <li>이더리움·트론·솔라나와 주요 이더리움 계열 체인을 봅니다. 조회가 실패한 체인은 위 ‘체인별 조치’ 표에 표시됩니다.</li>
       </ul>
       <p class="foot" id="fz-notes"></p>
     </div>
@@ -325,7 +339,7 @@
 <div class="wrap empty-state" id="freeze-empty">
   <div class="empty-box">
     <h3>아직 표시할 데이터가 없습니다</h3>
-    <p>발행사 동결·소각 이벤트는 이더리움 온체인 로그에서 수집합니다.</p>
+    <p>발행사 동결·소각 이벤트는 이더리움 계열·트론·솔라나 온체인 기록에서 수집합니다.</p>
     <p class="empty-reason">필요 시크릿: <code>ETHERSCAN_API_KEY</code> · 확인 위치: <strong>Actions</strong> 탭 → “수집 및 배포” 워크플로 → “동결 조치 수집” 단계 로그</p>
   </div>
 </div>

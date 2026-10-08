@@ -35,7 +35,7 @@ python -m http.server 8000 --directory site
 
 ```
 etl/fetch.py            수집 + 지표 계산 → site/data/*.json
-etl/fetch_freeze.py     발행사 동결·소각 조치 (Etherscan, 선택)
+etl/fetch_freeze.py     발행사 동결·소각 조치 (이더리움 계열: Etherscan 키 / 트론·솔라나: 키 불필요)
 etl/fetch_premium.py    김치프리미엄 (키 불필요)
 etl/fetch_flow.py       국경 간 온체인 코너 자금흐름 · 이더리움 (2026-10-07 수집·표시 중단, 코드만 보존)
 etl/fetch_flow_xrp.py   국경 간 온체인 코너 자금흐름 · XRP Ledger (키 불필요)
@@ -171,6 +171,8 @@ python etl/fetch_freeze.py --days 365
 ```
 
 키가 없으면 아무것도 하지 않고 종료하며, 사이트는 해당 섹션을 숨깁니다. CI에서는 저장소 시크릿 `ETHERSCAN_API_KEY`를 등록하면 자동으로 돌아갑니다.
+
+**다중 체인(2026-10-08)**: 이더리움·아비트럼·폴리곤은 Etherscan V2(같은 키, `chainid`만 다름), 트론 USDT 는 TronGrid 공개 API(`etl/freeze_tron.py`, 선택 시크릿 `TRONGRID_API_KEY`), 솔라나 USDC·USDT·PYUSD 는 공개 RPC(`etl/freeze_solana.py`, 선택 시크릿 `SOLANA_RPC_URL`)로 모읍니다. 솔라나는 블랙리스트 이벤트 대신 민트의 동결 권한 주소가 서명한 FreezeAccount/ThawAccount 명령을 세며, USDT 는 거래가 많아 `site/data/freeze_state_solana.json` 에 어디까지 봤는지 남기고 회차마다 나눠 채웁니다. 베이스·옵티미즘·아발란체는 Etherscan 무료 키로 막혀 있어 제외(`PAID_CHAINS`), BNB 체인의 USDT·USDC 는 바이낸스 발행 브리지 토큰이라 제외합니다.
 
 Etherscan은 2025년 8월 V1 API를 종료했습니다. 이 코드는 V2(`api.etherscan.io/v2/api` + `chainid` 파라미터)를 씁니다. 키 하나로 여러 체인을 조회할 수 있으므로 `ISSUERS`에 `chainid`만 바꿔 추가하면 다른 체인으로 확장됩니다.
 

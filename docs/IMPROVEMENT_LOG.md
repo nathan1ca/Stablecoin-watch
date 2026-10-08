@@ -2,6 +2,16 @@
 
 매일 자동 점검이 처리한 항목과 남은 백로그. 최신이 위.
 
+## 2026-10-08 (6) 발행사 동결 조치 다중 체인 (auto/2026-10-08-6)
+
+- 이더리움만 보던 동결·해제·소각 수집을 트론·솔라나·아비트럼·폴리곤으로 확장(네이선 요청).
+  - 이더리움 계열: 같은 Etherscan V2 키로 `chainid` 만 바꿔 조회. 아비트럼·폴리곤 USDC(네이티브), 아비트럼·폴리곤 USDT 추가. 베이스·옵티미즘·아발란체는 무료 키 미지원("Free API access is not supported for this chain", 2026-10-08 CI)이라 `PAID_CHAINS` 로 제외. BNB 체인은 바이낸스 발행 브리지 토큰이라 제외.
+  - 트론 USDT: TronGrid 공개 API(`etl/freeze_tron.py`), AddedBlackList·RemovedBlackList·DestroyedBlackFunds.
+  - 솔라나 USDC·USDT·PYUSD: 공개 RPC(`etl/freeze_solana.py`). 민트의 동결 권한 주소를 체인에서 읽어 그 주소가 서명한 FreezeAccount/ThawAccount 를 센다. USDT 는 동결 권한 주소가 일반 송금에도 쓰여 1년치 1만 건 이상 → 상태 파일(`site/data/freeze_state_solana.json`)로 증분 수집(회차마다 새 거래 전부 + 과거 500건).
+- 2026-10-08 CI 시험(최근 30일): 트론 USDT 동결 517·해제 5·소각 66건(이더리움 USDT 동결 36·소각 11건의 10배 이상), 아비트럼 USDC 62·폴리곤 USDC 60건, 이더리움 USDC 70·PYUSD 22·USDP 20건. 아비트럼·폴리곤 USDT 는 두 가지 이벤트 이름 후보 모두 0건(이름 미확인으로 표시). 솔라나 USDC·PYUSD 30일 0건(USDC 최근 동결 2026-08-10), USDT 과거분 채우는 중.
+- 화면: 요약 카드 기간에 체인 수, 핵심 문장에 체인 목록, 발행사 줄 위 체인별 건수(커서), '체인별 조치' 표(체인·종목·동결·해제·소각·수집 상태), 최근 조치 표에 체인 열. 시간축 표식은 잘린 이벤트 목록 대신 일별 집계(`daily`)로 그린다(트론 건수가 많아 최근 500건만으로는 오래된 표식이 빠짐).
+- 남은 일: 아비트럼·폴리곤 USDT(USDT0) 실제 동결 이벤트 이름 확인, 솔라나 USDT 과거분 채움 완료 확인(며칠), 무료 키 미지원 체인은 유료 키가 생기면 `PAID_CHAINS` 에서 빼기.
+
 ## 2026-10-08 (4) 최근 24시간 뉴스 탭 (auto/2026-10-08-4)
 
 - 새 수집기 `etl/fetch_news.py`(표준 라이브러리, 키 불필요) + 피드 목록 `etl/news_feeds.json` → `site/data/news.json`. 매시 ETL 에 단계 추가(실패 허용), 작업 브랜치 검증에 `--probe`(피드별 응답·24시간 건수·반영 건수).

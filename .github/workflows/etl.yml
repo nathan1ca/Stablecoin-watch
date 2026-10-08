@@ -41,10 +41,13 @@ jobs:
         run: python etl/fetch.py
         continue-on-error: true
 
-      # ETHERSCAN_API_KEY 시크릿이 없으면 이 단계는 조용히 건너뛴다.
+      # 발행사 동결·소각: 이더리움 계열(Etherscan V2, ETHERSCAN_API_KEY 필요 — 없으면 이 체인들만
+      # 건너뜀)·트론(TronGrid, 키 선택)·솔라나(공개 RPC, 증분 수집 상태는 site/data/freeze_state_solana.json).
       - name: 동결 조치 수집
         env:
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
         run: python etl/fetch_freeze.py --days 365
         continue-on-error: true
 
