@@ -1288,4 +1288,9 @@ html[data-theme="dark"]{--r-cash:#7FB2D6;--r-tbill:#5B95C4;--r-repo:#3E6E99;--r-
 /* 온체인 이체 건수 — 일별 추이 미니 그래프 */
 .otx-spark{width:120px;height:24px;display:block}
 .otx-spark polyline{fill:none;stroke:var(--accent);stroke-width:1.4;vector-effect:non-scaling-stroke}
+.otx-src{display:inline-block;margin-left:.4rem;font-size:.62rem;font-family:var(--sans);color:var(--dim);
+  border:1px solid var(--rule);border-radius:3px;padding:0 .25rem;line-height:1.4;vertical-align:middle;cursor:help}
+.otx-src.t-watch{color:var(--watch);border-color:currentColor}
+.otx-limits{margin-top:1rem}
+.otx-limits li{margin-bottom:.35rem}
 

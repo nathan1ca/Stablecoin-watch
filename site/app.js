@@ -2048,13 +2048,27 @@
       const pts = v.map((y, i) => `${(i / (v.length - 1) * 100).toFixed(1)},${(22 - (y - mn) / ((mx - mn) || 1) * 20).toFixed(1)}`).join(" ");
       return `<svg class="otx-spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`;
     };
-    $("#otx-tbl tbody").innerHTML = o.rows.map((r) => `<tr>
-      <td><span class="tsym">${esc(r.symbol)}</span></td>
+    const shareCell = (r) => {
+      if (r.chain_share_pct == null) {
+        return r.chain_share_lt != null
+          ? `<td class="num t-watch" title="${esc(`발행량 상위 6개 체인에 들지 않음 — ${r.chain_share_lt}% 미만`)}">&lt;${r.chain_share_lt}%</td>`
+          : `<td class="num"><span class="sig-dim">—</span></td>`;
+      }
+      const low = r.chain_share_pct < 50;
+      const tip = `발행량 중 ${CH[r.chain] || r.chain} 비중 ${r.chain_share_pct}%`
+        + ((r.other_chains || []).length ? ` · 세지 못한 체인: ${r.other_chains.join(", ")}` : "");
+      return `<td class="num${low ? " t-watch" : ""}" title="${esc(tip)}">${r.chain_share_pct >= 99.5 ? "≈100" : r.chain_share_pct.toFixed(r.chain_share_pct < 10 ? 1 : 0)}%</td>`;
+    };
+    $("#otx-tbl tbody").innerHTML = o.rows.map((r) => `<tr${r.complete === false ? ' class="otx-partial"' : ""}>
+      <td><span class="tsym">${esc(r.symbol)}</span>${r.source && /Etherscan/.test(r.source)
+        ? `<span class="otx-src" title="Coin Metrics 무료 범위 밖이라 Etherscan 로그를 직접 세었습니다(이더리움 몫만)">직접 집계</span>` : ""}${r.complete === false
+        ? `<span class="otx-src t-watch" title="${esc(`처음 30일치를 채우는 중 — 지금은 ${r.days}일(${r.from}~${r.to})만 셌습니다`)}">${r.days}일만</span>` : ""}</td>
       <td>${esc(CH[r.chain] || r.chain)}</td>
       <td class="num" title="${r.tx_30d.toLocaleString()}건 (${esc(r.from)} ~ ${esc(r.to)})">${cnt(r.tx_30d)}건</td>
       <td class="num" title="${(r.tx_avg || 0).toLocaleString()}건">${cnt(r.tx_avg)}</td>
       <td class="num">${r.chg_pct == null ? "—" : chgTxt(r.chg_pct)}</td>
       <td class="num"${r.active_avg != null ? ` title="${r.active_avg.toLocaleString()}개"` : ""}>${r.active_avg == null ? "—" : cnt(r.active_avg)}</td>
+      ${shareCell(r)}
       <td title="최소 ${Math.min(...r.daily.map((x) => x[1])).toLocaleString()} · 최대 ${Math.max(...r.daily.map((x) => x[1])).toLocaleString()}">${spark(r.daily)}</td>
     </tr>`).join("");
     tipify($("#otx-tbl"));
@@ -2064,7 +2078,16 @@
     setLead("otx", `최근 ${m.window_days || 30}일 ${esc((m.chains_covered || []).map((c) => CH[c] || c).join("·"))}에서 스테이블코인 이체가 ${bold(cnt(all) + "건")} 기록됐습니다.`
       + (top ? ` 가장 많은 곳은 ${bold(esc(top.symbol) + " " + esc(CH[top.chain] || top.chain))}(${cnt(top.tx_30d)}건)` : "")
       + (usdt && all ? `이고, USDT 가 전체의 ${Math.round(usdt / all * 100)}%입니다.` : "입니다."));
-    const bad = Object.entries(m.status || {}).filter(([, v]) => v !== "ok").map(([k]) => k);
+    const lim = m.not_covered || [];
+    const partial = o.rows.filter((r) => (r.chain_share_pct != null && r.chain_share_pct < 50) || r.chain_share_lt != null);
+    const lw = $("#otx-limits");
+    if (lw) {
+      lw.hidden = !lim.length;
+      $("#otx-limits-list").innerHTML = lim.map((x) => `<li><b class="tsym">${esc(x.symbol)}</b> — ${esc(x.missing)}</li>`).join("")
+        + `<li>‘이 체인 비중’이 50% 미만인 줄(${partial.map((r) => esc(r.symbol) + " " + esc(CH[r.chain] || r.chain)).join("·") || "없음"})은 그 종목 이체의 일부만 보여 줍니다. 종목끼리 건수를 비교할 때 주의하세요.</li>`
+        + `<li>USDS·USD1·USDG·RLUSD 는 Coin Metrics 무료 범위 밖이라 Etherscan 로그를 직접 세었습니다(‘직접 집계’ 표시). 활동 주소 수와 전 30일 대비는 없습니다.</li>`;
+    }
+    const bad = Object.entries(m.status || {}).filter(([, v]) => v !== "ok").map(([k, v]) => `${k}(${v})`);
     $("#otx-note").textContent = `출처: ${m.source || "Coin Metrics"}. ${m.note || ""} `
       + `범위 밖 체인: ${(m.chains_missing || []).join("·")} — 솔라나·BNB 등의 이체는 빠져 있어 전체 이체 건수보다 작습니다.`
       + (bad.length ? ` 이번 수집에서 받지 못한 항목: ${bad.join(", ")}.` : "");
