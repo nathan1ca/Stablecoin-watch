@@ -64,5 +64,43 @@ class TestBuild(unittest.TestCase):
         self.assertEqual(r["daily"][0]["total_krw"], 2e9)
 
 
+class TestShare24h(unittest.TestCase):
+    def test_parse_tickers(self):
+        self.assertEqual(kv.parse_ticker("upbit", [{"acc_trade_price_24h": 1.5e10}]), 1.5e10)
+        self.assertEqual(kv.parse_ticker("bithumb", [{"acc_trade_price_24h": "2e9"}]), 2e9)
+        self.assertEqual(kv.parse_ticker("coinone", {"tickers": [{"quote_volume": "3000"}]}), 3000.0)
+        self.assertEqual(kv.parse_ticker("digitalx", {"success": True, "data": [{"quoteVolume": "69311143400"}]}),
+                         69311143400.0)
+        self.assertEqual(kv.parse_ticker("gopax", {"volume": 10, "close": 1350}), 13500.0)
+        self.assertIsNone(kv.parse_ticker("coinone", {"tickers": []}))
+        self.assertIsNone(kv.parse_ticker("upbit", {"error": {"name": "404"}}))
+
+    def test_pairs_from_listings(self):
+        l = {"assets": {"USDT": {"exchanges": {"upbit": {"markets": ["KRW", "BTC"]}, "gopax": {"markets": ["KRW"]}}},
+                        "USDC": {"exchanges": {"upbit": {"markets": ["BTC"]}}}}}
+        self.assertEqual(kv.krw_pairs(l), [("gopax", "USDT"), ("upbit", "USDT")])
+
+    def test_global_picks_largest_same_symbol(self):
+        g = kv.global_volumes([{"symbol": "usdt", "id": "tether", "market_cap": 1e11, "total_volume": 5e10},
+                               {"symbol": "usdt", "id": "fake-usdt", "market_cap": 1e6, "total_volume": 9e12},
+                               {"symbol": "usdc", "id": "usd-coin", "market_cap": 7e10, "total_volume": None}])
+        self.assertEqual(g, {"USDT": {"usd": 5e10, "cg_id": "tether"}})
+
+    def test_build_share(self):
+        local = {("upbit", "USDT"): 1.35e11, ("bithumb", "USDT"): 1.35e11, ("coinone", "USDT"): RuntimeError("x"),
+                 ("upbit", "RLUSD"): 1.35e9, ("bithumb", "RLUSD"): None}
+        r = kv.build_share(local, {"USDT": {"usd": 5e10, "cg_id": "tether"}}, 1350.0)
+        u = r["assets"]["USDT"]
+        self.assertEqual(u["krw_24h"], 270_000_000_000)
+        self.assertEqual(u["usd_24h"], 200_000_000)
+        self.assertEqual(u["share_pct"], 0.4)
+        self.assertEqual(r["assets"]["RLUSD"]["share_pct"], None)     # 전 세계 값 없음
+        self.assertEqual(r["status"]["coinone:USDT"][:2], "실패")
+        self.assertIn("응답 형식", r["status"]["bithumb:RLUSD"])
+        r2 = kv.build_share(local, RuntimeError("429"), 1350.0)
+        self.assertTrue(r2["global_status"].startswith("실패"))
+        self.assertIsNone(r2["assets"]["USDT"]["share_pct"])
+
+
 if __name__ == "__main__":
     unittest.main()

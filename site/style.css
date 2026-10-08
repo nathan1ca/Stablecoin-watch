@@ -1271,3 +1271,6 @@ html[data-theme="dark"]{--r-cash:#7FB2D6;--r-tbill:#5B95C4;--r-repo:#3E6E99;--r-
   padding:.2rem .5rem;font-size:.76rem;color:var(--dim);line-height:1.4;overflow:visible}
 .res-open{font-family:var(--sans);font-size:.8rem;white-space:nowrap}
 
+/* 국내 거래 비중(24시간) — '국내 거래소' 칸 아래 줄 */
+.kr-share{display:block;margin-top:.2rem;font-size:.7rem;color:var(--dim);font-family:var(--mono);white-space:nowrap;cursor:help}
+
