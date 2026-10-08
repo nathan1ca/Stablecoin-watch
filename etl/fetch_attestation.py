@@ -94,6 +94,8 @@ def build(entries: list[dict], current_supply: dict[str, float], not_covered: li
             "attestor": e.get("attestor"), "attestor_note": e.get("attestor_note"), "report_type": e.get("report_type"),
             "published_date": e.get("published_date"),
             "reserves_total": e.get("reserves_total"), "reserves_currency": e.get("reserves_currency"),
+            "reserves_breakdown": e.get("reserves_breakdown"),
+            "reserves_breakdown_basis": e.get("reserves_breakdown_basis"),
             "verify": e.get("verify"), "note": e.get("note"),
         })
     rows.sort(key=lambda r: -r["days_since"])

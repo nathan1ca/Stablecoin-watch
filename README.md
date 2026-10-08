@@ -167,7 +167,7 @@ HHI 2,500은 미국 수평결합지침의 고집중 시장 판단선을 그대�
 ```bash
 export ETHERSCAN_API_KEY=...        # https://etherscan.io/apis 무료
 python etl/fetch_freeze.py --probe  # 시그니처와 topic0 확인
-python etl/fetch_freeze.py --days 365
+python etl/fetch_freeze.py --days 90
 ```
 
 키가 없으면 아무것도 하지 않고 종료하며, 사이트는 해당 섹션을 숨깁니다. CI에서는 저장소 시크릿 `ETHERSCAN_API_KEY`를 등록하면 자동으로 돌아갑니다.

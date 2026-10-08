@@ -17,6 +17,21 @@
     if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e8 ? 0 : 1) + "M";
     return Math.round(n).toLocaleString("en-US");
   };
+  // 원화 환산 — 스냅숏의 USD/KRW 기준환율(Frankfurter)로. "246.7조원", "5,620억원".
+  let FX_KRW = null, FX_DATE = "", FX_EUR = null; // FX_EUR: 1달러당 유로
+  const krwWon = (w) => {
+    if (w == null || !isFinite(w)) return "";
+    const a = Math.abs(w);
+    if (a >= 1e12) return (w / 1e12).toFixed(a >= 1e14 ? 0 : 1) + "조원";
+    if (a >= 1e8) return Math.round(w / 1e8).toLocaleString("ko-KR") + "억원";
+    return "1억원 미만";
+  };
+  const wonOf = (usdV) => (FX_KRW && usdV != null ? krwWon(usdV * FX_KRW) : "");
+  const wonSub = (usdV) => {
+    const t = wonOf(usdV);
+    return t ? `<span class="krw-sub">${t}</span>` : "";
+  };
+
   // 기준선처럼 딱 떨어지는 값은 ".0" 을 떼어 읽는다("$50.0M" → "$50M").
   const usdR = (n) => usd(n).replace(/\.0(?=[MBT]$)/, "");
   // 감시목록·소형 통화용. 백만 달러 아래도 읽히게 K 단위를 쓴다.
@@ -454,7 +469,7 @@
         <td class="td-ex">${krLogos(a.symbol)}</td>
         <td>${ok ? esc(a.mechanism_ko) : "—"}</td>
         <td>${esc(a.peg_currency)}</td>
-        <td class="num" title="${ok ? esc(localAmt(a.circulating, a.peg_currency)) : ""}">${ok ? "$" + usdC(a.mcap_usd) : "—"}</td>
+        <td class="num" title="${ok ? esc(localAmt(a.circulating, a.peg_currency)) : ""}">${ok ? "$" + usdC(a.mcap_usd) + wonSub(a.mcap_usd) : "—"}</td>
         <td class="num">${ok ? shareTxt(a.share, a.mcap_usd) : "—"}</td>
         <td class="num t-${g}"${thin ? ' title="유통액이 작아 가격 신뢰도가 낮습니다 — 등급 미부여"' : ""}>${
           ok && a.dev_bp_local != null ? signed(a.dev_bp_local, 1) + (thin ? "*" : "") : "—"}</td>
@@ -1279,7 +1294,7 @@
       <td class="td-ex">${krLogos(a.symbol)}</td>
       <td>${a.mechanism_ko}</td>
       <td>${a.peg_currency}</td>
-      <td class="num">$${usd(a.mcap_usd)}</td>
+      <td class="num">$${usd(a.mcap_usd)}${wonSub(a.mcap_usd)}</td>
       <td class="num">${a.share.toFixed(2)}%</td>
       <td class="num t-${a.grade_peg}"${a.dev_bp == null && isYieldBearing(a)
         ? ' title="이자부 토큰화 상품 — $1 고정이 목표가 아니라 편차를 계산하지 않습니다"' : ""
@@ -1341,11 +1356,20 @@
     // 시간축
     const now = Math.floor(Date.now() / 1000), from = now - days * 86400;
     const at = (ts) => clamp((ts - from) / (now - from), 0, 1) * 100;
-    const label = (ts) => new Date(ts * 1000).toLocaleDateString("ko-KR", { year: "2-digit", month: "short" });
-    $("#fz-axis").innerHTML =
-      `<span style="left:0%">${label(from)}</span>` +
-      `<span style="left:50%">${label((from + now) / 2)}</span>` +
-      `<span style="left:100%">${label(now)}</span>`;
+    // 3개월 이하면 월·일, 그보다 길면 연·월. 눈금은 매월 1일(짧은 기간) 또는 양끝·가운데.
+    const brief = days <= 120;
+    const label = (ts) => new Date(ts * 1000).toLocaleDateString("ko-KR",
+      brief ? { month: "short", day: "numeric" } : { year: "2-digit", month: "short" });
+    let marks = [from, (from + now) / 2, now];
+    if (brief) {
+      marks = [];
+      const d0 = new Date(from * 1000);
+      for (let d = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth() + 1, 1)); d.getTime() / 1000 < now; d.setUTCMonth(d.getUTCMonth() + 1)) {
+        marks.push(d.getTime() / 1000);
+      }
+    }
+    $("#fz-axis").innerHTML = marks.map((ts, i) =>
+      `<span style="left:${at(ts).toFixed(2)}%"${brief ? ' class="mid"' : ""}>${label(ts)}</span>`).join("");
 
     // 발행사 레인
     const byIssuer = {};
@@ -1864,6 +1888,8 @@
     // 정렬: 등급 나쁜 순 → 경과일 긴 순
     const rows = a.entries.slice().sort((x, y) =>
       (GRADE_RANK[y.grade] || 0) - (GRADE_RANK[x.grade] || 0) || (y.days_since || 0) - (x.days_since || 0));
+    // 토큰 개수 → 달러(유로 토큰은 기준환율로) — 원화 병기용
+    const toUsd = (v, e) => v == null ? null : e.reserves_currency === "EUR" ? (FX_EUR ? v / FX_EUR : null) : v;
     $("#attest-tbl tbody").innerHTML = rows.map((e) => {
       const ratio = e.reserves_total != null && e.reported_circulating ? e.reserves_total / e.reported_circulating * 100 : null;
       const why = e.days_since >= e.breach_days ? "경과일 경보" : e.days_since >= e.watch_days ? "경과일 주의"
@@ -1875,14 +1901,17 @@
       <td>${esc(e.as_of_date)}${e.cadence ? `<span class="att-sub">${esc(e.cadence)} 공표</span>` : ""}</td>
       <td class="num t-${e.days_since >= e.breach_days ? "breach" : e.days_since >= e.watch_days ? "watch" : "sound"}"
         title="주의 ${e.watch_days}일 · 경보 ${e.breach_days}일(공표 주기 ${e.cadence_days || 30}일 기준)">${e.days_since}일</td>
-      <td class="num" title="${esc(num(e.reported_circulating) + (e.verify ? " — " + e.verify : ""))}">${cmp(e.reported_circulating)}${e.verified ? "" : (e.reported_circulating == null ? "" : "*")}</td>
-      <td class="num" title="${esc(num(e.current_circulating))} (DefiLlama)">${cmp(e.current_circulating)}</td>
+      <td class="num" title="${esc(num(e.reported_circulating) + (e.verify ? " — " + e.verify : ""))}">${cmp(e.reported_circulating)}${e.verified ? "" : (e.reported_circulating == null ? "" : "*")}${wonSub(toUsd(e.reported_circulating, e))}</td>
+      <td class="num" title="${esc(num(e.current_circulating))} (DefiLlama)">${cmp(e.current_circulating)}${wonSub(toUsd(e.current_circulating, e))}</td>
       <td class="num t-${e.drift_pct == null ? "unknown" : Math.abs(e.drift_pct) >= 8 ? "breach" : Math.abs(e.drift_pct) >= 3 ? "watch" : "sound"}">${e.drift_pct != null ? signed(e.drift_pct, 1, "%") : "—"}</td>
       <td class="num"${e.reserves_total != null ? ` title="준비금 ${cur}${num(e.reserves_total)}"` : ""}>${ratio != null ? ratio.toFixed(2) + "%" : "—"}</td>
       <td><span class="pill is-${e.grade} t-${e.grade}"${why ? ` title="${why}"` : ""}>${GRADE_KO[e.grade] || e.grade}</span></td>
     </tr>`;
     }).join("");
+    tipify($("#attest-tbl"));
+    renderReserves(a.entries, toUsd);
     $("#attest-note").textContent = "종목명을 누르면 원문 보고서가 열립니다. 발행량은 토큰 개수(EURC 는 유로)이고, 보고 시점 발행량은 보고서 표의 기준일 값을 그대로 옮겼습니다. "
+      + (FX_KRW ? `원화는 ${FX_DATE} 기준환율(1달러 ${Math.round(FX_KRW).toLocaleString()}원)로 환산한 참고값입니다. ` : "")
       + "보고서는 특정 시점의 준비금 확인이지 회계감사가 아닙니다. 드리프트는 보고 이후 성장도 포함하므로 그 자체로 부실을 뜻하지 않습니다. " + (a.meta.maintenance_note || "");
 
     const gaps = a.not_covered || [];
@@ -1908,6 +1937,64 @@
       sev: e.days_since >= e.breach_days ? "breach" : "watch", tab: "attest", label: "어테스테이션",
       html: `${bold(e.symbol)} 준비금 보고서 ${bold(e.days_since + "일")} 경과 <span class="sig-dim">· ${esc(e.cadence || "월간")} 공표 · 기준일 ${esc(e.as_of_date)}</span>`,
     })));
+  }
+
+  // 준비금 구성 — 보고서의 준비자산 항목을 종류별로 쌓은 막대
+  const RES_KIND = [
+    ["cash", "현금·예금", true], ["tbill", "국채", true], ["repo", "국채 리포", true], ["fund", "국채 MMF·펀드", true],
+    ["gold", "금", false], ["btc", "비트코인", false], ["equity", "주식", false], ["loan", "담보대출", false],
+    ["other", "기타", false], ["settle", "결제 시차", false],
+  ];
+  function renderReserves(entries, toUsd) {
+    const wrap = $("#att-res-wrap");
+    if (!wrap) return;
+    const have = entries.filter((e) => (e.reserves_breakdown || []).length)
+      .sort((x, y) => (toUsd(y.reserves_total, y) || 0) - (toUsd(x.reserves_total, x) || 0));
+    wrap.hidden = !have.length;
+    if (!have.length) return;
+    const pct = (v) => (v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2)) + "%";
+    const used = new Set();
+    $("#att-res").innerHTML = have.map((e) => {
+      const cur = e.reserves_currency === "EUR" ? "€" : "$";
+      const pos = e.reserves_breakdown.filter((r) => r.amount > 0);
+      const base = pos.reduce((t, r) => t + r.amount, 0);
+      const liquid = pos.filter((r) => (RES_KIND.find((k) => k[0] === r.k) || [])[2]).reduce((t, r) => t + r.amount, 0);
+      const segs = RES_KIND.map(([k, name]) => {
+        const lines = e.reserves_breakdown.filter((r) => r.k === k);
+        const sum = lines.filter((r) => r.amount > 0).reduce((t, r) => t + r.amount, 0);
+        if (!lines.length) return "";
+        used.add(k);
+        const detail = lines.map((r) => `${r.label} ${cur}${usd(r.amount)}`).join(" · ");
+        const won = wonOf(toUsd(lines.reduce((t, r) => t + r.amount, 0), e));
+        const tip = `${e.symbol} ${name} ${sum > 0 ? pct(sum / base * 100) : ""} — ${detail}${won ? ` (약 ${won})` : ""}`;
+        return sum > 0
+          ? `<i class="res-seg res-${k}" style="width:${(sum / base * 100).toFixed(3)}%" title="${esc(tip)}"></i>` : "";
+      }).join("");
+      const lq = liquid / base * 100;
+      return `<li class="res-row">
+        <span class="res-sym"><b class="tsym">${esc(e.symbol)}</b><span class="att-sub">${esc(e.as_of_date)} · ${cur}${usd(e.reserves_total)}${wonOf(toUsd(e.reserves_total, e)) ? " · " + wonOf(toUsd(e.reserves_total, e)) : ""}</span></span>
+        <span class="res-bar" role="img" aria-label="${esc(e.symbol)} 준비금 구성, 현금성 ${pct(lq)}">${segs}</span>
+        <span class="res-liq t-${lq >= 99 ? "sound" : lq >= 90 ? "watch" : "breach"}" title="${esc(e.reserves_breakdown_basis || "")}">${pct(lq)}</span>
+      </li>`;
+    }).join("");
+    $("#att-res-legend").innerHTML = RES_KIND.filter(([k]) => used.has(k))
+      .map(([k, name, liq]) => `<span><i class="res-sw res-${k}"></i>${name}${liq ? "" : ""}</span>`).join("");
+    // 구성을 옮기지 못한 종목도 줄은 남기고, 이유와 원문 링크를 붙인다.
+    const missE = entries.filter((e) => !(e.reserves_breakdown || []).length);
+    const safe = (u) => (/^https:\/\//i.test(u || "") ? u : "#");
+    $("#att-res").insertAdjacentHTML("beforeend", missE.map((e) => `<li class="res-row res-miss">
+        <span class="res-sym"><b class="tsym">${esc(e.symbol)}</b><span class="att-sub">${esc(e.as_of_date)}${e.reserves_total ? ` · $${usd(e.reserves_total)}${wonOf(e.reserves_total) ? " · " + wonOf(e.reserves_total) : ""}` : ""}</span></span>
+        <span class="res-bar res-bar-empty"><span>구성 미입력 — ${esc(e.reserves_breakdown_basis || "원문을 아직 옮기지 못했습니다")}.</span></span>
+        <a class="res-liq res-open" href="${esc(safe(e.source_url))}" target="_blank" rel="noopener noreferrer">원문 보기 ↗</a>
+      </li>`).join(""));
+    const miss = missE.map((e) => e.symbol);
+    $("#att-res-note").textContent =
+      "미국 GENIUS Act 는 결제용 스테이블코인의 준비자산을 현금·요구불예금, 만기 93일 이하 미 국채, 국채 담보 리포, 이런 자산에만 투자하는 MMF 등으로 제한합니다. "
+      + "금·비트코인·주식·담보대출은 가격이 움직이거나 회수에 시간이 걸려 대량 상환 때 바로 현금으로 바꾸기 어렵습니다. "
+      + "오른쪽 비율 색은 현금성 99% 이상 초록, 90% 이상 주황, 그 아래 빨강입니다(화면 표시용, 등급에는 쓰지 않음). "
+      + "USDC·AUSD 는 운용 펀드(Circle Reserve Fund 등)가 들고 있는 자산까지 풀어서 셌습니다. 결제 시차 순액은 막대에서 뺐습니다."
+      + (miss.length ? ` ${miss.join("·")} 는 아직 구성을 옮기지 못했습니다 — 줄 오른쪽 ‘원문 보기’로 발행사 보고서를 직접 확인하세요.` : "");
+    tipify(wrap);
   }
 
   // ── 오늘의 뉴스 요약 ─────────────────────
@@ -2202,6 +2289,46 @@
     putSignals("listings", sig);
   }
 
+  // ── 설명 말풍선 ─────────────────────────────────────────
+  // 브라우저 기본 title 말풍선은 늦게 뜨거나(데스크톱) 아예 안 떠서(터치) 커서만 '?' 로 바뀌었다.
+  // abbr[title] 과 표 칸의 title 을 data-tip 으로 옮겨 바로 뜨는 말풍선으로 보여 준다.
+  let TIP = null, TIP_EL = null;
+  function tipify(root) {
+    (root || document).querySelectorAll("abbr[title], [data-tipify] [title]").forEach((el) => {
+      el.dataset.tip = el.getAttribute("title");
+      el.removeAttribute("title");
+      if (!el.hasAttribute("tabindex") && !/^(A|BUTTON)$/.test(el.tagName)) el.tabIndex = 0;
+    });
+  }
+  function tipShow(el) {
+    if (!TIP) return;
+    TIP_EL = el;
+    TIP.textContent = el.dataset.tip;
+    TIP.hidden = false;
+    const r = el.getBoundingClientRect(), w = TIP.offsetWidth, h = TIP.offsetHeight;
+    const vw = document.documentElement.clientWidth;
+    let x = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), vw - w - 8);
+    let y = r.bottom + 8;
+    if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 8);
+    TIP.style.left = x + "px"; TIP.style.top = y + "px";
+  }
+  function tipHide() { if (TIP) TIP.hidden = true; TIP_EL = null; }
+  function initTips() {
+    if (TIP) return;
+    TIP = document.createElement("div");
+    TIP.id = "tip"; TIP.setAttribute("role", "tooltip"); TIP.hidden = true;
+    document.body.appendChild(TIP);
+    tipify(document);
+    const near = (t) => (t && t.closest ? t.closest("[data-tip]") : null);
+    document.addEventListener("mouseover", (e) => { const el = near(e.target); if (el) { if (el !== TIP_EL) tipShow(el); } else if (TIP_EL) tipHide(); });
+    document.addEventListener("focusin", (e) => { const el = near(e.target); if (el) tipShow(el); });
+    document.addEventListener("focusout", () => tipHide());
+    // 터치: 탭하면 열고, 다른 곳을 탭하면 닫는다.
+    document.addEventListener("click", (e) => { const el = near(e.target); if (el && el.tagName !== "A") tipShow(el); else if (!el) tipHide(); });
+    window.addEventListener("scroll", tipHide, { passive: true });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") tipHide(); });
+  }
+
   // ── 부팅 ────────────────────────────────────────────────
   async function boot() {
     let snap, hist;
@@ -2236,6 +2363,13 @@
       if (target) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
     });
 
+    {
+      const wm = snap.watchlist && snap.watchlist.meta;
+      FX_KRW = (wm && wm.fx_rates && wm.fx_rates.KRW) || null;
+      FX_DATE = (wm && wm.fx_date) || "";
+      FX_EUR = (wm && wm.fx_rates && wm.fx_rates.EUR) || null;
+    }
+    initTips();
     renderStatus(snap);
     renderGauge(snap);
     renderTable(snap);

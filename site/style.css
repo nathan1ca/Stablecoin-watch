@@ -434,6 +434,7 @@ tbody tr:hover{background:#fff}
 .fz-axis span{position:absolute;bottom:0;transform:translateX(-50%);white-space:nowrap}
 .fz-axis span:first-child{transform:none}
 .fz-axis span:last-child{transform:translateX(-100%)}
+.fz-axis span.mid{transform:translateX(-50%)}
 .fz-lane{position:relative;height:30px}
 .fz-lane::before{content:"";position:absolute;inset-inline:0;top:50%;height:1px;background:var(--rule)}
 .fz-tick{position:absolute;top:50%;width:3px;height:11px;transform:translate(-50%,-50%);
@@ -1228,4 +1229,45 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
 .fz-tick.spike{width:5px;height:22px;opacity:1}
 .fz-guide li{margin-bottom:.55rem}
 .fz-guide strong{font-weight:600}
+
+/* 설명 말풍선(title 대체) */
+#tip{position:fixed;z-index:60;max-width:min(340px,calc(100vw - 16px));padding:.55rem .7rem;
+  background:var(--ink);color:var(--paper);font-size:.8rem;line-height:1.5;border-radius:6px;
+  box-shadow:0 6px 18px rgba(0,0,0,.18);pointer-events:none;white-space:normal;word-break:keep-all}
+[data-tip]{cursor:help}
+abbr[data-tip]{text-decoration:underline dotted;text-underline-offset:2px}
+
+/* 원화 병기 */
+.krw-sub{display:block;font-size:.72rem;color:var(--dim);font-family:var(--sans);line-height:1.2;margin-top:.1rem}
+
+/* 준비금 구성 */
+:root{--r-cash:#123F58;--r-tbill:#2C6595;--r-repo:#5B8DB8;--r-fund:#9BBCD6;
+  --r-gold:#B98A1B;--r-btc:#D9822B;--r-equity:#7A5BA6;--r-loan:#9E2A25;--r-other:#8A929C;--r-settle:#C9D0D8}
+html[data-theme="dark"]{--r-cash:#7FB2D6;--r-tbill:#5B95C4;--r-repo:#3E6E99;--r-fund:#2A4D6E;
+  --r-gold:#D4A63A;--r-btc:#E8964A;--r-equity:#A68AD0;--r-loan:#D9645E;--r-other:#6E7680;--r-settle:#4A525C}
+.att-res{margin-top:1.4rem}
+.res-rows{list-style:none;margin:.8rem 0 .6rem;padding:0}
+.res-row{display:grid;grid-template-columns:minmax(150px,1.1fr) 3fr 4.5rem;gap:.9rem;align-items:center;
+  padding:.45rem 0;border-top:1px solid var(--rule-soft)}
+.res-row:first-child{border-top:0}
+.res-sym{display:flex;flex-direction:column;line-height:1.3}
+.res-bar{display:flex;height:16px;border-radius:3px;overflow:hidden;background:var(--rule-soft)}
+.res-seg{display:block;height:100%;min-width:2px;cursor:help}
+.res-seg + .res-seg{box-shadow:inset 1px 0 0 var(--card)}
+.res-seg:hover,.res-seg:focus{filter:brightness(1.15);outline:none}
+.res-liq{font-family:var(--mono);font-size:.85rem;text-align:right}
+.res-legend{display:flex;flex-wrap:wrap;gap:.35rem 1rem;font-size:.78rem;color:var(--mid)}
+.res-legend span{display:inline-flex;align-items:center;gap:.35rem}
+.res-sw{display:inline-block;width:11px;height:11px;border-radius:2px}
+.res-cash{background:var(--r-cash)}.res-tbill{background:var(--r-tbill)}.res-repo{background:var(--r-repo)}
+.res-fund{background:var(--r-fund)}.res-gold{background:var(--r-gold)}.res-btc{background:var(--r-btc)}
+.res-equity{background:var(--r-equity)}.res-loan{background:var(--r-loan)}.res-other{background:var(--r-other)}
+.res-settle{background:var(--r-settle)}
+@media (max-width:640px){
+  .res-row{grid-template-columns:1fr 3.8rem;grid-template-areas:"s l" "b b";row-gap:.35rem}
+  .res-sym{grid-area:s}.res-bar{grid-area:b}.res-liq{grid-area:l}
+}
+.res-bar-empty{height:auto;min-height:16px;background:none;border:1px dashed var(--rule);border-radius:3px;
+  padding:.2rem .5rem;font-size:.76rem;color:var(--dim);line-height:1.4;overflow:visible}
+.res-open{font-family:var(--sans);font-size:.8rem;white-space:nowrap}
 

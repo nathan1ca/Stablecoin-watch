@@ -1,5 +1,5 @@
 {
-  "_readme": "손으로 관리하는 준비금 보고서(어테스테이션) 목록. 보고서는 PDF로만 공개되고 구조화된 무료 API가 없다. 새 보고서가 나오면 해당 항목의 as_of_date·reported_circulating·source_url 등을 갱신한다. reported_circulating 은 보고서의 'in Circulation / tokens outstanding' 표에서 그대로 옮긴다(기준일이 둘이면 늦은 날짜). cadence_days 는 공표 주기(월간 30, 분기 91)로, 경과일 등급의 기준이 된다. 숫자는 2026-10-07 GitHub Actions 에서 원문 PDF 를 pdftotext 로 직접 읽어 대조했다(verify 필드).",
+  "_readme": "손으로 관리하는 준비금 보고서(어테스테이션) 목록. 보고서는 PDF로만 공개되고 구조화된 무료 API가 없다. 새 보고서가 나오면 해당 항목의 as_of_date·reported_circulating·source_url 등을 갱신한다. reported_circulating 은 보고서의 'in Circulation / tokens outstanding' 표에서 그대로 옮긴다(기준일이 둘이면 늦은 날짜). cadence_days 는 공표 주기(월간 30, 분기 91)로, 경과일 등급의 기준이 된다. 숫자는 2026-10-07 GitHub Actions 에서 원문 PDF 를 pdftotext 로 직접 읽어 대조했다(verify 필드). reserves_breakdown 은 보고서의 준비자산 항목(k: cash 현금·예금, tbill 국채, repo 국채 리포, fund 국채 MMF·토큰화 펀드, gold, btc, equity, loan, other, settle 결제 시차)이며 합계가 reserves_total 과 맞아야 한다(테스트).",
   "entries": [
     {
       "issuer": "Circle",
@@ -17,7 +17,30 @@
       "verified": true,
       "verify": "원문 PDF 표 'USDC in Circulation' 2026-08-31 열(같은 보고서 2026-08-11: 72,034,978,974)",
       "note": "월 2회 기준일. 2026년 9월 보고서는 2026-10-07 현재 미게시.",
-      "attestor_note": "Circle 공시상 빅4. 보고서 서명이 이미지라 법인명은 판독하지 않음"
+      "attestor_note": "Circle 공시상 빅4. 보고서 서명이 이미지라 법인명은 판독하지 않음",
+      "reserves_breakdown": [
+        {
+          "k": "repo",
+          "label": "국채 리포",
+          "amount": 49584000000
+        },
+        {
+          "k": "tbill",
+          "label": "미 국채(펀드 119.2억+직접 13.0억)",
+          "amount": 13219438974
+        },
+        {
+          "k": "cash",
+          "label": "현금(금융기관 95.9억+펀드 내 10.0억)",
+          "amount": 10594506560
+        },
+        {
+          "k": "settle",
+          "label": "결제 시차 순액",
+          "amount": 587079
+        }
+      ],
+      "reserves_breakdown_basis": "Circle Reserve Fund(정부 MMF) 보유분을 풀어 합산 — 펀드 623.2억 달러 + 직접 보유 110.8억 달러(2026-08-31)"
     },
     {
       "issuer": "Circle",
@@ -35,7 +58,20 @@
       "verified": true,
       "verify": "원문 PDF 표 'EURC in Circulation' 2026-08-31 열",
       "note": "준비금은 유로 표시. Circle 공시 현재 유통량은 4.224억 유로(2026-10-07 확인)로, 대시보드가 쓰는 DefiLlama 값(약 4.81억)보다 약 14% 적다 — 드리프트가 그만큼 크게 잡힌다. Circle 기준 보고 이후 증가는 약 +8.2%.",
-      "attestor_note": "Circle 공시상 빅4"
+      "attestor_note": "Circle 공시상 빅4",
+      "reserves_breakdown": [
+        {
+          "k": "cash",
+          "label": "현금(규제 금융기관)",
+          "amount": 395424211
+        },
+        {
+          "k": "settle",
+          "label": "결제 시차 순액",
+          "amount": -2139303
+        }
+      ],
+      "reserves_breakdown_basis": "보고서 표 그대로(2026-08-31, 유로)"
     },
     {
       "issuer": "Tether",
@@ -53,7 +89,65 @@
       "verified": true,
       "verify": "원문 PDF '183,622,105,630 relates to digital tokens issued', 'Total Assets 187,751,426,411'",
       "note": "발행 토큰 부채(달러) 기준이라 USDT 외 Tether International 발행 토큰이 소량 섞일 수 있다. 3분기(9-30) 보고서는 보통 10월 말 공표.",
-      "attestor_note": "BDO Advisory Services S.r.l."
+      "attestor_note": "BDO Advisory Services S.r.l.",
+      "reserves_breakdown": [
+        {
+          "k": "tbill",
+          "label": "미 단기국채",
+          "amount": 114960963604
+        },
+        {
+          "k": "repo",
+          "label": "익일물 역레포",
+          "amount": 18625552412
+        },
+        {
+          "k": "repo",
+          "label": "기간물 역레포",
+          "amount": 6993428950
+        },
+        {
+          "k": "tbill",
+          "label": "미국 외 단기국채",
+          "amount": 22374689
+        },
+        {
+          "k": "cash",
+          "label": "현금·은행예금",
+          "amount": 40307440
+        },
+        {
+          "k": "other",
+          "label": "회사채",
+          "amount": 8711171
+        },
+        {
+          "k": "gold",
+          "label": "금",
+          "amount": 18838357171
+        },
+        {
+          "k": "btc",
+          "label": "비트코인",
+          "amount": 5801630681
+        },
+        {
+          "k": "equity",
+          "label": "상장주식",
+          "amount": 3761438892
+        },
+        {
+          "k": "other",
+          "label": "기타 투자",
+          "amount": 5244911675
+        },
+        {
+          "k": "loan",
+          "label": "담보대출",
+          "amount": 13453749726
+        }
+      ],
+      "reserves_breakdown_basis": "보고서 'Reserves Report' 자산 항목 그대로(2026-06-30)"
     },
     {
       "issuer": "World Liberty Financial · BitGo",
@@ -70,7 +164,20 @@
       "source_url": "https://landing.bitgo.com/rs/552-OGK-141/images/USD1_Reserve_Attestation_Report_August_2026.pdf",
       "verified": true,
       "verify": "원문 PDF 'Total USD1 redeemable tokens outstanding' 2026-08-31 열(08-13: 4,021,243,926)",
-      "note": "발행·상환 주체는 BitGo Bank & Trust. 여러 체인 합계."
+      "note": "발행·상환 주체는 BitGo Bank & Trust. 여러 체인 합계.",
+      "reserves_breakdown": [
+        {
+          "k": "fund",
+          "label": "정부 MMF",
+          "amount": 3066358657
+        },
+        {
+          "k": "cash",
+          "label": "요구불예금",
+          "amount": 1129357410
+        }
+      ],
+      "reserves_breakdown_basis": "보고서 Note B 그대로(2026-08-31)"
     },
     {
       "issuer": "Ripple (Standard Custody & Trust)",
@@ -88,7 +195,8 @@
       "verified": true,
       "verify": "원문 PDF 'Outstanding Stablecoin Units' 2026-08-31 열(08-17: 1,763,215,434)",
       "note": "Ripple 자회사 Standard Custody & Trust(NYDFS 인가) 발행.",
-      "attestor_note": "보고서 본문에서 법인명 미판독"
+      "attestor_note": "보고서 본문에서 법인명 미판독",
+      "reserves_breakdown_basis": "보고서 PDF 가 자동 조회를 막아 옮기지 못했습니다"
     },
     {
       "issuer": "First Digital (FD121)",
@@ -106,7 +214,25 @@
       "verified": true,
       "verify": "원문 PDF 체인별 발행량 합계 US$335,636,418.35, 준비금 US$336,969,677.04",
       "note": "발행사 투명성 페이지 표기(336.636M)와 PDF(335.636M)가 약 100만 달러 다르다 — PDF 기준.",
-      "attestor_note": "AOGB CPA Limited(홍콩)"
+      "attestor_note": "AOGB CPA Limited(홍콩)",
+      "reserves_breakdown": [
+        {
+          "k": "tbill",
+          "label": "미 단기국채",
+          "amount": 301190839.18
+        },
+        {
+          "k": "cash",
+          "label": "수탁 계좌 현금",
+          "amount": 31778837.86
+        },
+        {
+          "k": "cash",
+          "label": "정기예금",
+          "amount": 4000000
+        }
+      ],
+      "reserves_breakdown_basis": "보고서 준비금 계정 표 그대로(2026-08-31 미 동부 21시)"
     },
     {
       "issuer": "Ethena · Anchorage Digital Bank",
@@ -124,7 +250,20 @@
       "verified": true,
       "verify": "원문 PDF 'Total USDtb redeemable tokens outstanding 529,269,213'",
       "note": "준비금 대부분이 BlackRock BUIDL 펀드($525.2M).",
-      "attestor_note": "Anchorage 공시상 빅4"
+      "attestor_note": "Anchorage 공시상 빅4",
+      "reserves_breakdown": [
+        {
+          "k": "fund",
+          "label": "BUIDL(블랙록 토큰화 국채 펀드)",
+          "amount": 525205527
+        },
+        {
+          "k": "cash",
+          "label": "요구불예금",
+          "amount": 5214126
+        }
+      ],
+      "reserves_breakdown_basis": "보고서 Schedule II 그대로(2026-08-31)"
     },
     {
       "issuer": "Agora",
@@ -141,7 +280,30 @@
       "source_url": "https://docs.agora.finance/developer/transparency",
       "verified": true,
       "verify": "원문 PDF 2026-08-31 열: 유통량 238,379,206 · 준비금 $239,090,456 (자동 판독값을 네이선이 원문에서 확인, 2026-10-07)",
-      "note": ""
+      "note": "",
+      "reserves_breakdown": [
+        {
+          "k": "repo",
+          "label": "국채 리포",
+          "amount": 109979730
+        },
+        {
+          "k": "tbill",
+          "label": "미 국채",
+          "amount": 72739998
+        },
+        {
+          "k": "cash",
+          "label": "현금(금융기관·펀드 내)",
+          "amount": 51379741
+        },
+        {
+          "k": "other",
+          "label": "타 스테이블코인(규제 VASP 보관)",
+          "amount": 4990986
+        }
+      ],
+      "reserves_breakdown_basis": "보고서 표 그대로(2026-08-31). Agora Reserve Fund 1.862억 달러 + 직접 보유 0.529억 달러"
     },
     {
       "issuer": "Paxos (PayPal)",
@@ -158,7 +320,8 @@
       "reserves_total": 2893935877,
       "source_url": "https://www.paxos.com/pyusd-transparency",
       "verify": "2026년 8월 보고서 수치를 네이선이 원문에서 확인(2026-10-07): 발행량 2,886,948,845 · 준비금 $2,893,935,877",
-      "note": "발행사 Paxos Trust Company(NYDFS). 투명성 페이지가 자바스크립트로 보고서 링크를 불러와 자동 판독이 안 된다 — 매월 손으로 갱신."
+      "note": "발행사 Paxos Trust Company(NYDFS). 투명성 페이지가 자바스크립트로 보고서 링크를 불러와 자동 판독이 안 된다 — 매월 손으로 갱신.",
+      "reserves_breakdown_basis": "Paxos 투명성 페이지에서 월별 보고서를 직접 열어야 해 자동으로 옮기지 못했습니다"
     },
     {
       "issuer": "Paxos (Global Dollar)",
@@ -175,7 +338,8 @@
       "reserves_total": 3350462467,
       "source_url": "https://www.paxos.com/usdg-transparency#usdg-attestations",
       "verify": "2026년 8월 보고서 수치를 네이선이 원문에서 확인(2026-10-07): 발행량 3,340,650,602 · 준비금 $3,350,462,467",
-      "note": "Paxos 싱가포르 법인 발행(MAS 규제). 2026-02-27 이후 보고서는 KPMG. 매월 손으로 갱신."
+      "note": "Paxos 싱가포르 법인 발행(MAS 규제). 2026-02-27 이후 보고서는 KPMG. 매월 손으로 갱신.",
+      "reserves_breakdown_basis": "Paxos 투명성 페이지에서 월별 보고서를 직접 열어야 해 자동으로 옮기지 못했습니다"
     }
   ],
   "not_covered": [
