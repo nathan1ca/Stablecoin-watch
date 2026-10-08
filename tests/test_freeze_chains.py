@@ -167,6 +167,22 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(bc[("Tron", "USDT")]["seize"], 1)
         self.assertNotIn("Base", d["meta"]["chains"])
         self.assertEqual(d["meta"]["chain"], "3개 체인")
+        day = list(d["daily"]["USDT"].values())
+        self.assertEqual(sum(c[0] for c in day), 2)   # 동결 2(해제 제외)
+        self.assertEqual(sum(c[1] for c in day), 1)   # 소각 1
+
+    def test_paid_chains_skipped_without_calls(self):
+        calls = []
+        old = fetch_freeze.call
+        fetch_freeze.call = lambda params, key, retries=3: (
+            calls.append(params["chainid"]) or ("1" if params["module"] == "block" else []))
+        try:
+            ev, st, notes = fetch_freeze.collect_evm(SINCE, "k")
+        finally:
+            fetch_freeze.call = old
+        self.assertFalse(set(calls) & fetch_freeze.PAID_CHAINS)
+        skipped = [x for x in st if x["chain"] in ("Base", "Optimism", "Avalanche")]
+        self.assertTrue(skipped and all(not x["ok"] for x in skipped))
 
     def test_no_bnb_peg_tokens(self):
         self.assertNotIn(56, {s["chainid"] for s in fetch_freeze.ISSUERS})

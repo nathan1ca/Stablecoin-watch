@@ -96,13 +96,17 @@ _USDT = {
     "unfreeze": ["RemovedBlackList(address)", "BlockReleased(address)"],
     "seize": ["DestroyedBlackFunds(address,uint256)", "DestroyedBlockedFunds(address,uint256)"],
 }
+# Base·Optimism·Avalanche 는 Etherscan 무료 키로 조회가 막혀 있다(2026-10-08 CI:
+# "Free API access is not supported for this chain"). 유료 플랜이 생기면 PAID_CHAINS 를
+# 비우면 바로 수집된다.
+PAID_CHAINS = {8453, 10, 43114}
 for _cid, _addr in [(42161, "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"),
                     (137, "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"),
                     (8453, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
                     (10, "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"),
                     (43114, "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E")]:
     ISSUERS.append({"issuer": "Circle", "symbol": "USDC", "chainid": _cid, "decimals": 6,
-                    "verified": False, "address": _addr, "events": _USDC})
+                    "verified": _cid in (42161, 137), "address": _addr, "events": _USDC})
 for _cid, _addr in [(42161, "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"),
                     (137, "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"),
                     (10, "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58"),
@@ -207,6 +211,10 @@ def collect_evm(since: int, key: str) -> tuple[list[dict], list[dict], list[str]
         chain = CHAIN_NAME.get(cid, str(cid))
         st = {"chain": chain, "symbol": spec["symbol"], "ok": True, "complete": True,
               "note": "", "matched": []}
+        if cid in PAID_CHAINS:
+            st.update(ok=False, note="Etherscan 무료 키 미지원 체인 — 제외")
+            statuses.append(st)
+            continue
         if cid not in block_cache:
             try:
                 print(f"  {chain} 시작 블록 조회…")
@@ -240,6 +248,8 @@ def collect_evm(since: int, key: str) -> tuple[list[dict], list[dict], list[str]
                     })
                 print(f"  {chain:9s} {spec['symbol']:6s} {KIND_KO[kind]} {sig:38s} {len(logs):5d}건")
                 break  # 시그니처 후보 중 잡힌 것 하나면 충분
+        if st["ok"] and not st["matched"] and not spec["verified"]:
+            st["note"] = "조회 기간 0건 — 이 체인 컨트랙트의 동결 이벤트 이름은 아직 실물로 확인 못 함"
         statuses.append(st)
     return events, statuses, notes
 
@@ -285,6 +295,15 @@ def summarize(events: list[dict], statuses: list[dict], days: int, notes: list[s
     chain_rows = sorted(by_chain.values(), key=lambda r: -(r["freeze"] + r["seize"]))
     chains_ok = sorted({r["chain"] for r in chain_rows if r["ok"]})
 
+    # 종목별 일별 건수(해제 제외) — 화면의 시간축 표식은 잘린 events 목록이 아니라 이것으로 그린다
+    daily: dict[str, dict[str, list[int]]] = {}
+    for e in events:
+        if e["kind"] == "unfreeze":
+            continue
+        d = datetime.fromtimestamp(e["t"], timezone.utc).strftime("%Y-%m-%d")
+        cell = daily.setdefault(e["symbol"], {}).setdefault(d, [0, 0])
+        cell[1 if e["kind"] == "seize" else 0] += 1
+
     monthly: dict[str, dict[str, int]] = {}
     for e in events:
         if e["kind"] == "unfreeze":
@@ -313,6 +332,7 @@ def summarize(events: list[dict], statuses: list[dict], days: int, notes: list[s
         "issuers": rows,
         "by_chain": chain_rows,
         "monthly": [{"m": m, **v} for m, v in sorted(monthly.items())],
+        "daily": daily,
         "events": events[:500],
     }
 

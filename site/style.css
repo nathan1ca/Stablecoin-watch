@@ -1218,3 +1218,6 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
 .dg-conf.is-weak{border-color:var(--watch);color:var(--watch)}
 .dg-none{color:var(--mid);font-size:.88rem;margin:.2rem 0 0}
 .dg-link{margin-top:1rem;font-size:.88rem;color:var(--mid);line-height:1.6}
+
+/* ── 동결 조치: 체인별 표 ─────────────────────────── */
+.fz-chain-panel{margin-top:1.2rem}
