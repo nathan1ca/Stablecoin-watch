@@ -119,6 +119,42 @@ class TestSolana(unittest.TestCase):
         finally:
             fs.BACKFILL_PER_RUN = old
 
+    def test_time_budget_resumes_without_loss(self):
+        # 시간 상한에 걸리면 거기서 멈추고, 다음 회차가 빠짐없이 이어서 연다.
+        spec = {"issuer": "Tether", "symbol": "USDT", "mint": MINT}
+        fake = FakeSolana([{"signature": "s0", "blockTime": NOW - 100, "err": None}], {})
+        st = {}
+        fs.collect_mint(spec, st, SINCE, rpc=fake)            # 기준점 s0, 과거분 끝
+        self.assertTrue(st["done"])
+        # 새 거래 5건(n4 가 가장 최신). 거래 하나 열 때마다 시계가 1초 간다.
+        for i in range(5):
+            fake.sigs.insert(0, {"signature": f"n{i}", "blockTime": NOW + i, "err": None})
+            fake.txs[f"n{i}"] = sol_tx("freezeAccount", f"N{i}")
+        clock = lambda: float(fake.opened)  # noqa: E731
+        base = fake.opened                                     # 기준점 회차에 s0 를 한 번 열었다
+        ev, info = fs.collect_mint(spec, st, SINCE, rpc=fake, deadline=base + 2.0, clock=clock)
+        self.assertEqual(sorted(e["addr"] for e in ev), ["N0", "N1"])   # 오래된 것부터 2건
+        self.assertEqual(st["newest"], "n1")
+        self.assertIn("시간 상한", info["note"])
+        ev, info = fs.collect_mint(spec, st, SINCE, rpc=fake, deadline=99.0, clock=clock)
+        self.assertEqual(sorted(e["addr"] for e in ev), ["N0", "N1", "N2", "N3", "N4"])
+        self.assertEqual(st["newest"], "n4")
+        self.assertEqual(fake.opened - base, 5)               # 같은 거래를 두 번 열지 않음
+
+    def test_time_budget_stops_backfill(self):
+        spec = {"issuer": "Tether", "symbol": "USDT", "mint": MINT}
+        sigs = [{"signature": f"s{i}", "blockTime": NOW - i * 1000, "err": None} for i in range(10)]
+        fake = FakeSolana(sigs, {"s5": sol_tx("freezeAccount", "A5")})
+        st = {}
+        clock = lambda: float(fake.opened)  # noqa: E731
+        fs.collect_mint(spec, st, SINCE, rpc=fake, deadline=3.0, clock=clock)
+        self.assertEqual(fake.opened, 3)
+        self.assertFalse(st.get("done"))
+        ev, info = fs.collect_mint(spec, st, SINCE, rpc=fake, deadline=99.0, clock=clock)
+        self.assertTrue(info["done"])
+        self.assertEqual(fake.opened, 10)
+        self.assertEqual([e["addr"] for e in ev], ["A5"])
+
     def test_stops_at_lookback(self):
         spec = {"issuer": "Circle", "symbol": "USDC", "mint": MINT}
         sigs = [{"signature": "a", "blockTime": NOW, "err": None},
