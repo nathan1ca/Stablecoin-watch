@@ -163,8 +163,82 @@ def get(path: str, params: dict | None = None, retries: int = 3):
     raise RuntimeError(f"{url} 수집 실패: {last}")
 
 
+# 교차검증 대상 상한 — CoinGecko simple/price 한 번에 넘길 id 수(무료 API 부담 고려).
+CROSSCHECK_MAX_IDS = 100
+CROSSCHECK_CHUNK = 50
+
+
+def crosscheck_targets(assets: list[dict], top_n: int = 30,
+                       watch_bp: float | None = None,
+                       extra_symbols: set[str] | None = None,
+                       cap: int = CROSSCHECK_MAX_IDS) -> dict[str, str]:
+    """교차 가격을 받을 종목 → {DefiLlama id: CoinGecko id}.
+
+    대상: (1) 발행잔액 상위 top_n, (2) DefiLlama 가격만으로 USD 페그 편차가 주의선
+    (watch_bp) 이상인 종목 — 경보·주의로 뜰 종목은 규모와 관계없이 두 번째 가격으로
+    확인한다, (3) extra_symbols(국내 원화마켓 상장 등).
+    CoinGecko id 는 DefiLlama 응답의 gecko_id 를 쓴다. 심볼로 찾으면 같은 심볼의
+    다른 종목(USDA 는 4종 이상)에 남의 가격이 붙는다. gecko_id 가 없으면 상위
+    종목에 한해 CG_STABLE_IDS(수기 대조표)로 보충한다.
+    """
+    watch_bp = THRESHOLDS["peg_watch_bp"] if watch_bp is None else watch_bp
+    extra = {s.upper() for s in (extra_symbols or set())}
+    ranked = sorted(assets, key=lambda x: -peg_amount(x.get("circulating")))
+    out: dict[str, str] = {}
+    used: set[str] = set()
+    for rank, a in enumerate(ranked):
+        if len(out) >= cap:
+            break
+        aid = str(a.get("id") or "")
+        if not aid or peg_amount(a.get("circulating")) <= 0:
+            continue
+        sym = str(a.get("symbol") or "").strip().upper()
+        price = a.get("price")
+        off_peg = (isinstance(price, (int, float)) and peg_currency(a.get("circulating")) == "USD"
+                   and abs(float(price) - 1.0) * 10_000 >= watch_bp)
+        if not (rank < top_n or off_peg or sym in extra):
+            continue
+        gid = str(a.get("gecko_id") or "").strip()
+        if not gid and rank < top_n:
+            gid = CG_STABLE_IDS.get(sym, "")
+        if gid and gid not in used:
+            out[aid] = gid
+            used.add(gid)
+    return out
+
+
+def fetch_coingecko_prices_by_id(targets: dict[str, str]) -> dict[str, float]:
+    """{DefiLlama id: CoinGecko id} → {DefiLlama id: USD 가격}. 실패해도 빈 dict."""
+    if not targets:
+        return {}
+    by_gid: dict[str, str] = {g: aid for aid, g in targets.items()}
+    gids = list(by_gid)
+    out: dict[str, float] = {}
+    for i in range(0, len(gids), CROSSCHECK_CHUNK):
+        chunk = gids[i:i + CROSSCHECK_CHUNK]
+        try:
+            url = "https://api.coingecko.com/api/v3/simple/price?" + urlencode({
+                "ids": ",".join(chunk), "vs_currencies": "usd",
+            })
+            req = Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+            with urlopen(req, timeout=20) as r:
+                data = json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            print(f"  CoinGecko 교차가격 수집 실패({e}) — 이 묶음은 DefiLlama 단독", file=sys.stderr)
+            continue
+        for gid, box in (data or {}).items():
+            aid = by_gid.get(gid)
+            if aid and isinstance(box, dict) and isinstance(box.get("usd"), (int, float)) and box["usd"] > 0:
+                out[aid] = float(box["usd"])
+        if i + CROSSCHECK_CHUNK < len(gids):
+            time.sleep(2)
+    return out
+
+
 def fetch_coingecko_prices(symbols: list[str]) -> dict[str, float]:
-    """심볼 → USD 가격. 실패해도 빈 dict — 교차검증은 보조 신호일 뿐."""
+    """심볼 → USD 가격. 실패해도 빈 dict — 교차검증은 보조 신호일 뿐.
+
+    (예전 방식. 지금 수집은 fetch_coingecko_prices_by_id 를 쓴다.)"""
     ids = [CG_STABLE_IDS[s] for s in symbols if s in CG_STABLE_IDS]
     if not ids:
         return {}
@@ -570,7 +644,11 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         prices_for_med: list[float] = []
         if price is not None:
             prices_for_med.append(price)
-        cg = external_prices.get(symbol)
+        # 교차 가격은 종목 id 로 찾는다(같은 심볼의 다른 종목에 가격이 섞이지 않게).
+        # 심볼 키는 예전 호출 방식과의 호환용.
+        cg = external_prices.get(str(a.get("id", "")))
+        if cg is None:
+            cg = external_prices.get(symbol)
         if cg is not None:
             prices_for_med.append(cg)
         median_price = median(prices_for_med) if prices_for_med else None
@@ -814,9 +892,13 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "is_sample": False,
             "thresholds": thresholds_for_meta(THRESHOLDS),
             "asset_count": len(rows),
-            "price_basis": "DefiLlama 오라클 + CoinGecko 교차검증(중위값). 소스 간 편차 ≥ "
-                           f"{THRESHOLDS['source_disagreement_bp']}bp 이면 price_quality=degraded",
-            "price_crosscheck": "CoinGecko simple/price (상위 스테이블코인)",
+            "price_basis": "DefiLlama 오라클 + CoinGecko 교차 확인(발행잔액 상위 30종·편차 주의선 밖 종목·"
+                           "국내 원화마켓 상장 종목, 두 가격의 중간값). 두 가격이 "
+                           f"{THRESHOLDS['source_disagreement_bp']:g}bp 이상 다르면 가격 품질 저하로 표시",
+            "price_crosscheck": "CoinGecko simple/price — 발행잔액 상위 30종 + DefiLlama 가격 기준 페그 "
+                                f"편차 {THRESHOLDS['peg_watch_bp']:g}bp 이상 종목 + 국내 원화마켓 상장 종목. "
+                                "종목 대응은 DefiLlama gecko_id(없으면 수기 대조표). price_sources=1 이면 "
+                                "두 번째 가격을 못 구해 교차 확인이 안 된 값",
             "issuer_source": "etl/issuers.json (수기 관리)",
             "issuer_unknown_label": UNKNOWN_ISSUER,
             "yield_bearing_source": "DefiLlama 응답의 yieldBearing 필드 우선, 필드로 안 잡히는 종목은 etl/yield_bearing.json (수기 관리)",
@@ -1165,6 +1247,103 @@ def probe_watchlist():
     print(f"  → {n}종")
 
 
+# ── 원천 데이터 이상 점검 ──────────────────────────────────────────────────
+# DefiLlama 응답에서 체인 하나가 통째로 빠지면(2026-10-08 22시 UTC 작업 브랜치 시험:
+# JPYC 의 Kaia 몫 약 440만 엔이 사라지고 총 발행잔액이 5시간 만에 $315.2B → $303.3B)
+# 30일 증감률이 −30~−50%로 계산돼 USD1·USDG 같은 시장 영향 종목이 '상환 경보'가 되고
+# 시스템 등급이 '경보'로 뜬다. 시장이 아니라 원천의 문제이므로 직전 값을 유지한다.
+SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / "site" / "data" / "snapshot.json"
+SOURCE_TOTAL_DROP_PCT = 3.0       # 직전 회차 대비 총 발행잔액 감소 한도(%)
+SOURCE_CHAIN_MIN_USD = 200e6      # 종목·체인 몫이 이 금액 이상일 때만 '체인 누락'을 본다
+SOURCE_MARKET_CHAIN_MIN_USD = 1e9  # 체인 전체 합계 비교 하한
+SOURCE_CHAIN_DROP_PCT = 50.0      # 이만큼 넘게 줄면 누락으로 본다
+SOURCE_COMPARE_MAX_HOURS = 48     # 직전 값이 이보다 오래면 비교하지 않는다
+SOURCE_HOLD_MAX_HOURS = 12        # 직전 값을 유지하는 최대 시간(실제 위기를 오래 가리지 않게)
+
+
+def _parse_iso(s) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def load_prev_snapshot(out: Path | None = None) -> dict | None:
+    """직전 스냅숏. 출력 폴더에 없으면(작업 브랜치 시험) 저장소의 site/data 를 본다."""
+    for p in ([Path(out) / "snapshot.json"] if out else []) + [SNAPSHOT_PATH]:
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            continue
+        if isinstance(d, dict) and not (d.get("meta") or {}).get("is_sample"):
+            return d
+    return None
+
+
+def source_anomalies(prev: dict, snap: dict, raw_assets: list[dict],
+                     now: datetime | None = None) -> list[str]:
+    """직전 스냅숏 대비 원천 이상 목록(사람이 읽는 문장). 비어 있으면 정상."""
+    now = now or datetime.now(timezone.utc)
+    pt = _parse_iso((prev.get("meta") or {}).get("generated_at"))
+    if pt is None or (now - pt).total_seconds() / 3600 > SOURCE_COMPARE_MAX_HOURS:
+        return []
+    out: list[str] = []
+
+    p_tot = (prev.get("totals") or {}).get("circulating_usd") or 0
+    n_tot = (snap.get("totals") or {}).get("circulating_usd") or 0
+    if p_tot > 0:
+        chg = (n_tot / p_tot - 1) * 100
+        if chg <= -SOURCE_TOTAL_DROP_PCT:
+            out.append(f"총 발행잔액 ${p_tot/1e9:,.1f}B → ${n_tot/1e9:,.1f}B ({chg:+.1f}%)")
+
+    raw = {str(a.get("id")): a for a in raw_assets}
+    for r in prev.get("assets") or []:
+        circ = r.get("circulating") or 0
+        usd_unit = (r.get("mcap_usd") or 0) / circ if circ else 0
+        a = raw.get(str(r.get("id")))
+        if a is None or usd_unit <= 0:
+            continue
+        cc = a.get("chainCirculating") or {}
+        for c in r.get("chains") or []:
+            p_amt = c.get("amount") or 0
+            if p_amt * usd_unit < SOURCE_CHAIN_MIN_USD:
+                continue
+            n_amt = peg_amount((cc.get(c.get("chain")) or {}).get("current"))
+            if n_amt < p_amt * (1 - SOURCE_CHAIN_DROP_PCT / 100):
+                out.append(f"{r.get('symbol')}: {c.get('chain')} 체인 몫 ${p_amt*usd_unit/1e6:,.0f}M → "
+                           f"${n_amt*usd_unit/1e6:,.0f}M ({(n_amt/p_amt-1)*100:+.0f}%)")
+
+    n_ch = {c.get("chain"): c.get("amount") or 0 for c in snap.get("by_chain") or []}
+    for c in prev.get("by_chain") or []:
+        p_amt = c.get("amount") or 0
+        # 이번 회차 체인 목록이 통째로 비었으면(체인 집계 수집 실패) 이 비교는 건너뛴다.
+        if p_amt >= SOURCE_MARKET_CHAIN_MIN_USD and n_ch:
+            n_amt = n_ch.get(c.get("chain"), 0)
+            if n_amt < p_amt * (1 - SOURCE_CHAIN_DROP_PCT / 100):
+                out.append(f"체인 합계 {c.get('chain')} ${p_amt/1e9:,.1f}B → ${n_amt/1e9:,.1f}B")
+    return out
+
+
+def hold_decision(prev: dict, reasons: list[str], now: datetime | None = None) -> dict:
+    """직전 값을 유지할지. 직전 값이 SOURCE_HOLD_MAX_HOURS 보다 오래됐으면 새 값을 쓴다."""
+    now = now or datetime.now(timezone.utc)
+    pt = _parse_iso((prev.get("meta") or {}).get("generated_at"))
+    age_h = (now - pt).total_seconds() / 3600 if pt else None
+    held = age_h is not None and age_h < SOURCE_HOLD_MAX_HOURS
+    return {
+        "detected_at": now.isoformat(timespec="seconds"),
+        "held": held,
+        "prev_generated_at": (prev.get("meta") or {}).get("generated_at"),
+        "count": len(reasons),
+        "reasons": reasons[:8],
+        "note": ("원천(DefiLlama) 응답에서 체인 몫이 통째로 빠지는 등 이상이 보여 직전 수집값을 유지했습니다."
+                 if held else
+                 f"원천 이상이 {SOURCE_HOLD_MAX_HOURS}시간 넘게 이어져 새 값을 게시했습니다. "
+                 "발행잔액·30일 증감·등급이 실제보다 나쁘게 나올 수 있습니다."),
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="site/data", help="출력 디렉터리")
@@ -1194,14 +1373,20 @@ def main():
     history = fetch_history()
 
     print("4/5 교차 가격 수집 (CoinGecko)…")
-    # 상위 심볼 위주로 교차검증. 실패해도 스냅샷은 계속 만든다.
-    top_syms = []
-    for a in sorted(assets, key=lambda x: -peg_amount(x.get("circulating")))[:30]:
-        s = str(a.get("symbol") or "").upper()
-        if s in CG_STABLE_IDS:
-            top_syms.append(s)
-    cg_prices = fetch_coingecko_prices(top_syms)
-    print(f"    CoinGecko {len(cg_prices)}/{len(top_syms)}종 확보")
+    # 상위 30종 + 페그 편차가 주의선 이상인 종목 + 국내 원화마켓 상장 종목.
+    # 실패해도 스냅샷은 계속 만든다(그 종목은 DefiLlama 단독, price_sources=1).
+    targets = crosscheck_targets(assets, top_n=30, extra_symbols=krw_listed_symbols())
+    cg_prices = fetch_coingecko_prices_by_id(targets)
+    print(f"    CoinGecko {len(cg_prices)}/{len(targets)}종 확보")
+    # 편차가 큰 종목은 두 가격을 나란히 남겨 둔다(작업 브랜치 시험 로그로 확인).
+    by_id = {str(a.get("id")): a for a in assets}
+    for aid, gid in targets.items():
+        a = by_id.get(aid) or {}
+        p = a.get("price")
+        if isinstance(p, (int, float)) and abs(p - 1.0) * 10_000 >= THRESHOLDS["peg_watch_bp"]:
+            cg = cg_prices.get(aid)
+            print(f"      {a.get('symbol')}(id {aid}, {gid}): DefiLlama {p:.6f}"
+                  + (f" · CoinGecko {cg:.6f} · 차이 {abs(p - cg) * 10_000:.1f}bp" if cg else " · CoinGecko 없음"))
 
     issuers = load_issuers()
     yb = load_yield_bearing()
@@ -1229,6 +1414,26 @@ def main():
     print(f"    {len(series)}종 확보")
 
     hist = build_history(history, series)
+
+    # 원천 이상 점검: 직전 스냅숏(저장소에 커밋된 값)과 비교해 체인 통째 누락·총액 급감이면
+    # 직전 값을 유지한다. 실제 위기일 수도 있으므로 유지는 SOURCE_HOLD_MAX_HOURS 까지만.
+    prev = load_prev_snapshot(out)
+    found = source_anomalies(prev, snap, assets) if prev else []
+    if found:
+        print("\n원천 데이터 이상 감지 — " + str(len(found)) + "건")
+        for r in found[:12]:
+            print("  · " + r)
+        decision = hold_decision(prev, found)
+        if decision["held"]:
+            prev.setdefault("meta", {})["source_anomaly"] = decision
+            (out / "snapshot.json").write_text(
+                json.dumps(prev, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+            print(f"  → 직전 스냅숏({prev['meta'].get('generated_at')}) 유지, history.json 도 그대로 둔다.")
+            print(f"     이번 회차 값(쓰지 않음): 총 ${snap['totals']['circulating_usd']/1e9:,.1f}B · "
+                  f"경보 {snap['totals']['breach_count']} · 위험점수 {snap['totals'].get('risk_score')}")
+            return
+        snap["meta"]["source_anomaly"] = decision
+        print(f"  → 직전 값이 {SOURCE_HOLD_MAX_HOURS}시간보다 오래돼 새 값을 게시하고 이상 표시를 붙인다.")
 
     (out / "snapshot.json").write_text(
         json.dumps(snap, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

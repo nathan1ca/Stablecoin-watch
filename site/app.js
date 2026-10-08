@@ -139,6 +139,15 @@
     stamp.insertAdjacentHTML("beforeend",
       ` <span class="stamp-age${ageH > 6 ? " is-stale" : ""}">${esc(ageTxt(m.generated_at))}</span>`);
     if (ageH > 6) stamp.title = "마지막 수집 후 6시간이 넘었습니다. 수집 작업이 지연·실패했을 수 있습니다.";
+    // 원천(DefiLlama) 이상으로 직전 값을 유지했거나, 이상이 이어진 채 새 값을 게시한 경우.
+    const sa = m.source_anomaly;
+    if (sa) {
+      const tip = `${sa.note || ""}\n감지 ${fmtTime(sa.detected_at)} · ${sa.count || (sa.reasons || []).length}건`
+        + (sa.reasons || []).slice(0, 5).map((r) => "\n· " + r).join("");
+      stamp.insertAdjacentHTML("beforeend",
+        ` <span class="stamp-age is-stale" tabindex="0" data-tip="${esc(tip)}">`
+        + `${sa.held ? "원천 이상 — 직전 값 유지" : "원천 이상 — 값 확인 필요"}</span>`);
+    }
     $("#stamp-src").textContent = m.source || "—";
     $("#stamp-count").textContent = `${m.asset_count}종목`;
     $("#foot-time").textContent = fmtTime(m.generated_at);
@@ -1339,6 +1348,14 @@
       : a.grade === "sound" ? "정상 — 두 기준 모두 주의선 안쪽"
       : `${GRADE_KO[a.grade]} — ${why.join(", ") || "기준 초과"}`;
     const lines = [head, "· " + peg, "· " + red];
+    // 페그 편차가 몇 개의 가격으로 확인된 값인지 — 1곳뿐이면 호가가 얇거나 멈춘 가격일 수 있다.
+    if (a.dev_bp != null && a.price_sources != null) {
+      if (a.price_sources >= 2)
+        lines.push(`· 가격 출처 ${a.price_sources}곳(DefiLlama·CoinGecko) 중간값 기준`
+          + (a.price_spread_bp != null ? `, 두 가격 차이 ${a.price_spread_bp}bp` : ""));
+      else if (a.price_sources === 1)
+        lines.push("· 가격 출처 1곳(DefiLlama)뿐 — 두 번째 가격으로 확인하지 못한 값");
+    }
     if (a.grade === "breach" && t.systemic_share_pct != null && a.share < t.systemic_share_pct)
       lines.push(`· 시장 비중 ${a.share.toFixed(2)}%로 ${t.systemic_share_pct}% 미만 — 시스템 등급에는 ‘주의’로만 반영`);
     return lines.join("\n");

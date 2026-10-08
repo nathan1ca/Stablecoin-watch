@@ -1,71 +1,163 @@
 {
   "schema": 1,
-  "written_at": "2026-10-08T08:45:00+09:00",
-  "window": {"from": "2026-10-07T08:45:00+09:00", "to": "2026-10-08T08:45:00+09:00"},
+  "written_at": "2026-10-09T07:30:00+09:00",
+  "window": {
+    "from": "2026-10-08T07:00:00+09:00",
+    "to": "2026-10-09T07:00:00+09:00"
+  },
   "author": "Claude(매일 자동 점검)가 공개 기사·발표를 읽고 작성",
-  "headline": "해외에서는 중앙은행이 자국 통화 스테이블코인과 국경 간 활용을 '연구·시범' 단계로 검토하는 움직임이 이어졌습니다(카자흐스탄–테더 양해각서, 말레이시아–홍콩 공동 작업반 보도). 국내 당국의 새 발표는 확인되지 않았습니다.",
+  "headline": "유럽증권시장청(ESMA)이 MiCA 인가를 받지 않은 스테이블코인 관련 서비스를 멈추고 남은 보유분은 공표 후 3개월 안에 정리하라는 의견서를 냈습니다. 국내에서는 금융위원장이 국정감사에서 디지털자산기본법이 '막바지 협의' 단계라고 밝혔지만 원화 스테이블코인 발행 주체와 정부안 제출 시점은 제시하지 않았습니다.",
   "sections": [
     {
       "category": "reg_kr",
       "label": "국내 당국",
-      "items": [],
-      "empty_note": "최근 24시간 금융위원회·금융감독원·한국은행의 스테이블코인 관련 새 발표는 검색으로 확인되지 않았습니다(금융위 RSS 는 수집 서버에서 접속되지 않아 검색 기준)."
+      "items": [
+        {
+          "title": "금융위원장 \"디지털자산기본법 막바지 협의\" — 원화 스테이블코인 발행 주체는 미정",
+          "summary": "10월 8일 국회 정무위원회 국정감사에서 이억원 금융위원장은 디지털자산기본법 내용은 준비돼 있고 막바지 협의 중이라며 빠르게 추진하겠다고 답했습니다. 원화 스테이블코인 발행 주체·인가 구조·정부안 제출 시점은 구체적으로 밝히지 않았습니다.",
+          "why": "원화 스테이블코인 제도화 일정이 아직 확정되지 않았다는 뜻입니다. 의원들은 입법이 늦어질수록 국내 수요가 해외 달러 스테이블코인으로 쏠린다고 지적했는데, 대시보드의 원화 거래대금(USDT 비중 약 87%)과 김치프리미엄이 그 흐름을 보여 주는 지표입니다.",
+          "published": "2026-10-08",
+          "confidence": "보도 기준, 1차 출처 미확인",
+          "sources": [
+            {
+              "name": "한국금융신문",
+              "url": "https://www.fntimes.com/html/view.php?ud=20261008160415460f4390e77d_18"
+            },
+            {
+              "name": "뉴스웍스",
+              "url": "https://www.newsworks.co.kr/news/articleView.html?idxno=855962"
+            },
+            {
+              "name": "뉴데일리",
+              "url": "https://biz.newdaily.co.kr/site/data/html/2026/10/08/2026100800190.html"
+            }
+          ]
+        },
+        {
+          "title": "금융위원장 \"거래소 대주주 지분 규제, 누구 지시 아냐\" — 국회 심의에서 조정 여지",
+          "summary": "같은 국정감사에서 이 위원장은 법안의 가상자산 거래소 대주주 지분 제한이 외부 지시로 들어간 것이 아니라고 답했습니다. 거래소가 신고제에서 인가제로 바뀌는 만큼 공공성이 필요하다며, 세부 내용은 국회 논의에서 조정될 수 있다고 했습니다.",
+          "why": "거래소 지배구조가 법안의 핵심 쟁점이 되면서 스테이블코인 조항을 포함한 법안 전체의 처리 속도에 영향을 줄 수 있습니다.",
+          "published": "2026-10-08",
+          "confidence": "보도 기준, 1차 출처 미확인",
+          "sources": [
+            {
+              "name": "이투데이",
+              "url": "https://www.etoday.co.kr/news/view/2634117"
+            }
+          ]
+        }
+      ],
+      "empty_note": ""
     },
     {
       "category": "reg_global",
       "label": "해외 당국·중앙은행",
       "items": [
         {
-          "title": "카자흐스탄 중앙은행·테더, 텡게 연동 스테이블코인 연구 양해각서",
-          "summary": "카자흐스탄 국립은행(NBK)·테더·알라타우시 당국이 양해각서(MoU)를 맺었습니다. 텡게(카자흐 통화)에 연동된 스테이블코인의 개념과 시범사업 제안을 마련하고, 알라타우시에서 자산 토큰화 시범사업을 검토합니다. 발행 결정은 아닙니다.",
-          "why": "중앙은행이 최대 달러 스테이블코인 발행사와 자국 통화 스테이블코인 설계를 함께 연구하는 사례입니다. 원화 스테이블코인의 발행 주체 논의(은행 중심 등)와 비교해 볼 만합니다. 테더는 9월 말 미 상원 상설조사소위 보고서에서 이란 제재 회피 경로로 지목돼 반박한 바 있어, 공공 부문 협력과 제재 준수 논란이 동시에 진행 중입니다.",
-          "published": "2026-10-07",
+          "title": "ESMA, MiCA 미인가 스테이블코인 관련 서비스 중단 요구 — 남은 보유분은 3개월 안에 정리",
+          "summary": "ESMA가 10월 8일 의견서를 내고, MiCA 인가 가상자산사업자는 MiCA를 지키지 않는 스테이블코인 관련 서비스를 EU 고객에게 중단하고 새 매수·보유 확대를 막는 통제를 두라고 했습니다. 남은 보유분은 공표 후 3개월 안에 정리하게 하되, 그동안 매도·전환·출금 같은 한시적 정리 서비스는 허용될 수 있습니다.",
+          "why": "의견서에 종목 이름은 없지만 보도들은 USDT 를 대표 대상으로 봅니다(정리 기한은 보도 기준 2027-01-08). 대시보드의 EURC 등 MiCA 준수 종목 발행잔액과 USDT 증감을 이 기간에 함께 볼 만합니다.",
+          "published": "2026-10-08",
           "confidence": "1차 출처 확인",
           "sources": [
-            {"name": "Tether 발표(2026-10-07)", "url": "https://tether.io/news/tether-signs-mou-with-the-national-bank-of-kazakhstan-and-the-alatau-city-authority-to-explore-stablecoin-use-cases-and-asset-tokenization/"},
-            {"name": "CoinDesk", "url": "https://www.coindesk.com/business/2026/10/07/tether-tapped-by-kazakhstan-s-central-bank-to-explore-stablecoin-and-tokenization"}
+            {
+              "name": "ESMA 보도자료",
+              "url": "https://www.esma.europa.eu/press-news/esma-news/esma-sets-out-supervisory-expectations-services-related-unauthorised"
+            },
+            {
+              "name": "ESMA 의견서(PDF)",
+              "url": "https://www.esma.europa.eu/sites/default/files/2026-10/ESMA75-113276571-1742_Opinion_on_the_provision_of_crypto_asset_services_in_relation_to_non-MiCA-compliant_asset-referenced_tokens_and_e-money_tokens.pdf"
+            },
+            {
+              "name": "CoinDesk",
+              "url": "https://www.coindesk.com/policy/2026/10/08/eu-securities-regulator-gives-crypto-platforms-3-months-to-remove-unauthorized-stablecoins"
+            }
           ]
         },
         {
-          "title": "말레이시아·홍콩 중앙은행, 국경 간 스테이블코인 공동 정책 작업반",
-          "summary": "말레이시아 중앙은행(BNM)과 홍콩금융관리국(HKMA)이 10월 2일 홍콩 고위급 회의 뒤 디지털자산·토큰화 협력을 넓히고, 두 지역 사이의 규정을 지키는 국경 간 스테이블코인 활용 사례를 찾는 공동 작업반을 두기로 했다고 보도됐습니다.",
-          "why": "규제를 갖춘 지역끼리 스테이블코인을 국경 간 결제에 쓰는 틀을 짜는 흐름입니다. 원화 스테이블코인이 도입되면 해외 결제·송금 연계와 외환 관리가 함께 논의될 수밖에 없다는 점에서 참고가 됩니다.",
-          "published": "2026-10-07",
+          "title": "미 NCUA, 신협 정기 보고서에 스테이블코인 항목 26개 신설 제안",
+          "summary": "미국 신용협동조합감독청(NCUA)이 분기 보고서(콜리포트)에 '결제용 스테이블코인 활동' 서식을 추가해 준비자산 수탁·키 수탁·발행사 익스포저·보유 스테이블코인 등 26개 계정을 보고받는 안을 냈다고 업계 매체가 보도했습니다. 2027년 3월 말 기준 보고부터 적용하는 것이 목표입니다.",
+          "why": "GENIUS Act 시행을 앞두고 미국 감독당국이 예금취급기관의 스테이블코인 수탁·익스포저를 정기 보고로 파악하기 시작했다는 신호로, 국내 감독 보고서식 설계에 참고할 수 있습니다.",
+          "published": "2026-10-08",
           "confidence": "보도 기준, 1차 출처 미확인",
           "sources": [
-            {"name": "Fintech News Malaysia", "url": "https://fintechnews.my/61227/blockchain/hkma-bnm-cross-border-stablecoins/"},
-            {"name": "BIX Malaysia", "url": "https://www.bixmalaysia.com/learning-center/articles-tutorials/bnm-and-hkma-target-cross-border-stablecoins-in-new-fintech-pact"}
+            {
+              "name": "Credit Union Daily",
+              "url": "https://thecudaily.com/ncua-proposes-adding-stablecoin-reporting-to-quarterly-call-reports/"
+            }
+          ]
+        },
+        {
+          "title": "키르기스스탄 국영 금 담보 스테이블코인 USDKG 운영 중단 확인",
+          "summary": "USDKG 공식 사이트에 키르기스 내각 명령(2026-08-20)에 따라 운영을 중단하며 보유자는 신청을 거쳐 법정화폐나 USDT 로 상환받을 수 있다는 공지가 올라와 있습니다. 10월 8일 보도는 영국 제재 대상이던 발행사의 청산과 약 5,000만 USDKG 유통량을 전했습니다.",
+          "why": "제재를 받은 국가 연계 스테이블코인이 정리되는 사례로, 상환 절차·기한이 공지에 없다는 점이 보유자 보호 측면의 약점입니다. 명령은 8월자이고 시장에는 이번에 알려졌습니다.",
+          "published": "2026-10-08",
+          "confidence": "1차 출처 확인",
+          "sources": [
+            {
+              "name": "USDKG 공식 공지",
+              "url": "https://www.usdkg.com/"
+            },
+            {
+              "name": "crypto.news",
+              "url": "https://crypto.news/kyrgyzstan-shuts-50m-usdkg-months-after-uk-sanctions/"
+            }
           ]
         }
-      ]
+      ],
+      "empty_note": ""
     },
     {
       "category": "market",
       "label": "발행사·시장",
       "items": [
         {
-          "title": "서클, SAP 계열 Tereina 와 기업 결제에 USDC·EURC 연동",
-          "summary": "SAP 재무 소프트웨어를 쓰는 기업이 그 안에서 USDC(달러)·EURC(유로)로 송금·수취할 수 있게 하는 협력입니다. 앞으로 몇 달간 고객과 국제 결제·자금관리 용도로 시험합니다.",
-          "why": "스테이블코인이 거래소 밖 기업 결제망으로 들어가는 사례입니다. 결제 용도가 늘면 발행잔액보다 실제 지급결제 비중과 상환 경로가 감독상 더 중요해집니다.",
-          "published": "2026-10-07",
-          "confidence": "보도 기준, 1차 출처 미확인",
+          "title": "[국내] 삼성월렛, 미국 갤럭시 이용자에게 USDC 송금 기능 — 10월 마지막 주 시작",
+          "summary": "삼성전자가 미국의 호환 갤럭시 기기(약 8,200만 대)에서 삼성월렛으로 USDC 를 사고 보내는 기능을 10월 마지막 주부터 제공한다고 밝혔습니다(미국 현지 10월 7일 발표, 국내 보도 8일). 솔라나·수이 네트워크를 쓰고 Bastion 이 인프라, Coinbase 가 하위 수탁을 맡습니다.",
+          "why": "국내 제조사가 해외에서 달러 스테이블코인 지갑을 대규모로 배포하는 사례입니다. 삼성은 다른 나라 확대가 규제에 달려 있다고 밝혀, 국내 입법 일정과 함께 볼 필요가 있습니다.",
+          "published": "2026-10-08",
+          "confidence": "1차 출처 확인",
           "sources": [
-            {"name": "Cointelegraph (2026-10-07 20:48 UTC)", "url": "https://cointelegraph.com/news/circle-usdc-eurc-payments-sap-enterprise-ecosystem"}
+            {
+              "name": "Samsung Newsroom U.S.",
+              "url": "https://news.samsung.com/us/samsung-wallet-bring-stablecoin-access-eligible-galaxy-users-us/"
+            },
+            {
+              "name": "CoinDesk",
+              "url": "https://www.coindesk.com/tech/2026/10/08/solana-partners-with-samsung-to-integrate-usdc-in-82-million-phones"
+            }
           ]
         },
         {
-          "title": "폴리곤, 트론 USDT 를 자사 결제 연동 상품에 추가",
-          "summary": "폴리곤 랩스가 'Open Money Stack'에 트론 지원을 더해, 송금·핀테크 기업이 한 번의 연동으로 트론과 이더리움 계열 체인 사이에서 USDT 를 옮기고 은행 계좌로 현금화할 수 있게 했습니다. 트론 위 USDT 는 940억 달러 이상으로 보도됐습니다.",
-          "why": "USDT 가 가장 많이 도는 트론과 기존 금융망 사이의 연결이 쉬워지는 흐름입니다. 이 대시보드는 트론 위 이체를 수집하지 않으므로, 트론 경유 흐름이 커질수록 온체인으로 보지 못하는 부분도 커집니다.",
-          "published": "2026-10-07",
+          "title": "[국내] 광주은행·토스, 스테이블코인 매장 QR결제 기술검증 완료",
+          "summary": "광주은행 앱에서 스테이블코인 결제를 고르면 토스 앱과 토스플레이스 단말기의 QR 로 결제하고 결과가 은행 앱에 돌아오는 흐름을 가상 가맹점으로 시험했습니다. 실제 고객 자산은 쓰지 않았고 2차 검증을 논의할 계획입니다.",
+          "why": "법 제정 전에 은행·핀테크가 원화 스테이블코인 결제 인프라를 미리 준비하는 움직임입니다. 결제 즉시 정산 구조는 향후 지급결제 감독의 점검 대상이 됩니다.",
+          "published": "2026-10-08",
           "confidence": "보도 기준, 1차 출처 미확인",
           "sources": [
-            {"name": "CoinDesk 코리아", "url": "https://coindesk.com/ko/business/2026/10/07/polygon-and-tron-partner-to-bridge-usd94-billion-usdt-ecosystem-with-u-s-banking-rails"}
+            {
+              "name": "글로벌이코노믹",
+              "url": "https://www.g-enews.com/article/Finance/2026/10/202610080834389132bb91c46fcd_1"
+            }
+          ]
+        },
+        {
+          "title": "스탠다드차타드, 싱가포르에서 스테이블코인 포함 기관 디지털자산 수탁 추진",
+          "summary": "스탠다드차타드 싱가포르 법인이 기관·적격투자자 법인 고객에게 일부 가상자산·스테이블코인·토큰화 실물자산 수탁 서비스를 내놓겠다고 밝혔습니다. 규제 요건 충족이 전제이며 대상 종목과 출시일은 공개하지 않았습니다.",
+          "why": "글로벌 은행이 스테이블코인 수탁을 기존 증권 수탁과 묶는 흐름으로, 국내 은행 중심 발행·수탁 논의와 연결됩니다.",
+          "published": "2026-10-08",
+          "confidence": "1차 출처 확인",
+          "sources": [
+            {
+              "name": "Standard Chartered 보도자료",
+              "url": "https://www.sc.com/en/press-release/standard-chartered-advances-into-digital-asset-custody-offering-in-singapore/"
+            }
           ]
         }
-      ]
+      ],
+      "empty_note": ""
     }
   ],
-  "dashboard_link": "이 대시보드 지표와 직접 이어지는 사건(대형 발행사 동결·디페그 등)은 이번 24시간에 없었습니다. USDT 김치프리미엄 +1.97%(경보선 1.5%)는 뉴스로 설명되는 특정 사건 없이 이어지고 있습니다.",
-  "caveats": "Claude 가 공개 보도와 발표를 읽고 쓴 요약이며 원문과 다를 수 있습니다. '보도 기준' 항목은 당국·발행사 원문으로 확인하지 못했습니다. 개인이 공개 데이터로 만든 참고 자료이며 어떠한 기관의 공식 견해도 아닙니다."
+  "dashboard_link": "대시보드 지표와 이어지는 대형 발행사 동결·디페그 사건은 이번 24시간에 없었습니다. USDT 김치프리미엄은 +2.42%(경보선 1.5%)로 전날(+1.97%)보다 커졌는데, 이를 직접 설명하는 특정 뉴스는 확인되지 않았습니다. ESMA 의견서는 앞으로 3개월간 EURC 등 MiCA 준수 종목과 USDT 발행잔액 흐름을 함께 볼 이유입니다.",
+  "caveats": "Claude 가 공개 보도와 발표를 읽고 쓴 요약이며 원문과 다를 수 있습니다. '보도 기준' 항목은 당국·발행사 원문으로 확인하지 못했습니다. 무디스의 스카이 프로토콜 신용등급(B3) 발표는 미국 시각 10월 7일이라 이번 기간에서 뺐습니다. 개인이 공개 데이터로 만든 참고 자료이며 어떠한 기관의 공식 견해도 아닙니다."
 }
