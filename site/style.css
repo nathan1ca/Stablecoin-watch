@@ -1221,3 +1221,11 @@ html[data-theme="dark"] .ex:not(.ex--empty),html[data-theme="dark"] .ex-img{back
 
 /* ── 동결 조치: 체인별 표 ─────────────────────────── */
 .fz-chain-panel{margin-top:1.2rem}
+
+/* 동결 — 집중 조치일 */
+.fz-spike-panel{margin-top:1.2rem}
+.fz-spike-lead{color:var(--mid);font-size:.86rem;margin:.2rem 0 .8rem;max-width:62rem}
+.fz-tick.spike{width:5px;height:22px;opacity:1}
+.fz-guide li{margin-bottom:.55rem}
+.fz-guide strong{font-weight:600}
+

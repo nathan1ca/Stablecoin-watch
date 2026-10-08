@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import sys
+import statistics
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -254,6 +255,49 @@ def collect_evm(since: int, key: str) -> tuple[list[dict], list[dict], list[str]
     return events, statuses, notes
 
 
+# 집중 조치일: 한 종목이 하루에 평소보다 훨씬 많이 동결·소각한 날.
+# 보통 수사 한 건·제재 지정 한 번으로 여러 주소를 한꺼번에 묶을 때 생긴다.
+# 기준 = max(SPIKE_MIN, SPIKE_MULT × 조회 기간 일별 중앙값(조치 없는 날 0 포함)).
+# 2026-10-08 1년치로 보면 USDT 중앙값 10건/일 → 50건 이상인 날(6일),
+# USDC 중앙값 0 → 20건 이상인 날이 걸린다. 화면 표시용이며 경보 등급에는 쓰지 않는다.
+SPIKE_MIN = 20
+SPIKE_MULT = 5
+SPIKE_TOP = 12
+
+
+def spikes(events: list[dict], days: int) -> list[dict]:
+    """종목별 집중 조치일 목록(건수 큰 순, 최대 SPIKE_TOP). 같은 날 다른 종목도 몰렸으면 joint 표시."""
+    per: dict[str, dict[str, dict]] = {}
+    for e in events:
+        if e["kind"] == "unfreeze":
+            continue
+        d = datetime.fromtimestamp(e["t"], timezone.utc).strftime("%Y-%m-%d")
+        c = per.setdefault(e["symbol"], {}).setdefault(
+            d, {"date": d, "symbol": e["symbol"], "issuer": e["issuer"], "freeze": 0, "seize": 0,
+                "units": 0.0, "chains": {}})
+        c["freeze" if e["kind"] == "freeze" else "seize"] += 1
+        c["chains"][e["chain"]] = c["chains"].get(e["chain"], 0) + 1
+        if e.get("units"):
+            c["units"] += e["units"]
+    out = []
+    for sym, by_day in per.items():
+        counts = [c["freeze"] + c["seize"] for c in by_day.values()]
+        counts += [0] * max(0, days - len(counts))
+        med = statistics.median(counts) if counts else 0
+        cut = max(SPIKE_MIN, SPIKE_MULT * med)
+        for c in by_day.values():
+            n = c["freeze"] + c["seize"]
+            if n >= cut:
+                out.append(dict(c, n=n, median=med, units=round(c["units"], 2)))
+    by_date: dict[str, set] = {}
+    for c in out:
+        by_date.setdefault(c["date"], set()).add(c["symbol"])
+    for c in out:
+        c["joint"] = sorted(by_date[c["date"]] - {c["symbol"]})
+    out.sort(key=lambda c: (-c["n"], c["date"]))
+    return out[:SPIKE_TOP]
+
+
 def summarize(events: list[dict], statuses: list[dict], days: int, notes: list[str]) -> dict:
     events = sorted(events, key=lambda e: -e["t"])
     # 발행사(종목)별 — 체인을 합친 값
@@ -333,6 +377,8 @@ def summarize(events: list[dict], statuses: list[dict], days: int, notes: list[s
         "by_chain": chain_rows,
         "monthly": [{"m": m, **v} for m, v in sorted(monthly.items())],
         "daily": daily,
+        "spikes": spikes(events, days),
+        "spike_rule": {"min": SPIKE_MIN, "mult": SPIKE_MULT},
         "events": events[:500],
     }
 

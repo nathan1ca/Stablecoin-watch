@@ -1353,13 +1353,15 @@
       if (e.kind === "unfreeze") return;
       (byIssuer[e.issuer] = byIssuer[e.issuer] || []).push(e);
     });
+    const spikeKey = new Set((f.spikes || []).map((x) => x.symbol + "|" + x.date));
     $("#fz-lanes").innerHTML = f.issuers.map((r) => {
       // 일별 집계(daily)가 있으면 그것으로 — events 는 최근 500건만 실려 와 오래된 표식이 빠진다.
       const dd = (f.daily || {})[r.symbol];
       const ticks = dd
         ? Object.entries(dd).map(([d, [fz, sz]]) => {
             const ts = Date.parse(d + "T12:00:00Z") / 1000;
-            return `<i class="fz-tick${sz ? " seize" : ""}" style="left:${at(ts).toFixed(2)}%" title="${d} 동결 ${fz} · 소각 ${sz}"></i>`;
+            const sp = spikeKey.has(r.symbol + "|" + d);
+            return `<i class="fz-tick${sz ? " seize" : ""}${sp ? " spike" : ""}" style="left:${at(ts).toFixed(2)}%" title="${d} 동결 ${fz} · 소각 ${sz}${sp ? " · 집중 조치일" : ""}"></i>`;
           }).join("")
         : (byIssuer[r.issuer] || []).map((e) =>
             `<i class="fz-tick${e.kind === "seize" ? " seize" : ""}" style="left:${at(e.t).toFixed(2)}%"></i>`
@@ -1386,10 +1388,35 @@
           <td>${esc(chKo(r.chain))}</td><td>${esc(r.symbol)}</td>
           <td class="num">${(r.freeze || 0).toLocaleString()}</td>
           <td class="num">${(r.unfreeze || 0).toLocaleString()}</td>
+          <td class="num">${r.freeze >= 30 ? Math.round((r.unfreeze || 0) / r.freeze * 100) + "%" : `<span class="sig-dim">—</span>`}</td>
           <td class="num">${(r.seize || 0).toLocaleString()}</td>
           <td>${state}${r.note && !/^과거 기록/.test(r.note) ? ` <span class="sig-dim">${esc(r.note.replace(/ — 제외$/, ""))}</span>` : ""}</td>
         </tr>`;
       }).join("");
+    }
+
+    // 집중 조치일 — 한 종목이 하루에 평소의 몇 배를 동결·소각한 날
+    const spw = $("#fz-spikes-wrap");
+    const sps = f.spikes || [];
+    if (spw) {
+      spw.hidden = !sps.length;
+      $("#fz-spikes tbody").innerHTML = sps.map((x) => {
+        const chs = Object.entries(x.chains || {}).sort((a, b) => b[1] - a[1])
+          .map(([c, v]) => `${esc(chKo(c))} ${v.toLocaleString()}`).join(" · ");
+        const vs = x.median > 0 ? `${(x.n / x.median).toFixed(x.n / x.median >= 10 ? 0 : 1)}배` : "평소 0건";
+        const what = `동결 ${x.freeze.toLocaleString()}` + (x.seize ? ` · <span class="kind-seize">소각 ${x.seize.toLocaleString()}</span>` : "");
+        return `<tr>
+          <td>${esc(x.date)}</td>
+          <td>${esc(x.issuer)} <span class="tname">${esc(x.symbol)}</span></td>
+          <td class="num" title="${what.replace(/<[^>]+>/g, "")}">${x.n.toLocaleString()}</td>
+          <td class="num">${vs}</td>
+          <td>${chs}</td>
+          <td>${(x.joint || []).length ? `<span class="t-watch">${x.joint.map(esc).join("·")}</span>` : `<span class="sig-dim">—</span>`}</td>
+        </tr>`;
+      }).join("");
+      const rule = f.spike_rule || { min: 20, mult: 5 };
+      $("#fz-spike-rule").textContent =
+        `기준: 그 종목의 하루 건수가 조회 기간 일별 중앙값(조치 없는 날 0 포함)의 ${rule.mult}배 이상이면서 ${rule.min}건 이상인 날. 건수 큰 순 최대 ${sps.length >= 12 ? 12 : sps.length}일. 해제는 세지 않습니다. 레인의 굵은 표식이 이 날들입니다. ‘같은 날’은 그날 다른 종목도 집중 조치일이었다는 뜻입니다.`;
     }
 
     // 최근 조치
