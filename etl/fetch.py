@@ -1247,6 +1247,103 @@ def probe_watchlist():
     print(f"  → {n}종")
 
 
+# ── 원천 데이터 이상 점검 ──────────────────────────────────────────────────
+# DefiLlama 응답에서 체인 하나가 통째로 빠지면(2026-10-08 22시 UTC 작업 브랜치 시험:
+# JPYC 의 Kaia 몫 약 440만 엔이 사라지고 총 발행잔액이 5시간 만에 $315.2B → $303.3B)
+# 30일 증감률이 −30~−50%로 계산돼 USD1·USDG 같은 시장 영향 종목이 '상환 경보'가 되고
+# 시스템 등급이 '경보'로 뜬다. 시장이 아니라 원천의 문제이므로 직전 값을 유지한다.
+SNAPSHOT_PATH = Path(__file__).resolve().parents[1] / "site" / "data" / "snapshot.json"
+SOURCE_TOTAL_DROP_PCT = 3.0       # 직전 회차 대비 총 발행잔액 감소 한도(%)
+SOURCE_CHAIN_MIN_USD = 200e6      # 종목·체인 몫이 이 금액 이상일 때만 '체인 누락'을 본다
+SOURCE_MARKET_CHAIN_MIN_USD = 1e9  # 체인 전체 합계 비교 하한
+SOURCE_CHAIN_DROP_PCT = 50.0      # 이만큼 넘게 줄면 누락으로 본다
+SOURCE_COMPARE_MAX_HOURS = 48     # 직전 값이 이보다 오래면 비교하지 않는다
+SOURCE_HOLD_MAX_HOURS = 12        # 직전 값을 유지하는 최대 시간(실제 위기를 오래 가리지 않게)
+
+
+def _parse_iso(s) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def load_prev_snapshot(out: Path | None = None) -> dict | None:
+    """직전 스냅숏. 출력 폴더에 없으면(작업 브랜치 시험) 저장소의 site/data 를 본다."""
+    for p in ([Path(out) / "snapshot.json"] if out else []) + [SNAPSHOT_PATH]:
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            continue
+        if isinstance(d, dict) and not (d.get("meta") or {}).get("is_sample"):
+            return d
+    return None
+
+
+def source_anomalies(prev: dict, snap: dict, raw_assets: list[dict],
+                     now: datetime | None = None) -> list[str]:
+    """직전 스냅숏 대비 원천 이상 목록(사람이 읽는 문장). 비어 있으면 정상."""
+    now = now or datetime.now(timezone.utc)
+    pt = _parse_iso((prev.get("meta") or {}).get("generated_at"))
+    if pt is None or (now - pt).total_seconds() / 3600 > SOURCE_COMPARE_MAX_HOURS:
+        return []
+    out: list[str] = []
+
+    p_tot = (prev.get("totals") or {}).get("circulating_usd") or 0
+    n_tot = (snap.get("totals") or {}).get("circulating_usd") or 0
+    if p_tot > 0:
+        chg = (n_tot / p_tot - 1) * 100
+        if chg <= -SOURCE_TOTAL_DROP_PCT:
+            out.append(f"총 발행잔액 ${p_tot/1e9:,.1f}B → ${n_tot/1e9:,.1f}B ({chg:+.1f}%)")
+
+    raw = {str(a.get("id")): a for a in raw_assets}
+    for r in prev.get("assets") or []:
+        circ = r.get("circulating") or 0
+        usd_unit = (r.get("mcap_usd") or 0) / circ if circ else 0
+        a = raw.get(str(r.get("id")))
+        if a is None or usd_unit <= 0:
+            continue
+        cc = a.get("chainCirculating") or {}
+        for c in r.get("chains") or []:
+            p_amt = c.get("amount") or 0
+            if p_amt * usd_unit < SOURCE_CHAIN_MIN_USD:
+                continue
+            n_amt = peg_amount((cc.get(c.get("chain")) or {}).get("current"))
+            if n_amt < p_amt * (1 - SOURCE_CHAIN_DROP_PCT / 100):
+                out.append(f"{r.get('symbol')}: {c.get('chain')} 체인 몫 ${p_amt*usd_unit/1e6:,.0f}M → "
+                           f"${n_amt*usd_unit/1e6:,.0f}M ({(n_amt/p_amt-1)*100:+.0f}%)")
+
+    n_ch = {c.get("chain"): c.get("amount") or 0 for c in snap.get("by_chain") or []}
+    for c in prev.get("by_chain") or []:
+        p_amt = c.get("amount") or 0
+        # 이번 회차 체인 목록이 통째로 비었으면(체인 집계 수집 실패) 이 비교는 건너뛴다.
+        if p_amt >= SOURCE_MARKET_CHAIN_MIN_USD and n_ch:
+            n_amt = n_ch.get(c.get("chain"), 0)
+            if n_amt < p_amt * (1 - SOURCE_CHAIN_DROP_PCT / 100):
+                out.append(f"체인 합계 {c.get('chain')} ${p_amt/1e9:,.1f}B → ${n_amt/1e9:,.1f}B")
+    return out
+
+
+def hold_decision(prev: dict, reasons: list[str], now: datetime | None = None) -> dict:
+    """직전 값을 유지할지. 직전 값이 SOURCE_HOLD_MAX_HOURS 보다 오래됐으면 새 값을 쓴다."""
+    now = now or datetime.now(timezone.utc)
+    pt = _parse_iso((prev.get("meta") or {}).get("generated_at"))
+    age_h = (now - pt).total_seconds() / 3600 if pt else None
+    held = age_h is not None and age_h < SOURCE_HOLD_MAX_HOURS
+    return {
+        "detected_at": now.isoformat(timespec="seconds"),
+        "held": held,
+        "prev_generated_at": (prev.get("meta") or {}).get("generated_at"),
+        "count": len(reasons),
+        "reasons": reasons[:8],
+        "note": ("원천(DefiLlama) 응답에서 체인 몫이 통째로 빠지는 등 이상이 보여 직전 수집값을 유지했습니다."
+                 if held else
+                 f"원천 이상이 {SOURCE_HOLD_MAX_HOURS}시간 넘게 이어져 새 값을 게시했습니다. "
+                 "발행잔액·30일 증감·등급이 실제보다 나쁘게 나올 수 있습니다."),
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="site/data", help="출력 디렉터리")
@@ -1317,6 +1414,26 @@ def main():
     print(f"    {len(series)}종 확보")
 
     hist = build_history(history, series)
+
+    # 원천 이상 점검: 직전 스냅숏(저장소에 커밋된 값)과 비교해 체인 통째 누락·총액 급감이면
+    # 직전 값을 유지한다. 실제 위기일 수도 있으므로 유지는 SOURCE_HOLD_MAX_HOURS 까지만.
+    prev = load_prev_snapshot(out)
+    found = source_anomalies(prev, snap, assets) if prev else []
+    if found:
+        print("\n원천 데이터 이상 감지 — " + str(len(found)) + "건")
+        for r in found[:12]:
+            print("  · " + r)
+        decision = hold_decision(prev, found)
+        if decision["held"]:
+            prev.setdefault("meta", {})["source_anomaly"] = decision
+            (out / "snapshot.json").write_text(
+                json.dumps(prev, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+            print(f"  → 직전 스냅숏({prev['meta'].get('generated_at')}) 유지, history.json 도 그대로 둔다.")
+            print(f"     이번 회차 값(쓰지 않음): 총 ${snap['totals']['circulating_usd']/1e9:,.1f}B · "
+                  f"경보 {snap['totals']['breach_count']} · 위험점수 {snap['totals'].get('risk_score')}")
+            return
+        snap["meta"]["source_anomaly"] = decision
+        print(f"  → 직전 값이 {SOURCE_HOLD_MAX_HOURS}시간보다 오래돼 새 값을 게시하고 이상 표시를 붙인다.")
 
     (out / "snapshot.json").write_text(
         json.dumps(snap, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

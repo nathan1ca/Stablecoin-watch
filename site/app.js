@@ -139,6 +139,15 @@
     stamp.insertAdjacentHTML("beforeend",
       ` <span class="stamp-age${ageH > 6 ? " is-stale" : ""}">${esc(ageTxt(m.generated_at))}</span>`);
     if (ageH > 6) stamp.title = "마지막 수집 후 6시간이 넘었습니다. 수집 작업이 지연·실패했을 수 있습니다.";
+    // 원천(DefiLlama) 이상으로 직전 값을 유지했거나, 이상이 이어진 채 새 값을 게시한 경우.
+    const sa = m.source_anomaly;
+    if (sa) {
+      const tip = `${sa.note || ""}\n감지 ${fmtTime(sa.detected_at)} · ${sa.count || (sa.reasons || []).length}건`
+        + (sa.reasons || []).slice(0, 5).map((r) => "\n· " + r).join("");
+      stamp.insertAdjacentHTML("beforeend",
+        ` <span class="stamp-age is-stale" tabindex="0" data-tip="${esc(tip)}">`
+        + `${sa.held ? "원천 이상 — 직전 값 유지" : "원천 이상 — 값 확인 필요"}</span>`);
+    }
     $("#stamp-src").textContent = m.source || "—";
     $("#stamp-count").textContent = `${m.asset_count}종목`;
     $("#foot-time").textContent = fmtTime(m.generated_at);

@@ -109,3 +109,60 @@ class TestSnapshotUsesIdKey(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSourceAnomaly(unittest.TestCase):
+    """2026-10-08 22시 UTC: DefiLlama 응답에서 체인 몫이 통째로 빠져 총액 −3.8%."""
+
+    def setUp(self):
+        from datetime import datetime, timezone, timedelta
+        self.now = datetime(2026, 10, 8, 22, 0, tzinfo=timezone.utc)
+        self.prev = {
+            "meta": {"generated_at": (self.now - timedelta(hours=5)).isoformat()},
+            "totals": {"circulating_usd": 315e9},
+            "assets": [{"id": "1", "symbol": "USDG", "circulating": 3.3e9, "mcap_usd": 3.3e9,
+                        "chains": [{"chain": "Solana", "amount": 1.5e9}, {"chain": "Ethereum", "amount": 0.5e9}]}],
+            "by_chain": [{"chain": "Solana", "amount": 15e9}, {"chain": "Ethereum", "amount": 160e9}],
+        }
+        self.td = timedelta
+
+    def raw(self, sol):
+        cc = {"Ethereum": {"current": {"peggedUSD": 0.5e9}}}
+        if sol is not None:
+            cc["Solana"] = {"current": {"peggedUSD": sol}}
+        return [{"id": "1", "chainCirculating": cc}]
+
+    def snap(self, total, sol_chain=15e9):
+        return {"totals": {"circulating_usd": total},
+                "by_chain": [{"chain": "Solana", "amount": sol_chain}, {"chain": "Ethereum", "amount": 160e9}]}
+
+    def test_normal_run_has_no_anomaly(self):
+        self.assertEqual(fetch.source_anomalies(self.prev, self.snap(315.5e9), self.raw(1.48e9), now=self.now), [])
+
+    def test_chain_dropout_detected(self):
+        r = fetch.source_anomalies(self.prev, self.snap(314e9), self.raw(None), now=self.now)
+        self.assertTrue(any("USDG: Solana" in x for x in r), r)
+
+    def test_total_drop_and_market_chain_detected(self):
+        r = fetch.source_anomalies(self.prev, self.snap(303e9, sol_chain=1e9), self.raw(1.5e9), now=self.now)
+        self.assertTrue(any("총 발행잔액" in x for x in r))
+        self.assertTrue(any("체인 합계 Solana" in x for x in r))
+
+    def test_empty_chain_fetch_is_not_anomaly(self):
+        s = self.snap(315e9); s["by_chain"] = []
+        self.assertEqual(fetch.source_anomalies(self.prev, s, self.raw(1.5e9), now=self.now), [])
+
+    def test_old_prev_not_compared(self):
+        self.prev["meta"]["generated_at"] = (self.now - self.td(hours=60)).isoformat()
+        self.assertEqual(fetch.source_anomalies(self.prev, self.snap(200e9), self.raw(None), now=self.now), [])
+
+    def test_hold_only_for_limited_time(self):
+        self.assertTrue(fetch.hold_decision(self.prev, ["x"], now=self.now)["held"])
+        self.prev["meta"]["generated_at"] = (self.now - self.td(hours=13)).isoformat()
+        d = fetch.hold_decision(self.prev, ["x"], now=self.now)
+        self.assertFalse(d["held"])
+        self.assertIn("새 값을 게시", d["note"])
+
+    def test_real_crash_with_flat_chains_is_not_held(self):
+        # 가격이 무너져도 수량·체인 몫이 그대로면 원천 이상이 아니다(시장 사건은 그대로 게시).
+        self.assertEqual(fetch.source_anomalies(self.prev, self.snap(312e9), self.raw(1.4e9), now=self.now), [])
