@@ -2036,6 +2036,40 @@
     tipify(wrap);
   }
 
+  // ── 최근 30일 온체인 이체 건수 ─────────────────────────
+  function renderOnchainTx(o) {
+    if (!o || !(o.rows || []).length) return;
+    $("#otx-sec").hidden = false;
+    const CH = { Ethereum: "이더리움", Tron: "트론", Avalanche: "아발란체" };
+    const cnt = (n) => n == null ? "—" : n >= 1e8 ? (n / 1e8).toFixed(1) + "억" : n >= 1e4 ? (n / 1e4).toFixed(n >= 1e6 ? 0 : 1) + "만" : n.toLocaleString();
+    const spark = (d) => {
+      if (!d || d.length < 2) return "";
+      const v = d.map((x) => x[1]), mx = Math.max(...v) || 1, mn = Math.min(...v);
+      const pts = v.map((y, i) => `${(i / (v.length - 1) * 100).toFixed(1)},${(22 - (y - mn) / ((mx - mn) || 1) * 20).toFixed(1)}`).join(" ");
+      return `<svg class="otx-spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`;
+    };
+    $("#otx-tbl tbody").innerHTML = o.rows.map((r) => `<tr>
+      <td><span class="tsym">${esc(r.symbol)}</span></td>
+      <td>${esc(CH[r.chain] || r.chain)}</td>
+      <td class="num" title="${r.tx_30d.toLocaleString()}건 (${esc(r.from)} ~ ${esc(r.to)})">${cnt(r.tx_30d)}건</td>
+      <td class="num" title="${(r.tx_avg || 0).toLocaleString()}건">${cnt(r.tx_avg)}</td>
+      <td class="num">${r.chg_pct == null ? "—" : chgTxt(r.chg_pct)}</td>
+      <td class="num"${r.active_avg != null ? ` title="${r.active_avg.toLocaleString()}개"` : ""}>${r.active_avg == null ? "—" : cnt(r.active_avg)}</td>
+      <td title="최소 ${Math.min(...r.daily.map((x) => x[1])).toLocaleString()} · 최대 ${Math.max(...r.daily.map((x) => x[1])).toLocaleString()}">${spark(r.daily)}</td>
+    </tr>`).join("");
+    tipify($("#otx-tbl"));
+    const m = o.meta || {}, t = o.totals || {};
+    const top = o.rows[0];
+    const usdt = (t.by_symbol || {}).USDT, all = t.tx_30d;
+    setLead("otx", `최근 ${m.window_days || 30}일 ${esc((m.chains_covered || []).map((c) => CH[c] || c).join("·"))}에서 스테이블코인 이체가 ${bold(cnt(all) + "건")} 기록됐습니다.`
+      + (top ? ` 가장 많은 곳은 ${bold(esc(top.symbol) + " " + esc(CH[top.chain] || top.chain))}(${cnt(top.tx_30d)}건)` : "")
+      + (usdt && all ? `이고, USDT 가 전체의 ${Math.round(usdt / all * 100)}%입니다.` : "입니다."));
+    const bad = Object.entries(m.status || {}).filter(([, v]) => v !== "ok").map(([k]) => k);
+    $("#otx-note").textContent = `출처: ${m.source || "Coin Metrics"}. ${m.note || ""} `
+      + `범위 밖 체인: ${(m.chains_missing || []).join("·")} — 솔라나·BNB 등의 이체는 빠져 있어 전체 이체 건수보다 작습니다.`
+      + (bad.length ? ` 이번 수집에서 받지 못한 항목: ${bad.join(", ")}.` : "");
+  }
+
   // ── 오늘의 뉴스 요약 ─────────────────────
   // site/digest/news_digest.json — 매일 점검이 써서 PR 로 들어온다.
   function renderDigest(g) {
@@ -2506,6 +2540,14 @@
       if (r.ok) renderListings(await r.json(), snap);
     } catch (e) {
       console.info("listings.json 없음 — 국내 거래지원 표시 생략");
+    }
+
+    // 최근 30일 온체인 이체 건수
+    try {
+      const r = await fetch("data/onchain_tx.json", { cache: "no-cache" });
+      if (r.ok) renderOnchainTx(await r.json());
+    } catch (e) {
+      console.info("onchain_tx.json 없음 — 이체 건수 생략");
     }
 
     // 오늘의 뉴스 요약

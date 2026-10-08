@@ -66,6 +66,11 @@ jobs:
         run: python etl/fetch_freeze.py --days 30 --out "$RUNNER_TEMP/scw-dryrun"
         continue-on-error: true
 
+      # 종목·체인별 최근 30일 온체인 이체 건수(Coin Metrics 커뮤니티) 응답 확인(쓰기 없음).
+      - name: 온체인 이체 건수 확인 (읽기 전용)
+        run: python etl/fetch_onchain_tx.py --probe
+        continue-on-error: true
+
       # 뉴스 RSS 피드별 응답·24시간 건수·키워드 반영 건수를 로그로 남긴다(쓰기 없음).
       - name: 뉴스 피드 확인 (읽기 전용)
         run: python etl/fetch_news.py --probe
