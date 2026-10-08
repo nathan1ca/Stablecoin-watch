@@ -62,6 +62,27 @@ class TestBuild(unittest.TestCase):
                 self.assertIsNotNone(e.get("reported_circulating"))   # 검증 표시는 수치가 있을 때만
         fa.build(d["entries"], {}, d.get("not_covered"))
 
+    def test_reserve_breakdown_sums_to_total(self):
+        # 준비금 구성은 보고서 항목을 옮긴 것이라 합계가 보고서 총액과 맞아야 한다(반올림 $10 허용).
+        d = json.loads((ROOT / "etl" / "attestations.json").read_text(encoding="utf-8"))
+        kinds = {"cash", "tbill", "repo", "fund", "gold", "btc", "equity", "loan", "other", "settle"}
+        n = 0
+        for e in d["entries"]:
+            rows = e.get("reserves_breakdown")
+            if not rows:
+                continue
+            n += 1
+            self.assertTrue(e.get("reserves_breakdown_basis"), e["symbol"])
+            for r in rows:
+                self.assertIn(r["k"], kinds, e["symbol"])
+                self.assertTrue(r["label"])
+            self.assertAlmostEqual(sum(r["amount"] for r in rows), e["reserves_total"], delta=10,
+                                   msg=e["symbol"])
+        self.assertGreaterEqual(n, 7)
+        out = fa.build(d["entries"], {}, [])
+        usdt = next(x for x in out["entries"] if x["symbol"] == "USDT")
+        self.assertEqual(len(usdt["reserves_breakdown"]), 11)
+
 
 if __name__ == "__main__":
     unittest.main()

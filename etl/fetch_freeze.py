@@ -17,7 +17,7 @@
     조치가 아니어서 넣지 않는다.
 
     export ETHERSCAN_API_KEY=...
-    python etl/fetch_freeze.py --days 365
+    python etl/fetch_freeze.py --days 90
 """
 
 from __future__ import annotations
@@ -416,7 +416,7 @@ def probe(key: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--days", type=int, default=365, help="조회 기간(일)")
+    ap.add_argument("--days", type=int, default=90, help="조회 기간(일) — 화면 시간축이 촘촘해지지 않게 3개월(2026-10-08)")
     ap.add_argument("--out", default="site/data")
     ap.add_argument("--probe", action="store_true", help="시그니처와 topic0만 출력")
     ap.add_argument("--solana-state", default=None, help="솔라나 증분 수집 상태 파일(기본: <out>/freeze_state_solana.json)")

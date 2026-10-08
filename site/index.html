@@ -341,7 +341,7 @@
     <div class="panel">
       <h3>읽는 법</h3>
       <ul class="plain fz-guide">
-        <li><strong>위험 지표가 아닙니다.</strong> 1년 소각액은 USDT 발행잔액의 1% 에도 못 미쳐 페그·상환과는 무관합니다. 그래서 시스템 등급과 합성점수에 넣지 않습니다.</li>
+        <li><strong>위험 지표가 아닙니다.</strong> 1년치를 모아도 소각액이 USDT 발행잔액의 1% 에도 못 미쳐 페그·상환과는 무관합니다. 그래서 시스템 등급과 합성점수에 넣지 않습니다.</li>
         <li><strong>건수는 범죄 규모가 아니라 발행사 정책을 더 많이 반영합니다.</strong> 테더는 여러 나라 수사기관과 협력해 적극적으로 동결해 온 편이고, 서클은 법원 명령 등 법적 요구가 있을 때 동결한다는 입장을 밝혀 왔습니다. 종목 간 건수 차이를 그대로 ‘어느 쪽이 더 위험하다’로 읽으면 안 됩니다.</li>
         <li><strong>트론 비중이 큰 이유.</strong> 트론 USDT 는 장외거래·송금에 가장 많이 쓰이는 경로라 사기·자금세탁 자금도 그쪽으로 많이 움직입니다.</li>
         <li><strong>급증한 날은 뉴스와 같이 보세요.</strong> 아래 ‘집중 조치일’이 대부분 한 사건의 일괄 조치입니다. 여러 발행사가 같은 날 몰렸다면 공동 대응일 수 있습니다.</li>
@@ -546,18 +546,25 @@
     <p>발행사가 공표한 준비금 보고서(회계법인 검토)의 기준일과 지금 이 순간의 온체인 발행잔액 사이에는 항상 간격이 있습니다. 그 간격과, 보고서 시점 대비 발행량이 얼마나 달라졌는지를 봅니다. 경과일 등급은 발행사 공표 주기(월간·분기)에 맞춰 매깁니다.</p>
   </div>
   <div class="tablewrap">
-    <table id="attest-tbl">
+    <table id="attest-tbl" data-tipify>
       <thead><tr>
         <th scope="col">종목</th><th scope="col">검토 기관</th><th scope="col">기준일</th><th scope="col" class="num">경과일</th>
         <th scope="col" class="num">보고 시점 발행량</th><th scope="col" class="num">현재 발행량</th>
-        <th scope="col" class="num"><abbr title="보고서 기준일 이후 발행량 변화율. 크면 보고서가 지금 규모를 설명하지 못한다는 뜻입니다(성장도 포함).">드리프트</abbr></th>
-        <th scope="col" class="num"><abbr title="보고서상 준비금 ÷ 보고서상 발행량. 100% 이상이면 발행량보다 준비금이 많습니다.">준비금 비율</abbr></th>
+        <th scope="col" class="num"><abbr title="보고서 기준일 이후 발행량이 얼마나 달라졌는지입니다. (현재 발행량 − 보고 시점 발행량) ÷ 보고 시점 발행량. 늘어난 만큼은 아직 회계법인이 확인하지 않은 준비금으로 뒷받침되고 있다는 뜻입니다. ±3% 이상 주의, ±8% 이상 경보. 발행이 늘어난 성장도 포함되므로 그 자체로 부실을 뜻하지는 않습니다.">드리프트</abbr></th>
+        <th scope="col" class="num"><abbr title="보고서상 준비금 총액 ÷ 보고서상 발행량. 100% 를 넘는 부분이 초과 준비금(손실 완충)입니다. 준비금에 금·비트코인·주식처럼 가격이 움직이는 자산이 있으면 그 가격이 떨어질 때 비율도 내려갑니다 — 아래 ‘준비금 구성’을 같이 보세요. 등급에는 쓰지 않습니다.">준비금 비율</abbr></th>
         <th scope="col">등급</th>
       </tr></thead>
       <tbody></tbody>
     </table>
   </div>
   <p class="foot" id="attest-note"></p>
+  <div class="panel att-res" id="att-res-wrap" hidden data-tipify>
+    <h3>준비금 구성</h3>
+    <p class="plain-p">보고서에 적힌 준비자산을 종류별로 나눈 비중입니다. 오른쪽 숫자는 현금성 자산(현금·예금, 국채, 국채 리포, 국채 MMF·펀드)의 비중입니다. 막대에 커서를 올리거나 탭하면 항목별 금액이 나옵니다.</p>
+    <ol class="res-rows" id="att-res"></ol>
+    <div class="res-legend" id="att-res-legend"></div>
+    <p class="foot" id="att-res-note"></p>
+  </div>
   <div class="panel attest-gaps" id="attest-gaps-wrap" hidden>
     <h3>표에 없는 주요 스테이블코인</h3>
     <p class="plain-p">회계법인 준비금 보고서가 없거나, 있어도 형식상 확인하지 못한 종목입니다.</p>
