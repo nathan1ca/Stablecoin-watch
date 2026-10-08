@@ -35,6 +35,9 @@ PAUSE = 0.3
 NEW_MAX = 1500            # 한 회차에 여는 새 거래 상한(넘으면 메모로 남김)
 BACKFILL_PER_RUN = 500    # 한 회차에 여는 과거 거래 수
 KIND = {"freezeAccount": "freeze", "thawAccount": "unfreeze"}
+# 한 회차에 솔라나에 쓰는 시간 상한(초). 넘으면 거기서 멈추고 다음 회차에 이어 간다.
+# 2026-10-08: 상한이 없어 매시 수집의 동결 단계가 11분 넘게 걸렸고, 그동안 사이트 배포가 막혔다.
+TIME_BUDGET = float(os.environ.get("SOLANA_TIME_BUDGET", "150"))
 
 
 def rpc_url() -> str:
@@ -89,9 +92,12 @@ def _sigs(addr: str, rpc, before=None, until=None, limit=1000):
     return rpc("getSignaturesForAddress", [addr, p]) or []
 
 
-def collect_mint(spec: dict, st: dict, since_ts: int, rpc=_rpc) -> tuple[list[dict], dict]:
-    """민트 하나. st 는 이 민트의 상태(제자리 갱신). 반환: (전체 이벤트, 상태 메모)."""
+def collect_mint(spec: dict, st: dict, since_ts: int, rpc=_rpc,
+                 deadline: float | None = None, clock=time.monotonic) -> tuple[list[dict], dict]:
+    """민트 하나. st 는 이 민트의 상태(제자리 갱신). 반환: (전체 이벤트, 상태 메모).
+    deadline(clock 기준)을 넘기면 거래 열기를 멈춘다 — 본 곳까지 상태에 남아 다음 회차에 이어 간다."""
     note, opened = "", 0
+    late = lambda: deadline is not None and clock() >= deadline  # noqa: E731
     info = rpc("getAccountInfo", [spec["mint"], {"encoding": "jsonParsed"}])
     fa = (((info or {}).get("value") or {}).get("data") or {}).get("parsed", {}).get("info", {}).get("freezeAuthority")
     if not fa:
@@ -137,15 +143,19 @@ def collect_mint(spec: dict, st: dict, since_ts: int, rpc=_rpc) -> tuple[list[di
                 break
         if len(new) >= NEW_MAX:
             note = f"새 거래가 {NEW_MAX}건을 넘어 일부만 확인"
-        if new:
-            st["newest"] = new[0]["signature"]
-        for s in new:
+        # 오래된 것부터 열고, 하나 열 때마다 기준점을 옮긴다 — 시간이 다 되면 거기서 멈추고
+        # 남은 새 거래는 다음 회차가 이어서 연다.
+        for s in reversed(new):
+            if late():
+                note = (note + " · " if note else "") + "시간 상한 — 새 거래 일부는 다음 회차에"
+                break
             if (s.get("blockTime") or 0) >= since_ts:
                 open_sig(s)
+            st["newest"] = s["signature"]
 
     # 2) 과거분 — 조회 기간 시작점에 닿을 때까지 회차마다 BACKFILL_PER_RUN 건씩
     budget = BACKFILL_PER_RUN
-    while budget > 0 and not st.get("done") and st.get("newest"):
+    while budget > 0 and not st.get("done") and st.get("newest") and not late():
         cursor = None if st.get("backfill_from_top") else st.get("oldest")
         want = min(1000, budget)
         page = _sigs(fa, rpc, before=cursor, limit=want)
@@ -156,6 +166,8 @@ def collect_mint(spec: dict, st: dict, since_ts: int, rpc=_rpc) -> tuple[list[di
         for s in page:
             if (s.get("blockTime") or 0) < since_ts:
                 st["done"] = True
+                break
+            if late():
                 break
             open_sig(s)
             budget -= 1
@@ -170,16 +182,18 @@ def collect_mint(spec: dict, st: dict, since_ts: int, rpc=_rpc) -> tuple[list[di
                           "covered_from": st.get("oldest_t")}
 
 
-def collect(since_ts: int, state_path: Path, rpc=_rpc) -> tuple[list[dict], list[dict]]:
+def collect(since_ts: int, state_path: Path, rpc=_rpc, budget: float | None = None,
+            clock=time.monotonic) -> tuple[list[dict], list[dict]]:
     try:
         state = json.loads(Path(state_path).read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         state = {}
     all_ev, statuses = [], []
+    deadline = clock() + (TIME_BUDGET if budget is None else budget)
     for spec in MINTS:
         st = state.setdefault(spec["mint"], {})
         try:
-            ev, info = collect_mint(spec, st, since_ts, rpc)
+            ev, info = collect_mint(spec, st, since_ts, rpc, deadline=deadline, clock=clock)
             all_ev += ev
             statuses.append({"chain": "Solana", "symbol": spec["symbol"], "ok": True,
                              "complete": info["done"], "covered_from": info.get("covered_from"),
