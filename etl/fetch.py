@@ -702,7 +702,9 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         red_g = grade_redemption(chg_30d)
         overall = worse_grade(peg_g, red_g)
         # 가격 품질 저하만으로 breach 로 올리지는 않는다 — 관측 신뢰도 신호.
-        if price_quality == "degraded" and overall == "sound":
+        # 이자부 상품은 NAV 가 $1 위에 있어 교차 대상에 들어오지만, CoinGecko 가 소수 둘째 자리로
+        # 반올림해 주는 경우가 많아(reUSD 1.106 vs 1.11) 차이만으로 주의를 붙이지 않는다.
+        if price_quality == "degraded" and overall == "sound" and not is_yb:
             overall = "watch"
 
         # 체인별 분포

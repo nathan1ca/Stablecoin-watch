@@ -180,3 +180,14 @@ class TestSourceAnomalyPegValued(unittest.TestCase):
         snap = {"totals": {"circulating_usd": 315e9}, "by_chain": []}
         raw = [{"id": "214", "chainCirculating": {"BSC": {"current": {"peggedUSD": 4e6}}}}]
         self.assertEqual(fetch.source_anomalies(prev, snap, raw, now=now), [])
+
+
+class TestYieldBearingNotEscalated(unittest.TestCase):
+    def test_nav_rounding_gap_does_not_make_watch(self):
+        a = asset(339, "reUSD", 3e8, 1.106, "re-protocol-reusd")
+        rows = fetch.build_snapshot([a] + market()[:2], [], issuers={},
+                                    yield_bearing={"REUSD": {"kind": "x", "defillama_id": "339"}},
+                                    external_prices={"339": 1.11})["assets"]
+        r = [x for x in rows if x["id"] == "339"][0]
+        self.assertEqual(r["price_quality"], "degraded")
+        self.assertEqual(r["grade"], "sound")
