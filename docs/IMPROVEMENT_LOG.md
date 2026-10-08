@@ -18,6 +18,8 @@
 4. JPYC totalSupply 교차검증(Actions 경유), KRWQ 발행 주체 확인.
 5. 9월분 어테스테이션(10월 중순~말 공표) 반영, USDT 3분기(10월 말).
 
+**보고서**: [2026-10-09 스테이블코인 대시보드 보완 보고서](https://docs.google.com/document/d/14S5z_eoFZ5dvlO4F-o88k1ZV3fv4UPhmyeYTX50Orj4/edit) · PR #37
+
 ## 2026-10-08 (16) 이체 건수: USDS·USD1·USDG·RLUSD 이더리움 몫 직접 집계, 한계 표시 (auto/2026-10-08-16)
 
 - 네이선: 국내 상장 4종(USDS·USD1·USDG·RLUSD)이 Coin Metrics 무료 범위 밖이라 이체 건수가 없었음 → "가능한 것만 하고 한계점은 분명히 표시".
