@@ -24,7 +24,8 @@
     const a = Math.abs(w);
     if (a >= 1e12) return (w / 1e12).toFixed(a >= 1e14 ? 0 : 1) + "조원";
     if (a >= 1e8) return Math.round(w / 1e8).toLocaleString("ko-KR") + "억원";
-    return "1억원 미만";
+    if (a >= 1e4) return Math.round(w / 1e4).toLocaleString("ko-KR") + "만원";
+    return a > 0 ? "1만원 미만" : "0원";
   };
   const wonOf = (usdV) => (FX_KRW && usdV != null ? krwWon(usdV * FX_KRW) : "");
   const wonSub = (usdV) => {
@@ -64,6 +65,9 @@
   };
   const signed = (n, d = 2, suf = "") =>
     n == null || !isFinite(n) ? "—" : (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(d) + suf;
+  // 표의 증감률: 1,000% 넘는 값(신규 발행 직후 등)은 소수점을 떼어 칸이 넓어지지 않게 한다.
+  const chgTxt = (n) => n != null && Math.abs(n) >= 1000
+    ? `<span title="${signed(n, 1, "%")}">${signed(n, 0, "%")}</span>` : signed(n, 1, "%");
   const pct = (n, d = 2) => (n == null ? "—" : n.toFixed(d) + "%");
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const esc = (s) => String(s == null ? "" : s)
@@ -1290,7 +1294,7 @@
     $("#tbl tbody").innerHTML = rows.map((a, i) => `<tr>
       <td><span class="tsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="tsym sym-btn"
           data-i="${i}" aria-expanded="false"
-          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname">${esc(a.name || "")}</span></span></td>
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button><span class="tname" title="${esc(a.name || "")}">${esc(a.name || "")}</span></span></td>
       <td class="td-ex">${krLogos(a.symbol)}</td>
       <td>${a.mechanism_ko}</td>
       <td>${a.peg_currency}</td>
@@ -1299,8 +1303,8 @@
       <td class="num t-${a.grade_peg}"${a.dev_bp == null && isYieldBearing(a)
         ? ' title="이자부 토큰화 상품 — $1 고정이 목표가 아니라 편차를 계산하지 않습니다"' : ""
       }>${a.dev_bp == null ? "—" : signed(a.dev_bp, 1)}</td>
-      <td class="num">${signed(a.chg_7d, 1, "%")}</td>
-      <td class="num t-${a.grade_redemption}">${signed(a.chg_30d, 1, "%")}</td>
+      <td class="num">${chgTxt(a.chg_7d)}</td>
+      <td class="num t-${a.grade_redemption}">${chgTxt(a.chg_30d)}</td>
       <td><span class="pill is-${a.grade} t-${a.grade}" tabindex="0" data-tip="${esc(gradeWhy(a))}">${GRADE_KO[a.grade]}</span></td>
     </tr>`).join("");
   }
@@ -2247,7 +2251,10 @@
   let KRW_SHARE = null;
   function krShareSub(sym) {
     const a = KRW_SHARE && KRW_SHARE.assets && KRW_SHARE.assets[String(sym || "").toUpperCase()];
-    if (!a || !a.krw_24h) return "";
+    if (!a) return "";
+    if (!a.krw_24h) {
+      return `<span class="kr-share" tabindex="0" data-tip="${esc("국내 원화마켓에 상장돼 있지만 최근 24시간 거래가 없었습니다(거래소 24시간 시세의 거래대금 0).")}">24h 거래 없음</span>`;
+    }
     const pctTxt = a.share_pct == null ? "비중 —" : a.share_pct >= 10 ? a.share_pct.toFixed(0) + "%"
       : a.share_pct >= 0.1 ? a.share_pct.toFixed(1) + "%" : a.share_pct > 0 ? "<0.1%" : "0%";
     const by = Object.entries(a.by || {}).sort((x, y) => y[1] - x[1])
