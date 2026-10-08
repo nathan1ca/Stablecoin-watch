@@ -1302,7 +1302,10 @@ def source_anomalies(prev: dict, snap: dict, raw_assets: list[dict],
         circ = r.get("circulating") or 0
         usd_unit = (r.get("mcap_usd") or 0) / circ if circ else 0
         a = raw.get(str(r.get("id")))
-        if a is None or usd_unit <= 0:
+        # 시장 가격 없이 액면($1)으로 잰 종목은 금액 자체가 불확실하다. 2026-10-08 22:31 UTC
+        # 실제 수집: 가격이 없어 $6.8억으로 잡히던 USDX(실제 시세 약 $0.008)의 BSC 몫 변화
+        # 하나로 스냅숏 전체가 묶였다 → 이런 종목은 체인 누락 판정에서 뺀다.
+        if a is None or usd_unit <= 0 or r.get("mcap_basis") not in (None, "price"):
             continue
         cc = a.get("chainCirculating") or {}
         for c in r.get("chains") or []:
