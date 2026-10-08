@@ -289,9 +289,13 @@
 
   function renderGauge(d) {
     const list = $("#gauge-list");
-    const rows = d.assets
-      .filter((a) => a.peg_currency === "USD" && !isYieldBearing(a))
-      .slice(0, 16);
+    // 발행잔액 상위 16종 + 그 밖의 국내 원화마켓 상장 종목(달러 페그). 국내 상장 여부는 매시 갱신되는
+    // listings.json 을 그대로 읽으므로 상장·폐지가 바로 반영된다(거래지원 목록을 읽은 뒤 다시 그린다).
+    const usd = d.assets.filter((a) => a.peg_currency === "USD" && !isYieldBearing(a));
+    const top = usd.slice(0, 16);
+    const krExtra = usd.slice(16).filter((a) => { const k = krOf(a.symbol); return !!(k && k.krw_count > 0); });
+    const rows = top.concat(krExtra);
+    const krSet = new Set(krExtra.map((a) => a.symbol));
     GAUGE_ROWS = rows;
     const pos = (bp) => 50 + (clamp(bp, -SCALE_BP, SCALE_BP) / SCALE_BP) * 50;
 
@@ -312,7 +316,8 @@
       return `<li class="grow grow-asset">
         <span class="gsym-cell">${icons ? iconCell(a) : ""}<button type="button" class="gsym sym-btn"
           data-i="${i}" aria-expanded="false"
-          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button></span>
+          aria-label="${esc(a.symbol)} 발행사 개요 열기">${esc(a.symbol)}</button>${krSet.has(a.symbol)
+            ? `<span class="gkr" title="발행잔액 상위 16종 밖이지만 국내 원화마켓에 상장돼 있어 함께 표시(BTC·USDT 마켓만 있는 종목은 제외)">국내</span>` : ""}</span>
         <span class="gstrip" role="img" aria-label="${a.symbol} 페그 편차 ${has ? signed(a.dev_bp, 1) + "bp" : "측정 불가"}">
           <i class="gband"></i>${ticks}<i class="gdatum"></i>
           <i class="gbar is-${g}" style="left:50%;width:0" data-l="${barL}" data-w="${barW}"></i>
@@ -340,7 +345,7 @@
       const inBand = measured.filter((a) => Math.abs(a.dev_bp) < d.meta.thresholds.peg_watch_bp).length;
       const worst = measured.reduce((x, y) => (Math.abs(y.dev_bp) > Math.abs(x.dev_bp) ? y : x));
       setLead("gauge",
-        `발행잔액 상위 USD 페그 ${measured.length}종 중 ${bold(inBand + "종")}이 허용 구간(±${d.meta.thresholds.peg_watch_bp}bp) 안에 있습니다.`
+        `USD 페그 ${measured.length}종(발행잔액 상위${krExtra.length ? ` + 국내 상장 ${krExtra.length}종` : ""}) 중 ${bold(inBand + "종")}이 허용 구간(±${d.meta.thresholds.peg_watch_bp}bp) 안에 있습니다.`
         + (Math.abs(worst.dev_bp) >= d.meta.thresholds.peg_watch_bp
           ? ` 가장 크게 벗어난 종목은 ${bold(worst.symbol)}(${esc(signed(worst.dev_bp, 1))}bp)입니다.` : ""));
     }
@@ -2286,6 +2291,7 @@
     if (leg) leg.hidden = false;
     paintTable();
     renderWatchlist(snap);
+    renderGauge(snap); // 상위 16종 밖의 국내 상장 종목을 계기판에 더한다
     if (!sec) return;
 
     const mcapOf = {};

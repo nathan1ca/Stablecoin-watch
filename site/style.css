@@ -1281,3 +1281,7 @@ html[data-theme="dark"]{--r-cash:#7FB2D6;--r-tbill:#5B95C4;--r-repo:#3E6E99;--r-
   #tbl .tname{display:inline-block;max-width:8.5rem;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 }
 
+/* 계기판: 상위 16종 밖 국내 상장 종목 표시 */
+.gkr{font-family:var(--sans);font-size:.62rem;color:var(--petrol);border:1px solid currentColor;border-radius:3px;
+  padding:0 .25rem;margin-left:.35rem;line-height:1.4;white-space:nowrap}
+

@@ -41,6 +41,14 @@ jobs:
         run: python etl/fetch.py
         continue-on-error: true
 
+      # 키 없이 항상 실행된다. 스냅샷(data/snapshot.json)의 종목 목록을 쓰므로 데이터 수집 바로
+      # 다음에 둔다 — 국내 원화마켓 거래대금 비중(아래)이 같은 회차의 상장 목록을 쓰게 하려는 것.
+      # 데이터 수집(종목별 시계열 범위)은 직전 회차 목록을 쓰므로 새 상장은 다음 회차부터 반영된다.
+      # 거래소 하나가 실패해도 나머지는 기록된다.
+      - name: 국내 거래소 거래지원 수집
+        run: python etl/fetch_listings.py
+        continue-on-error: true
+
       # 발행사 동결·소각: 이더리움 계열(Etherscan V2, ETHERSCAN_API_KEY 필요 — 없으면 이 체인들만
       # 건너뜀)·트론(TronGrid, 키 선택)·솔라나(공개 RPC, 증분 수집 상태는 site/data/freeze_state_solana.json).
       # 솔라나는 회차당 시간 상한(SOLANA_TIME_BUDGET, 기본 150초)까지만 수집하고 다음 회차에 이어 간다.
@@ -77,12 +85,6 @@ jobs:
       # 키 없이 항상 실행된다. 국내 원화마켓 USDT·USDC 일별 거래대금(업비트·빗썸·코인원·디지털엑스·고팍스).
       - name: 국내 원화마켓 스테이블코인 거래대금 수집
         run: python etl/fetch_krw_volume.py
-        continue-on-error: true
-
-      # 키 없이 항상 실행된다. 스냅샷(data/snapshot.json)의 종목 목록을 쓰므로
-      # 데이터 수집 다음에 둔다. 거래소 하나가 실패해도 나머지는 기록된다.
-      - name: 국내 거래소 거래지원 수집
-        run: python etl/fetch_listings.py
         continue-on-error: true
 
       # 키 없이 항상 실행된다. 최근 24시간 스테이블코인 관련 뉴스·당국 발표의 제목·출처·링크만
