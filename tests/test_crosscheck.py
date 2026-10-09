@@ -158,7 +158,7 @@ class TestSourceAnomaly(unittest.TestCase):
 
     def test_hold_only_for_limited_time(self):
         self.assertTrue(fetch.hold_decision(self.prev, ["x"], now=self.now)["held"])
-        self.prev["meta"]["generated_at"] = (self.now - self.td(hours=13)).isoformat()
+        self.prev["meta"]["generated_at"] = (self.now - self.td(hours=37)).isoformat()
         d = fetch.hold_decision(self.prev, ["x"], now=self.now)
         self.assertFalse(d["held"])
         self.assertIn("새 값을 게시", d["note"])
@@ -166,3 +166,28 @@ class TestSourceAnomaly(unittest.TestCase):
     def test_real_crash_with_flat_chains_is_not_held(self):
         # 가격이 무너져도 수량·체인 몫이 그대로면 원천 이상이 아니다(시장 사건은 그대로 게시).
         self.assertEqual(fetch.source_anomalies(self.prev, self.snap(312e9), self.raw(1.4e9), now=self.now), [])
+
+
+class TestSourceAnomalyPegValued(unittest.TestCase):
+    def test_peg_valued_coin_does_not_hold_snapshot(self):
+        from datetime import datetime, timezone, timedelta
+        now = datetime(2026, 10, 8, 22, 31, tzinfo=timezone.utc)
+        prev = {"meta": {"generated_at": (now - timedelta(hours=5)).isoformat()},
+                "totals": {"circulating_usd": 315e9},
+                "assets": [{"id": "214", "symbol": "USDX", "circulating": 6.8e8, "mcap_usd": 6.8e8,
+                            "mcap_basis": "peg_usd", "chains": [{"chain": "BSC", "amount": 5.28e8}]}],
+                "by_chain": []}
+        snap = {"totals": {"circulating_usd": 315e9}, "by_chain": []}
+        raw = [{"id": "214", "chainCirculating": {"BSC": {"current": {"peggedUSD": 4e6}}}}]
+        self.assertEqual(fetch.source_anomalies(prev, snap, raw, now=now), [])
+
+
+class TestYieldBearingNotEscalated(unittest.TestCase):
+    def test_nav_rounding_gap_does_not_make_watch(self):
+        a = asset(339, "reUSD", 3e8, 1.106, "re-protocol-reusd")
+        rows = fetch.build_snapshot([a] + market()[:2], [], issuers={},
+                                    yield_bearing={"REUSD": {"kind": "x", "defillama_id": "339"}},
+                                    external_prices={"339": 1.11})["assets"]
+        r = [x for x in rows if x["id"] == "339"][0]
+        self.assertEqual(r["price_quality"], "degraded")
+        self.assertEqual(r["grade"], "sound")

@@ -702,7 +702,9 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         red_g = grade_redemption(chg_30d)
         overall = worse_grade(peg_g, red_g)
         # 가격 품질 저하만으로 breach 로 올리지는 않는다 — 관측 신뢰도 신호.
-        if price_quality == "degraded" and overall == "sound":
+        # 이자부 상품은 NAV 가 $1 위에 있어 교차 대상에 들어오지만, CoinGecko 가 소수 둘째 자리로
+        # 반올림해 주는 경우가 많아(reUSD 1.106 vs 1.11) 차이만으로 주의를 붙이지 않는다.
+        if price_quality == "degraded" and overall == "sound" and not is_yb:
             overall = "watch"
 
         # 체인별 분포
@@ -1258,7 +1260,10 @@ SOURCE_CHAIN_MIN_USD = 200e6      # 종목·체인 몫이 이 금액 이상일 �
 SOURCE_MARKET_CHAIN_MIN_USD = 1e9  # 체인 전체 합계 비교 하한
 SOURCE_CHAIN_DROP_PCT = 50.0      # 이만큼 넘게 줄면 누락으로 본다
 SOURCE_COMPARE_MAX_HOURS = 48     # 직전 값이 이보다 오래면 비교하지 않는다
-SOURCE_HOLD_MAX_HOURS = 12        # 직전 값을 유지하는 최대 시간(실제 위기를 오래 가리지 않게)
+# 직전 값을 유지하는 최대 시간(실제 위기를 오래 가리지 않게). 처음 12시간으로 잡았으나 2026-10-08
+# 22시~10-09 02시 UTC DefiLlama 체인 누락(Hyperliquid L1·X Layer·Plasma 등)이 4시간 넘게 이어졌고,
+# 예약 수집이 약 7시간 간격이라 12시간은 사실상 1~2회차뿐이다 → 36시간(예약 수집 약 5회차).
+SOURCE_HOLD_MAX_HOURS = 36
 
 
 def _parse_iso(s) -> datetime | None:
@@ -1302,7 +1307,10 @@ def source_anomalies(prev: dict, snap: dict, raw_assets: list[dict],
         circ = r.get("circulating") or 0
         usd_unit = (r.get("mcap_usd") or 0) / circ if circ else 0
         a = raw.get(str(r.get("id")))
-        if a is None or usd_unit <= 0:
+        # 시장 가격 없이 액면($1)으로 잰 종목은 금액 자체가 불확실하다. 2026-10-08 22:31 UTC
+        # 실제 수집: 가격이 없어 $6.8억으로 잡히던 USDX(실제 시세 약 $0.008)의 BSC 몫 변화
+        # 하나로 스냅숏 전체가 묶였다 → 이런 종목은 체인 누락 판정에서 뺀다.
+        if a is None or usd_unit <= 0 or r.get("mcap_basis") not in (None, "price"):
             continue
         cc = a.get("chainCirculating") or {}
         for c in r.get("chains") or []:
