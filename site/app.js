@@ -2537,7 +2537,7 @@
     const fv = snap.face_valued, fvEl = $("#mech-facevalued");
     if (fvEl && fv && fv.count) {
       const names = (fv.top || []).slice(0, 3).map((x) => x.symbol).join(", ");
-      fvEl.textContent = `시장 가격이 없어 액면 $1로 계상한 종목 ${fv.count}종(${usd(fv.usd)}, 총액의 ${fv.share_pct.toFixed(2)}%): ${names}${fv.count > 3 ? " 등" : ""}. 실제 가치는 이보다 작을 수 있습니다.`;
+      fvEl.textContent = `시장 가격이 없어 액면 $1로 계상한 종목 ${fv.count}종($${usd(fv.usd)}, 총액의 ${fv.share_pct.toFixed(2)}%): ${names}${fv.count > 3 ? " 등" : ""}. 실제 가치는 이보다 작을 수 있습니다.`;
       fvEl.hidden = false;
     }
     const uv = snap.unvalued, uvEl = $("#cur-unvalued");
