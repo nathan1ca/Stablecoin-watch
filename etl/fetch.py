@@ -1260,7 +1260,10 @@ SOURCE_CHAIN_MIN_USD = 200e6      # 종목·체인 몫이 이 금액 이상일 �
 SOURCE_MARKET_CHAIN_MIN_USD = 1e9  # 체인 전체 합계 비교 하한
 SOURCE_CHAIN_DROP_PCT = 50.0      # 이만큼 넘게 줄면 누락으로 본다
 SOURCE_COMPARE_MAX_HOURS = 48     # 직전 값이 이보다 오래면 비교하지 않는다
-SOURCE_HOLD_MAX_HOURS = 12        # 직전 값을 유지하는 최대 시간(실제 위기를 오래 가리지 않게)
+# 직전 값을 유지하는 최대 시간(실제 위기를 오래 가리지 않게). 처음 12시간으로 잡았으나 2026-10-08
+# 22시~10-09 02시 UTC DefiLlama 체인 누락(Hyperliquid L1·X Layer·Plasma 등)이 4시간 넘게 이어졌고,
+# 예약 수집이 약 7시간 간격이라 12시간은 사실상 1~2회차뿐이다 → 36시간(예약 수집 약 5회차).
+SOURCE_HOLD_MAX_HOURS = 36
 
 
 def _parse_iso(s) -> datetime | None:

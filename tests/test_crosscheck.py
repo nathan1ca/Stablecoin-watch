@@ -158,7 +158,7 @@ class TestSourceAnomaly(unittest.TestCase):
 
     def test_hold_only_for_limited_time(self):
         self.assertTrue(fetch.hold_decision(self.prev, ["x"], now=self.now)["held"])
-        self.prev["meta"]["generated_at"] = (self.now - self.td(hours=13)).isoformat()
+        self.prev["meta"]["generated_at"] = (self.now - self.td(hours=37)).isoformat()
         d = fetch.hold_decision(self.prev, ["x"], now=self.now)
         self.assertFalse(d["held"])
         self.assertIn("새 값을 게시", d["note"])
