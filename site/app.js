@@ -1354,7 +1354,9 @@
         lines.push(`· 가격 출처 ${a.price_sources}곳(DefiLlama·CoinGecko) 중간값 기준`
           + (a.price_spread_bp != null ? `, 두 가격 차이 ${a.price_spread_bp}bp` : ""));
       else if (a.price_sources === 1)
-        lines.push("· 가격 출처 1곳(DefiLlama)뿐 — 두 번째 가격으로 확인하지 못한 값");
+        lines.push(a.price == null
+          ? "· 가격 출처 1곳(CoinGecko)뿐 — DefiLlama 가격이 없어 CoinGecko 가격으로 잰 값"
+          : "· 가격 출처 1곳(DefiLlama)뿐 — 두 번째 가격으로 확인하지 못한 값");
     }
     if (a.grade === "breach" && t.systemic_share_pct != null && a.share < t.systemic_share_pct)
       lines.push(`· 시장 비중 ${a.share.toFixed(2)}%로 ${t.systemic_share_pct}% 미만 — 시스템 등급에는 ‘주의’로만 반영`);
@@ -2531,6 +2533,13 @@
       label: c.currency, share: c.share, amount: c.amount,
       pinned: c.pinned || pinned.includes(c.currency),
     })));
+    // 시장 가격이 없어 액면($1)으로 계상한 종목 — 총계·비중에 들어가 있지만 실제 가치는 확인 못 함.
+    const fv = snap.face_valued, fvEl = $("#mech-facevalued");
+    if (fvEl && fv && fv.count) {
+      const names = (fv.top || []).slice(0, 3).map((x) => x.symbol).join(", ");
+      fvEl.textContent = `시장 가격이 없어 액면 $1로 계상한 종목 ${fv.count}종($${usd(fv.usd)}, 총액의 ${fv.share_pct.toFixed(2)}%): ${names}${fv.count > 3 ? " 등" : ""}. 실제 가치는 이보다 작을 수 있습니다.`;
+      fvEl.hidden = false;
+    }
     const uv = snap.unvalued, uvEl = $("#cur-unvalued");
     if (uvEl && uv && uv.count) {
       const tops = (uv.top || []).slice(0, 3).map((u) => `${u.symbol}(${u.peg_currency} ${localAmt(u.circulating, u.peg_currency).replace(" " + u.peg_currency, "")})`);

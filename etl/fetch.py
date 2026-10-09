@@ -176,35 +176,44 @@ def crosscheck_targets(assets: list[dict], top_n: int = 30,
 
     대상: (1) 발행잔액 상위 top_n, (2) DefiLlama 가격만으로 USD 페그 편차가 주의선
     (watch_bp) 이상인 종목 — 경보·주의로 뜰 종목은 규모와 관계없이 두 번째 가격으로
-    확인한다, (3) extra_symbols(국내 원화마켓 상장 등).
+    확인한다, (3) extra_symbols(국내 원화마켓 상장 등), (4) DefiLlama 가격이 없는 USD
+    페그 종목 중 액면 금액이 표시 하한(min_mcap_usd) 이상인 것 — 가격이 없으면 액면
+    $1로 계상되므로, 두 번째 가격이 있으면 그 값으로 잰다(build_snapshot).
     CoinGecko id 는 DefiLlama 응답의 gecko_id 를 쓴다. 심볼로 찾으면 같은 심볼의
     다른 종목(USDA 는 4종 이상)에 남의 가격이 붙는다. gecko_id 가 없으면 상위
     종목에 한해 CG_STABLE_IDS(수기 대조표)로 보충한다.
+    상한(cap)에 닿을 때는 (1)(3)(4)를 먼저 채우고 (2)를 규모순으로 채운다 — 편차 25bp
+    이상 소형 종목이 70종 안팎이라(2026-10-08 실측) 순서를 두지 않으면 금액 계상에
+    직접 쓰이는 (4)가 상한에 밀려 빠질 수 있다.
     """
     watch_bp = THRESHOLDS["peg_watch_bp"] if watch_bp is None else watch_bp
+    min_face = THRESHOLDS["min_mcap_usd"]
     extra = {s.upper() for s in (extra_symbols or set())}
     ranked = sorted(assets, key=lambda x: -peg_amount(x.get("circulating")))
-    out: dict[str, str] = {}
+    must: list[tuple[str, str]] = []
+    fill: list[tuple[str, str]] = []
     used: set[str] = set()
     for rank, a in enumerate(ranked):
-        if len(out) >= cap:
-            break
         aid = str(a.get("id") or "")
-        if not aid or peg_amount(a.get("circulating")) <= 0:
+        circ = peg_amount(a.get("circulating"))
+        if not aid or circ <= 0:
             continue
         sym = str(a.get("symbol") or "").strip().upper()
         price = a.get("price")
-        off_peg = (isinstance(price, (int, float)) and peg_currency(a.get("circulating")) == "USD"
-                   and abs(float(price) - 1.0) * 10_000 >= watch_bp)
-        if not (rank < top_n or off_peg or sym in extra):
+        has_price = isinstance(price, (int, float)) and price > 0
+        is_usd = peg_currency(a.get("circulating")) == "USD"
+        off_peg = has_price and is_usd and abs(float(price) - 1.0) * 10_000 >= watch_bp
+        no_price_face = (not has_price) and is_usd and circ >= min_face
+        priority = rank < top_n or sym in extra or no_price_face
+        if not (priority or off_peg):
             continue
         gid = str(a.get("gecko_id") or "").strip()
         if not gid and rank < top_n:
             gid = CG_STABLE_IDS.get(sym, "")
         if gid and gid not in used:
-            out[aid] = gid
+            (must if priority else fill).append((aid, gid))
             used.add(gid)
-    return out
+    return dict((must + fill)[:cap])
 
 
 def fetch_coingecko_prices_by_id(targets: dict[str, str]) -> dict[str, float]:
@@ -357,15 +366,24 @@ def yield_bearing_reason(asset: dict, table: dict) -> str | None:
     return "symbol"
 
 
-def usd_value_per_unit(price: float | None, cur: str, fx_rates: dict | None) -> tuple[float, str]:
+def usd_value_per_unit(price: float | None, cur: str, fx_rates: dict | None,
+                       alt_price: float | None = None) -> tuple[float, str]:
     """토큰 1개의 USD 가치와 그 근거.
 
-    - 가격이 있으면 가격 그대로 ('price')
-    - 가격이 없고 USD 페그면 1달러 ('peg_usd')
-    - 가격이 없고 비USD 페그면 1 / 환율 ('fx'), 환율도 없으면 0 ('unpriced')
+    - 가격(DefiLlama)이 있으면 가격 그대로 ('price')
+    - DefiLlama 가격이 없고 교차 가격(CoinGecko)이 있으면 그 값 ('price_crosscheck')
+    - 둘 다 없고 USD 페그면 1달러 ('peg_usd' — 액면 계상, 화면에 따로 밝힌다)
+    - 둘 다 없고 비USD 페그면 1 / 환율 ('fx'), 환율도 없으면 0 ('unpriced')
+
+    교차 가격을 쓰는 이유: 2026-10-09 수집에서 DefiLlama 가격이 빠진 USDN(Neutrino USD,
+    CoinGecko $0.0158)이 액면 $4.09억으로, USDX(시세 약 $0.008)가 $6.83억으로 총계에
+    들어갔다. 시장에서 1~2센트에 거래되는 토큰을 $1로 세면 총 발행잔액·알고리즘형 비중·
+    점유율이 부풀고, 원천 응답에 따라 종목이 표에 들어왔다 나갔다 한다.
     """
     if isinstance(price, (int, float)) and price > 0:
         return float(price), "price"
+    if isinstance(alt_price, (int, float)) and alt_price > 0:
+        return float(alt_price), "price_crosscheck"
     if cur == "USD":
         return 1.0, "peg_usd"
     rate = (fx_rates or {}).get(cur)
@@ -665,7 +683,7 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         # 가격이 없을 때 USD 페그는 1달러로 보면 되지만, 비USD 페그를 그대로 두면
         # 엔·원 단위 수량이 달러로 둔갑한다(1억 원 → $1억, 약 1,400배 과대).
         # 그래서 환율이 있으면 환율로 나누고, 없으면 금액을 0으로 두고 표시한다.
-        usd_per_unit, mcap_basis = usd_value_per_unit(price, cur, fx_rates)
+        usd_per_unit, mcap_basis = usd_value_per_unit(price, cur, fx_rates, alt_price=cg)
         mcap_usd = circ * usd_per_unit
 
         prev_d = peg_amount(a.get("circulatingPrevDay"))
@@ -762,6 +780,14 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         ({"symbol": r["symbol"], "name": r["name"], "peg_currency": r["peg_currency"],
           "circulating": r["circulating"]} for r in rows if r["mcap_basis"] == "unpriced"),
         key=lambda x: -x["circulating"])
+
+    # 시장 가격이 어디에도 없어 액면($1)으로 계상한 USD 페그 종목. 총계에는 들어가지만
+    # 실제 가치를 확인하지 못한 금액이라 규모·종목을 밝힌다(2026-10-09: 약 $7억, 6종).
+    face_rows = sorted((r for r in rows if r["mcap_basis"] == "peg_usd"),
+                       key=lambda r: -r["mcap_usd"])
+    face_usd = sum(r["mcap_usd"] for r in face_rows)
+    xc_rows = sorted((r for r in rows if r["mcap_basis"] == "price_crosscheck"),
+                     key=lambda r: -r["circulating"])
 
     for r in rows:
         r["share"] = round(r["mcap_usd"] / total * 100, 3)
@@ -895,10 +921,12 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
             "thresholds": thresholds_for_meta(THRESHOLDS),
             "asset_count": len(rows),
             "price_basis": "DefiLlama 오라클 + CoinGecko 교차 확인(발행잔액 상위 30종·편차 주의선 밖 종목·"
-                           "국내 원화마켓 상장 종목, 두 가격의 중간값). 두 가격이 "
-                           f"{THRESHOLDS['source_disagreement_bp']:g}bp 이상 다르면 가격 품질 저하로 표시",
+                           "국내 원화마켓 상장 종목·DefiLlama 가격 없는 종목, 두 가격의 중간값). 두 가격이 "
+                           f"{THRESHOLDS['source_disagreement_bp']:g}bp 이상 다르면 가격 품질 저하로 표시. "
+                           "금액(발행잔액 USD)은 DefiLlama 가격, 없으면 CoinGecko 가격, 둘 다 없으면 액면 $1",
             "price_crosscheck": "CoinGecko simple/price — 발행잔액 상위 30종 + DefiLlama 가격 기준 페그 "
-                                f"편차 {THRESHOLDS['peg_watch_bp']:g}bp 이상 종목 + 국내 원화마켓 상장 종목. "
+                                f"편차 {THRESHOLDS['peg_watch_bp']:g}bp 이상 종목 + 국내 원화마켓 상장 종목 + "
+                                "DefiLlama 가격이 없고 액면 금액이 표시 하한 이상인 종목. "
                                 "종목 대응은 DefiLlama gecko_id(없으면 수기 대조표). price_sources=1 이면 "
                                 "두 번째 가격을 못 구해 교차 확인이 안 된 값",
             "issuer_source": "etl/issuers.json (수기 관리)",
@@ -938,6 +966,19 @@ def build_snapshot(assets: list[dict], chains: list[dict], issuers: dict | None 
         ],
         "assets": visible[:60],
         "watchlist": watch_out,
+        "face_valued": {
+            "count": len(face_rows),
+            "usd": round(face_usd, 2),
+            "share_pct": round(face_usd / total * 100, 3),
+            "top": [{"symbol": r["symbol"], "name": r["name"], "mcap_usd": r["mcap_usd"]}
+                    for r in face_rows[:8]],
+            "crosscheck_valued": [
+                {"symbol": r["symbol"], "name": r["name"], "circulating": r["circulating"],
+                 "price": r["price_median"], "mcap_usd": r["mcap_usd"]}
+                for r in xc_rows[:8]],
+            "note": "DefiLlama·CoinGecko 어디에도 시장 가격이 없어 액면 $1로 계상한 USD 페그 종목"
+                    "(총계 포함). crosscheck_valued 는 DefiLlama 가격이 없어 CoinGecko 가격으로 잰 종목",
+        },
         "unvalued": {"count": len(unvalued), "top": unvalued[:8],
                      "fx_date": fx_date,
                      "note": "가격과 환율이 모두 없어 USD 환산·총계에서 제외한 비USD 페그 종목"},
@@ -1463,6 +1504,13 @@ def main():
     print("       경보·주의 상위: " + ", ".join(
         f"{a['symbol']}({a['grade']}, {a.get('dev_bp')}bp, 30일 {a.get('chg_30d')}%)"
         for a in snap["alerts"][:6]))
+    fv = snap["face_valued"]
+    print(f"       액면 계상(시장 가격 없음): {fv['count']}종 ${fv['usd']/1e6:,.0f}M "
+          f"({fv['share_pct']}%) — " + (", ".join(
+              f"{x['symbol']}(${x['mcap_usd']/1e6:,.0f}M)" for x in fv["top"]) or "없음"))
+    print("       CoinGecko 가격으로 계상(DefiLlama 가격 없음): " + (", ".join(
+        f"{x['symbol']}({x['circulating']:,.0f}개 × ${x['price']} = ${x['mcap_usd']/1e6:,.1f}M)"
+        for x in fv["crosscheck_valued"]) or "없음"))
     unknown = sum(1 for r in snap["assets"] if r["issuer"] == UNKNOWN_ISSUER)
     print(f"       발행사 대조: {len(snap['assets']) - unknown}/{len(snap['assets'])}종 확인, "
           f"{unknown}종 '{UNKNOWN_ISSUER}' (etl/issuers.json 에 채우면 줄어든다)")
