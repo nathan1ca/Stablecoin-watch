@@ -42,7 +42,7 @@ def market():
         asset(4, "QUIET", 1e8, 1.0001, "quiet-usd"),  # 작고 페그 안쪽 → 대상 아님
         asset(5, "BUSD", 2e8, 1.0106, "binance-peg-busd"),   # 작지만 +106bp → 대상
         asset(6, "USDA", 7e7, 0.9036, "ap-usda"),     # 같은 심볼 두 종목
-        asset(7, "USDA", 1.4e8, None, "avalon-usda"),  # 가격 없음 → 대상 아님
+        asset(7, "USDA", 1.4e8, None, "avalon-usda"),  # 가격 없음·액면 하한 이상 → 대상(금액 계상용)
         asset(8, "NOGECKO", 5e7, 0.95, None),          # 이탈했지만 id 없음 → 못 받음
         asset(9, "JPYC", 2e7, 0.0063, "jpyc", cur="JPY"),  # 비USD 는 $1 기준으로 보지 않음
     ]
@@ -63,8 +63,7 @@ class TestTargets(unittest.TestCase):
     def test_small_on_peg_coin_excluded(self):
         self.assertNotIn("4", self.t)
 
-    def test_no_price_or_no_gecko_or_non_usd_excluded(self):
-        self.assertNotIn("7", self.t)
+    def test_no_gecko_or_non_usd_excluded(self):
         self.assertNotIn("8", self.t)
         self.assertNotIn("9", self.t)
 
@@ -75,6 +74,25 @@ class TestTargets(unittest.TestCase):
     def test_cap(self):
         t = fetch.crosscheck_targets(market(), top_n=30, watch_bp=25, cap=2)
         self.assertEqual(len(t), 2)
+
+    def test_unpriced_coin_above_floor_included(self):
+        # 2026-10-09: DefiLlama 가격이 없는 Avalon USDA($1.46억 액면)는 두 번째 가격이 없으면
+        # $1로 계상된다 → 금액을 재기 위해 교차 가격 대상에 넣는다.
+        self.assertEqual(self.t["7"], "avalon-usda")
+
+    def test_unpriced_coin_below_floor_excluded(self):
+        mk = market() + [asset(10, "TINY", 1e6, None, "tiny-usd")]
+        t = fetch.crosscheck_targets(mk, top_n=3, watch_bp=25)
+        self.assertNotIn("10", t)
+
+    def test_cap_keeps_priority_before_off_peg_fill(self):
+        # 상한에 닿아도 가격 없는 대형 종목(금액 계상에 쓰임)이 편차 큰 소형 종목보다 먼저 들어간다.
+        mk = [asset(1, "USDT", 180e9, 0.9995, "tether"),
+              asset(2, "BIGOFF", 9e8, 0.97, "big-off"),
+              asset(3, "MIDOFF", 6e8, 0.96, "mid-off"),
+              asset(4, "USDN", 4.09e8, None, "neutrino")]
+        t = fetch.crosscheck_targets(mk, top_n=1, watch_bp=25, cap=3)
+        self.assertEqual(list(t), ["1", "4", "2"])
 
 
 class TestSnapshotUsesIdKey(unittest.TestCase):
@@ -191,3 +209,51 @@ class TestYieldBearingNotEscalated(unittest.TestCase):
         r = [x for x in rows if x["id"] == "339"][0]
         self.assertEqual(r["price_quality"], "degraded")
         self.assertEqual(r["grade"], "sound")
+
+
+class TestValuationUsesSecondPrice(unittest.TestCase):
+    """DefiLlama 가격이 빠진 종목의 금액 계상(2026-10-09 USDN·USDX 사례)."""
+
+    def mk(self):
+        return [asset(1, "USDT", 180e9, 0.9995, "tether"),
+                asset(12, "USDN", 4.0889e8, None, "neutrino"),
+                asset(13, "HUSD", 1.92e8, None, None)]
+
+    def build(self, ext):
+        return fetch.build_snapshot(self.mk(), [], issuers={}, yield_bearing={}, external_prices=ext)
+
+    def test_crosscheck_price_values_unpriced_coin(self):
+        s = self.build({"12": 0.015759})
+        total = s["totals"]["circulating_usd"]
+        # USDN 은 4.09억 개 × $0.0158 ≈ $644만 → 표시 하한($5,000만) 아래라 표에서 빠지고,
+        # 총계에도 $4.09억이 아니라 약 $644만만 들어간다.
+        self.assertNotIn("USDN", [r["symbol"] for r in s["assets"]])
+        self.assertAlmostEqual(total, 180e9 * 0.9995 + 4.0889e8 * 0.015759 + 1.92e8, delta=1)
+        xc = s["face_valued"]["crosscheck_valued"]
+        self.assertEqual(xc[0]["symbol"], "USDN")
+        self.assertAlmostEqual(xc[0]["mcap_usd"], 4.0889e8 * 0.015759, delta=1)
+
+    def test_without_any_price_face_value_is_disclosed(self):
+        s = self.build({})
+        fv = s["face_valued"]
+        self.assertEqual(fv["count"], 2)
+        self.assertEqual([x["symbol"] for x in fv["top"]], ["USDN", "HUSD"])
+        self.assertAlmostEqual(fv["usd"], 4.0889e8 + 1.92e8, delta=1)
+        usdn = next(r for r in s["assets"] if r["symbol"] == "USDN")
+        self.assertEqual(usdn["mcap_basis"], "peg_usd")
+
+    def test_defillama_price_still_preferred(self):
+        mk = [asset(1, "USDT", 180e9, 0.9995, "tether")]
+        s = fetch.build_snapshot(mk, [], issuers={}, yield_bearing={}, external_prices={"1": 0.90})
+        r = s["assets"][0]
+        self.assertEqual(r["mcap_basis"], "price")
+        self.assertAlmostEqual(r["mcap_usd"], 180e9 * 0.9995, delta=1)
+        self.assertEqual(s["face_valued"]["count"], 0)
+
+    def test_value_per_unit_order(self):
+        f = fetch.usd_value_per_unit
+        self.assertEqual(f(0.99, "USD", {}, alt_price=0.5), (0.99, "price"))
+        self.assertEqual(f(None, "USD", {}, alt_price=0.0158), (0.0158, "price_crosscheck"))
+        self.assertEqual(f(None, "USD", {}, alt_price=None), (1.0, "peg_usd"))
+        self.assertEqual(f(None, "JPY", {"JPY": 158.0}, alt_price=0.0063), (0.0063, "price_crosscheck"))
+        self.assertEqual(f(None, "JPY", {"JPY": 158.0})[1], "fx")
